@@ -7,8 +7,7 @@
       "States": [
         {
           "Image": "imgs/actions/repo-stats/key",
-          "ShowTitle": false,
-          "UserTitleEnabled": false
+          "ShowTitle": false
         }
       ],
       "Tooltip": "Display GitHub repository statistics (stars, issues, forks, watchers)",
@@ -21,8 +20,7 @@
       "States": [
         {
           "Image": "imgs/actions/workflow-status/key",
-          "ShowTitle": false,
-          "UserTitleEnabled": false
+          "ShowTitle": false
         }
       ],
       "Tooltip": "Display the latest GitHub Actions workflow run status and deployment state",

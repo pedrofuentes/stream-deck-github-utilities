@@ -13,8 +13,16 @@
     "lint": "eslint src/ --ext .ts",
     "lint:fix": "eslint src/ --ext .ts --fix",
     "validate": "streamdeck validate com.pedrofuentes.github-utilities.sdPlugin",
-    "pack": "npm run build && npm run test && streamdeck pack com.pedrofuentes.github-utilities.sdPlugin --output dist/",
-    "prepack": "npm run validate"
+    "pack": "npm run build && npm run test && streamdeck pack com.pedrofuentes.github-utilities.sdPlugin --output release/",
+    "prepack": "npm run validate",
+    "streamdeck:link": "streamdeck link com.pedrofuentes.github-utilities.sdPlugin",
+    "streamdeck:unlink": "streamdeck unlink com.pedrofuentes.github-utilities.sdPlugin",
+    "streamdeck:restart": "streamdeck restart com.pedrofuentes.github-utilities",
+    "streamdeck:stop": "streamdeck stop com.pedrofuentes.github-utilities",
+    "streamdeck:validate": "streamdeck validate com.pedrofuentes.github-utilities.sdPlugin",
+    "streamdeck:pack": "npm run build && streamdeck pack com.pedrofuentes.github-utilities.sdPlugin --output release/",
+    "streamdeck:dev": "streamdeck dev",
+    "streamdeck:dev:disable": "streamdeck dev --disable"
   },
   "keywords": [
     "stream-deck",
@@ -23,11 +31,11 @@
     "plugin",
     "utilities"
   ],
-  "author": "Pedro Fuentes",
+  "author": "Pedro Pablo Fuentes Schuster",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pedrofuentes/stream-deck-github-utilities"
+    "url": "git+https://github.com/pedrofuentes/stream-deck-github-utilities.git"
   },
   "bugs": {
     "url": "https://github.com/pedrofuentes/stream-deck-github-utilities/issues"

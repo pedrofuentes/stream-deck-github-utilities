@@ -103,7 +103,7 @@ tests/                 # Test files mirroring src/ structure (262 tests)
 - All buttons use 144×144 SVG with GitHub dark theme.
 - **SVG encoding**: `ev.action.setImage("data:image/svg+xml," + encodeURIComponent(svg))` — do NOT use `charset=utf8` or base64; only `encodeURIComponent` renders correctly on Stream Deck hardware.
 - Clear title with `ev.action.setTitle("")` when using full SVG buttons.
-- Manifest must set `"ShowTitle": false` and `"UserTitleEnabled": false` in each action's States to prevent default title overlay.
+- Manifest must set `"ShowTitle": false` in each action's States to prevent default title overlay.
 - **Text buttons**: `renderKeyImage()` for generic layout, `renderStatImage()` for repo stats, `renderWorkflowImage()` for workflow status, `renderDeployingImage()` for active deployments.
 - **Icon buttons**: `renderIconKeyImage()` for buttons with centered SVG icons (used by workflow status and deploying views).
 - **Status icons**: `STATUS_ICONS` record contains 14 SVG path definitions (36×36 viewBox) for workflow statuses: `success`, `failure`, `in_progress`, `cancelled`, `queued`, `pending`, `waiting`, `skipped`, `timed_out`, `action_required`, `neutral`, `stale`, `requested`, `deploying`.
