@@ -22,12 +22,14 @@ const {
 	mockRegisterAction,
 	mockLoggerDebug,
 	mockLoggerError,
+	mockOpenUrl,
 } = vi.hoisted(() => ({
 	mockGetGlobalSettings: vi.fn(),
 	mockSetGlobalSettings: vi.fn(),
 	mockRegisterAction: vi.fn(),
 	mockLoggerDebug: vi.fn(),
 	mockLoggerError: vi.fn(),
+	mockOpenUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@elgato/streamdeck", () => {
@@ -44,6 +46,9 @@ vi.mock("@elgato/streamdeck", () => {
 			settings: {
 				getGlobalSettings: mockGetGlobalSettings,
 				setGlobalSettings: mockSetGlobalSettings,
+			},
+			system: {
+				openUrl: mockOpenUrl,
 			},
 			logger: {
 				setLevel: vi.fn(),
@@ -426,10 +431,10 @@ describe("WorkflowStatusAction", () => {
 
 			await action.onKeyDown?.(ev as never);
 
-			expect(mockAction.setImage).not.toHaveBeenCalled();
+			expect(mockOpenUrl).not.toHaveBeenCalled();
 		});
 
-		it("shows loading and refreshes when repo is configured", async () => {
+		it("opens the workflow run URL when button is pressed", async () => {
 			const mockAction = createMockKeyAction("wf-12");
 			const settings = { repo: "owner/repo" };
 
@@ -438,21 +443,61 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupFetchMock([makeRunData()]);
+			setupFetchMock([makeRunData({ html_url: "https://github.com/owner/repo/actions/runs/12345" })]);
 
-			// Set up by appearing first
+			// Set up by appearing first (this populates lastUrl)
 			const appearEv = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(appearEv as never);
 
-			mockAction.setImage.mockClear();
+			mockOpenUrl.mockClear();
 
 			const ev = createKeyDownEvent(mockAction, settings);
 			await action.onKeyDown?.(ev as never);
 
-			// Should have shown loading then refreshed
-			expect(mockAction.setImage).toHaveBeenCalled();
-			// First call should be Loading image
-			expect(decodeSvg(mockAction.setImage.mock.calls[0][0] as string)).toContain("Loading");
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/actions/runs/12345");
+		});
+
+		it("falls back to actions page when no URL stored", async () => {
+			const mockAction = createMockKeyAction("wf-13-fallback");
+			const settings = { repo: "owner/repo" };
+
+			// Don't set up appearance (no lastUrl stored)
+			const ev = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev as never);
+
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/actions");
+		});
+
+		it("falls back to workflow file URL when workflowFile is set and no stored URL", async () => {
+			const mockAction = createMockKeyAction("wf-14-wffile");
+			const settings = { repo: "owner/repo", workflowFile: "deploy.yml" };
+
+			const ev = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev as never);
+
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/actions/workflows/deploy.yml");
+		});
+
+		it("opens actions page when no runs exist", async () => {
+			const mockAction = createMockKeyAction("wf-15-noruns");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			setupFetchMock([]);
+
+			const appearEv = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(appearEv as never);
+
+			mockOpenUrl.mockClear();
+
+			const ev = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev as never);
+
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/actions");
 		});
 	});
 

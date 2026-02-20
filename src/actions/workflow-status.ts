@@ -57,6 +57,9 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	/** Last known settings per action instance */
 	private actionSettings = new Map<string, WorkflowStatusSettings>();
 
+	/** Last known URL per action instance (for opening on key press) */
+	private lastUrl = new Map<string, string>();
+
 	/**
 	 * Called when the action becomes visible on the Stream Deck.
 	 */
@@ -85,10 +88,11 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	override onWillDisappear(ev: WillDisappearEvent<WorkflowStatusSettings>): void {
 		this.stopTimer(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
+		this.lastUrl.delete(ev.action.id);
 	}
 
 	/**
-	 * Called when the user presses the button. Forces an immediate refresh.
+	 * Called when the user presses the button. Opens the workflow run URL in the browser.
 	 */
 	override async onKeyDown(ev: KeyDownEvent<WorkflowStatusSettings>): Promise<void> {
 		const settings = ev.payload.settings;
@@ -97,14 +101,20 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			return;
 		}
 
-		await ev.action.setImage(renderLoadingImage());
-		await ev.action.setTitle("");
-
-		await this.refreshStatus(ev.action.id);
-
-		// Restart the timer so next auto-refresh is a full interval away
-		this.stopTimer(ev.action.id);
-		this.startTimer(ev.action.id, settings);
+		// Open the last known URL for this action (workflow run or repo actions page)
+		const url = this.lastUrl.get(ev.action.id);
+		if (url) {
+			await streamDeck.system.openUrl(url);
+		} else {
+			// Fallback: open the repo's Actions tab
+			const parsed = parseRepoIdentifier(settings.repo);
+			if (parsed) {
+				const fallbackUrl = settings.workflowFile
+					? `https://github.com/${parsed.owner}/${parsed.repo}/actions/workflows/${settings.workflowFile}`
+					: `https://github.com/${parsed.owner}/${parsed.repo}/actions`;
+				await streamDeck.system.openUrl(fallbackUrl);
+			}
+		}
 	}
 
 	/**
@@ -191,6 +201,12 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 				// Show deploying state prominently
 				const envName = info.deployment.environment || "deploy";
 				await actionContext.setImage(renderDeployingImage(envName, info.deployment.state, parsed.repo));
+
+				// Store the deployment log URL, or fall back to latest run URL
+				this.lastUrl.set(
+					actionId,
+					info.deployment.log_url || info.latestRun?.html_url || `https://github.com/${parsed.owner}/${parsed.repo}/actions`,
+				);
 			} else if (info.latestRun) {
 				// Show the latest workflow run status
 				const displayStatus = getWorkflowDisplayStatus(info.latestRun);
@@ -204,9 +220,15 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 				}
 
 				await actionContext.setImage(renderWorkflowImage(statusLabel, displayStatus, parsed.repo, deployLabel));
+
+				// Store the workflow run URL
+				this.lastUrl.set(actionId, info.latestRun.html_url || `https://github.com/${parsed.owner}/${parsed.repo}/actions`);
 			} else {
 				// No workflow runs found
 				await actionContext.setImage(renderWorkflowImage("No Runs", "neutral", parsed.repo));
+
+				// Fall back to the repo's Actions tab
+				this.lastUrl.set(actionId, `https://github.com/${parsed.owner}/${parsed.repo}/actions`);
 			}
 
 			await actionContext.setTitle("");

@@ -309,3 +309,29 @@ Status – Deploying:    #a371f7
 - ❌ Complex SVG paths at small scale — simplify icons for 72px
 - ❌ Inline styles in PI HTML where CSS classes would suffice
 - ❌ Unstyled native HTML elements — always match the dark theme
+
+## Contributing Learnings Back to the Template
+
+This plugin is part of a family of Stream Deck plugins that share a common template and knowledge base:
+
+- **Template repo**: https://github.com/pedrofuentes/stream-deck-template
+- **Local path**: `S:\Pedro\Projects\stream-deck-template`
+
+As an agent working on this plugin, you should **proactively offer to contribute new learnings** back to the template after completing significant work. This helps all future plugins benefit from discoveries made here.
+
+### How to contribute
+
+1. Write new findings to `S:\Pedro\Projects\stream-deck-template\contributions\github-utilities.md` using the format documented in `S:\Pedro\Projects\stream-deck-template\COLLABORATION.md`.
+2. Commit and push (or open a PR) to `https://github.com/pedrofuentes/stream-deck-template` with a conventional commit: `docs(github-utilities): add learnings about <topic>`.
+
+### When to offer
+
+- After solving a non-obvious bug or hardware quirk
+- After implementing a reusable pattern (polling, caching, UI component)
+- After discovering a manifest or SDK constraint
+- After a release
+- When the session is wrapping up
+
+### Before starting major work
+
+Read `S:\Pedro\Projects\stream-deck-template\LEARNINGS.md` for the latest consolidated knowledge from all plugins.
