@@ -1,0 +1,12 @@
+node_modules/
+dist/
+com.pedrofuentes.github-utilities.sdPlugin/bin/
+com.pedrofuentes.github-utilities.sdPlugin/logs/
+*.js.map
+*.tsbuildinfo
+coverage/
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
