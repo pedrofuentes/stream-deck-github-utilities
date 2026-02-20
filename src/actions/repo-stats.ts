@@ -7,6 +7,10 @@
  *   - Press to force refresh
  *   - SVG key images with accent-bar design (via setImage)
  *   - Visual error states with retry hint
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
  */
 
 import {

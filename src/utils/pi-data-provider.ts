@@ -12,6 +12,10 @@
  *   4. Handler fetches data from GitHub API via github-api.ts
  *   5. Handler sends response via `streamDeck.ui.sendToPropertyInspector()`
  *   6. sdpi-components receives items and populates the dropdown
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
  */
 
 import type { JsonValue } from "@elgato/utils";

@@ -1,5 +1,9 @@
 /**
  * Shared type definitions for the GitHub Utilities plugin.
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
  */
 
 import type { JsonValue } from "@elgato/utils";

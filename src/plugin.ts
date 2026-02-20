@@ -1,3 +1,11 @@
+/**
+ * Plugin entry point — registers actions and connects to Stream Deck.
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
+ */
+
 import streamDeck from "@elgato/streamdeck";
 
 import { RepoStatsAction } from "./actions/repo-stats";

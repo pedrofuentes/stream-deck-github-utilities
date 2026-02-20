@@ -4,6 +4,10 @@
  * Mocks the @elgato/streamdeck module and the fetch API to test
  * the action's lifecycle, settings handling, and error states.
  * The action uses setImage() for SVG key images.
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";

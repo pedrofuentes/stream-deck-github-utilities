@@ -9,6 +9,10 @@
  *
  * Encoding: data:image/svg+xml,{encodeURIComponent(svg)}
  * (same approach as the Cloudflare Utilities plugin — confirmed working on device)
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
  */
 
 import type { StatType } from "./github-api";

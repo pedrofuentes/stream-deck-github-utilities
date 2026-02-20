@@ -3,6 +3,10 @@
  *
  * Exercises fetchUserRepos, fetchRepoWorkflows, fetchRepoBranches,
  * and fetchRepoEnvironments with mocked global fetch.
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";

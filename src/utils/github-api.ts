@@ -1,6 +1,10 @@
 /**
  * GitHub REST API client for fetching repository data.
  * Uses Node.js native fetch (available in Node 20+).
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
  */
 
 import type { JsonValue } from "@elgato/utils";

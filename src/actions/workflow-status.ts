@@ -11,6 +11,10 @@
  *   - Press to force refresh
  *   - SVG key images with accent-bar design (via setImage)
  *   - Optional filtering by workflow file, branch, and environment
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
  */
 
 import {

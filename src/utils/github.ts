@@ -1,4 +1,12 @@
 /**
+ * GitHub token validation, repository parsing, and count formatting helpers.
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
+ */
+
+/**
  * Validates that a GitHub personal access token (PAT) has the expected format.
  * Supports both classic tokens (ghp_) and fine-grained tokens (github_pat_).
  *

@@ -1,3 +1,11 @@
+/**
+ * Barrel exports for shared utilities.
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
+ */
+
 export { isValidGitHubToken, maskToken, formatCount, isValidRepoIdentifier, parseRepoIdentifier } from "./github";
 export {
 	fetchRepoStats,

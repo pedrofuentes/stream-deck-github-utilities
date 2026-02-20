@@ -3,6 +3,10 @@
  *
  * Mocks @elgato/streamdeck and the GitHub API datasource functions to test
  * the handlePIDataRequest orchestration logic.
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";

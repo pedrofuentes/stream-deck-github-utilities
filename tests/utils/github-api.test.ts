@@ -2,6 +2,10 @@
  * Tests for the GitHub API client (src/utils/github-api.ts).
  *
  * Uses vi.fn() to mock the global fetch function so no real HTTP calls are made.
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";

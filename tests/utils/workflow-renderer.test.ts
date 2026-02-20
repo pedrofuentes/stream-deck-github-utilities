@@ -3,6 +3,10 @@
  *
  * Tests additional edge cases for getWorkflowStatusColor, COLORS completeness,
  * and workflow-specific rendering functions.
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
  */
 
 import { describe, it, expect } from "vitest";
