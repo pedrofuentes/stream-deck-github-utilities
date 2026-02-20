@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<title>GitHub Utilities — Settings</title>
+	<style>
+		* { box-sizing: border-box; margin: 0; padding: 0; }
+		body {
+			font-family: "SF Pro", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+			background: #1a1d23;
+			color: #e6edf3;
+			padding: 20px;
+			font-size: 13px;
+			line-height: 1.5;
+		}
+
+		/* ── Header ── */
+		.header {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			margin-bottom: 20px;
+			padding-bottom: 14px;
+			border-bottom: 1px solid #30363d;
+		}
+		.header-icon {
+			width: 28px;
+			height: 28px;
+			border-radius: 6px;
+			background: linear-gradient(135deg, #161b22, #0d1117);
+			border: 1px solid #30363d;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 16px;
+		}
+		.header h2 {
+			font-size: 15px;
+			font-weight: 600;
+			color: #fff;
+		}
+		.header-sub {
+			font-size: 11px;
+			color: #8b949e;
+			font-weight: 400;
+		}
+
+		/* ── Section headings ── */
+		.section-label {
+			font-size: 11px;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 0.8px;
+			color: #8b949e;
+			margin-bottom: 8px;
+		}
+
+		/* ── Inputs ── */
+		.token-row {
+			display: flex;
+			gap: 6px;
+			margin-bottom: 10px;
+		}
+		.token-row input { flex: 1; }
+
+		input[type="password"],
+		input[type="text"] {
+			width: 100%;
+			background: #0d1117;
+			border: 1px solid #30363d;
+			border-radius: 6px;
+			color: #e6edf3;
+			padding: 9px 12px;
+			font-size: 13px;
+			font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+			transition: border-color 0.2s, box-shadow 0.2s;
+		}
+		input:focus {
+			outline: none;
+			border-color: #58a6ff;
+			box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.15);
+		}
+		input::placeholder { color: #484f58; }
+
+		/* ── Buttons ── */
+		.btn {
+			background: #21262d;
+			color: #e6edf3;
+			border: 1px solid #30363d;
+			border-radius: 6px;
+			padding: 9px 16px;
+			font-size: 12px;
+			font-weight: 500;
+			cursor: pointer;
+			transition: background 0.15s, border-color 0.15s;
+			font-family: inherit;
+		}
+		.btn:hover {
+			background: #30363d;
+			border-color: #484f58;
+		}
+		.btn-primary {
+			background: #238636;
+			border-color: #2ea043;
+			color: #fff;
+		}
+		.btn-primary:hover {
+			background: #2ea043;
+			border-color: #3fb950;
+		}
+		.btn-icon {
+			padding: 9px 11px;
+			font-size: 15px;
+			line-height: 1;
+			flex-shrink: 0;
+		}
+		.btn-row {
+			display: flex;
+			gap: 8px;
+		}
+
+		/* ── Status box ── */
+		.status-box {
+			margin-top: 12px;
+			padding: 10px 12px;
+			border-radius: 6px;
+			background: #0d1117;
+			border: 1px solid #30363d;
+			font-size: 12px;
+			line-height: 1.5;
+			transition: border-color 0.3s, color 0.3s;
+		}
+		.status-box.success { color: #3fb950; border-color: #238636; }
+		.status-box.error { color: #f85149; border-color: #da3633; }
+		.status-box.loading { color: #d29922; border-color: #9e6a03; }
+		.status-box.idle { color: #8b949e; border-color: #30363d; }
+
+		/* ── Divider ── */
+		.divider {
+			border: none;
+			border-top: 1px solid #21262d;
+			margin: 18px 0;
+		}
+
+		/* ── Info / Help text ── */
+		.help-text {
+			font-size: 12px;
+			color: #8b949e;
+			line-height: 1.6;
+		}
+		.help-text strong { color: #c9d1d9; }
+		.help-text a { color: #58a6ff; text-decoration: none; }
+		.help-text a:hover { text-decoration: underline; }
+		.help-step {
+			display: flex;
+			gap: 8px;
+			margin-bottom: 6px;
+		}
+		.help-num {
+			width: 20px;
+			height: 20px;
+			border-radius: 50%;
+			background: #21262d;
+			border: 1px solid #30363d;
+			color: #8b949e;
+			font-size: 11px;
+			font-weight: 600;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			flex-shrink: 0;
+			margin-top: 1px;
+		}
+		.scope-list {
+			margin: 4px 0 0 28px;
+			font-size: 11px;
+			color: #8b949e;
+		}
+		.scope-list code {
+			background: #161b22;
+			padding: 1px 5px;
+			border-radius: 4px;
+			font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+			font-size: 11px;
+			color: #c9d1d9;
+		}
+
+		/* ── Alert banner ── */
+		#alerts {
+			padding: 10px 12px;
+			border-radius: 6px;
+			margin-bottom: 14px;
+			display: none;
+			font-size: 12px;
+			font-weight: 500;
+		}
+		#alerts.notice {
+			color: #3fb950;
+			background: rgba(46, 160, 67, 0.1);
+			border: 1px solid rgba(46, 160, 67, 0.3);
+			display: block;
+		}
+		#alerts.error-alert {
+			color: #f85149;
+			background: rgba(248, 81, 73, 0.1);
+			border: 1px solid rgba(248, 81, 73, 0.3);
+			display: block;
+		}
+	</style>
+</head>
+<body>
+	<div class="header">
+		<div class="header-icon">⚙</div>
+		<div>
+			<h2>GitHub Utilities</h2>
+			<span class="header-sub">Plugin Settings</span>
+		</div>
+	</div>
+
+	<div id="alerts"></div>
+
+	<div class="section-label">Personal Access Token</div>
+	<div class="token-row">
+		<input type="password" id="tokenInput" placeholder="ghp_xxxx" autocomplete="off" spellcheck="false" />
+		<button class="btn btn-icon" id="toggleBtn" title="Show/Hide token">👁</button>
+	</div>
+	<div class="btn-row">
+		<button class="btn btn-primary" id="saveBtn">Save Token</button>
+		<button class="btn" id="validateBtn">Validate</button>
+	</div>
+	<div id="status" class="status-box idle">Enter your GitHub personal access token.</div>
+
+	<hr class="divider" />
+
+	<div class="section-label">How to create a token</div>
+	<div class="help-text">
+		<div class="help-step">
+			<span class="help-num">1</span>
+			<span>Go to <a href="https://github.com/settings/tokens" target="_blank">Settings → Developer settings → Tokens (classic)</a></span>
+		</div>
+		<div class="help-step">
+			<span class="help-num">2</span>
+			<span>Click <strong>Generate new token (classic)</strong></span>
+		</div>
+		<div class="help-step">
+			<span class="help-num">3</span>
+			<span>Select these scopes:</span>
+		</div>
+		<div class="scope-list">
+			<code>repo:status</code> · <code>repo_deployment</code> · <code>public_repo</code><br>
+			<code>notifications</code> · <code>read:enterprise</code> · <code>read:project</code>
+		</div>
+		<div class="help-step" style="margin-top: 8px;">
+			<span class="help-num">4</span>
+			<span>Click <strong>Generate token</strong> and paste it above</span>
+		</div>
+	</div>
+
+	<script>
+		/**
+		 * Setup page for GitHub Utilities plugin.
+		 * Manages the global GitHub token setting.
+		 * Token is passed via URL hash from the PI; saves via opener._saveToken().
+		 */
+
+		function showAlert(text, type, seconds) {
+			const el = document.getElementById("alerts");
+			if (!el) return;
+			el.textContent = text;
+			el.className = type === "notice" ? "notice" : "error-alert";
+			clearTimeout(el._timer);
+			el._timer = setTimeout(() => { el.className = ""; }, (seconds || 5) * 1000);
+		}
+
+		function updateStatus(text, cls) {
+			const el = document.getElementById("status");
+			el.textContent = text;
+			el.className = "status-box " + cls;
+		}
+
+		function escapeHtml(text) {
+			const div = document.createElement("div");
+			div.textContent = text;
+			return div.innerHTML;
+		}
+
+		function getOpenerPI() {
+			try { return window.opener; } catch(e) { return null; }
+		}
+
+		// ── Load token from URL hash, opener cache, or WebSocket ──
+		function loadSettings() {
+			const hash = window.location.hash.slice(1); // remove '#'
+			if (hash) {
+				const token = decodeURIComponent(hash);
+				document.getElementById("tokenInput").value = token;
+				updateStatus("✓ Token loaded from settings", "success");
+				// Clear hash from URL to avoid leaking token in history
+				if (history.replaceState) history.replaceState(null, "", window.location.pathname);
+				return;
+			}
+
+			// Fallback: try opener's _globalSettings cache
+			const opener = getOpenerPI();
+			if (opener && opener._globalSettings && opener._globalSettings.githubToken) {
+				document.getElementById("tokenInput").value = opener._globalSettings.githubToken;
+				updateStatus("✓ Token loaded from settings", "success");
+				return;
+			}
+
+			// Final fallback: request global settings via opener's WebSocket
+			// (mirrors the Cloudflare plugin approach)
+			if (opener && opener._sdWebSocket && opener._sdUuid) {
+				const ws = opener._sdWebSocket;
+				const uuid = opener._sdUuid;
+				if (ws.readyState === WebSocket.OPEN) {
+					function onGlobalMsg(evt) {
+						try {
+							const data = JSON.parse(evt.data);
+							if (data.event === "didReceiveGlobalSettings") {
+								ws.removeEventListener("message", onGlobalMsg);
+								const token = (data.payload && data.payload.settings && data.payload.settings.githubToken) || "";
+								if (token) {
+									document.getElementById("tokenInput").value = token;
+									updateStatus("✓ Token loaded from settings", "success");
+								}
+							}
+						} catch(e) {}
+					}
+					ws.addEventListener("message", onGlobalMsg);
+					ws.send(JSON.stringify({ event: "getGlobalSettings", context: uuid }));
+				}
+			}
+		}
+
+		// ── Save token via the parent PI's _saveToken function ──
+		function saveToken() {
+			const token = document.getElementById("tokenInput").value.trim();
+			const opener = getOpenerPI();
+
+			if (!opener || typeof opener._saveToken !== "function") {
+				showAlert("Cannot communicate with Property Inspector. Close and reopen from the action.", "error");
+				return;
+			}
+
+			const ok = opener._saveToken(token);
+			if (!ok) {
+				showAlert("WebSocket connection lost. Close and reopen from the action.", "error");
+				return;
+			}
+
+			if (token) {
+				updateStatus("✓ Token saved", "success");
+			} else {
+				updateStatus("Token cleared", "idle");
+			}
+			showAlert("Saved!", "notice", 3);
+		}
+
+		// ── Validate token against GitHub API ──
+		async function validateToken() {
+			const token = document.getElementById("tokenInput").value.trim();
+			if (!token) {
+				updateStatus("⚠ Enter a token first", "error");
+				return;
+			}
+
+			updateStatus("Validating…", "loading");
+
+			try {
+				const res = await fetch("https://api.github.com/user", {
+					headers: {
+						"Authorization": "Bearer " + token,
+						"Accept": "application/vnd.github+json",
+						"X-GitHub-Api-Version": "2022-11-28",
+						"User-Agent": "stream-deck-github-utilities/1.0"
+					}
+				});
+
+				if (res.ok) {
+					const user = await res.json();
+					const scopes = res.headers.get("x-oauth-scopes") || "none";
+					const el = document.getElementById("status");
+					el.innerHTML = "✓ Valid — <strong>@" + escapeHtml(user.login) + "</strong><br>Scopes: " + escapeHtml(scopes);
+					el.className = "status-box success";
+				} else if (res.status === 401) {
+					updateStatus("✗ Invalid or expired token", "error");
+				} else if (res.status === 403) {
+					updateStatus("✗ Access denied (403) — check token permissions", "error");
+				} else {
+					updateStatus("✗ GitHub API error (" + res.status + ")", "error");
+				}
+			} catch (e) {
+				updateStatus("✗ Network error — check your internet connection", "error");
+			}
+		}
+
+		function toggleVisibility() {
+			const input = document.getElementById("tokenInput");
+			const btn = document.getElementById("toggleBtn");
+			if (input.type === "password") {
+				input.type = "text";
+				btn.textContent = "🔒";
+				btn.title = "Hide token";
+			} else {
+				input.type = "password";
+				btn.textContent = "👁";
+				btn.title = "Show token";
+			}
+		}
+
+		// ── Init ──
+		document.addEventListener("DOMContentLoaded", function() {
+			loadSettings();
+
+			document.getElementById("saveBtn").addEventListener("click", saveToken);
+			document.getElementById("validateBtn").addEventListener("click", validateToken);
+			document.getElementById("toggleBtn").addEventListener("click", toggleVisibility);
+
+			document.getElementById("tokenInput").addEventListener("keydown", function(e) {
+				if (e.key === "Enter") saveToken();
+			});
+		});
+	</script>
+</body>
+</html>

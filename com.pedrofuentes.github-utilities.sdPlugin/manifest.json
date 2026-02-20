@@ -1,0 +1,61 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "Actions": [
+    {
+      "Icon": "imgs/actions/repo-stats/icon",
+      "Name": "Repo Stats",
+      "States": [
+        {
+          "Image": "imgs/actions/repo-stats/key",
+          "ShowTitle": false,
+          "UserTitleEnabled": false
+        }
+      ],
+      "Tooltip": "Display GitHub repository statistics (stars, issues, forks, watchers)",
+      "UUID": "com.pedrofuentes.github-utilities.repo-stats",
+      "PropertyInspectorPath": "ui/repo-stats.html"
+    },
+    {
+      "Icon": "imgs/actions/workflow-status/icon",
+      "Name": "Workflow Status",
+      "States": [
+        {
+          "Image": "imgs/actions/workflow-status/key",
+          "ShowTitle": false,
+          "UserTitleEnabled": false
+        }
+      ],
+      "Tooltip": "Display the latest GitHub Actions workflow run status and deployment state",
+      "UUID": "com.pedrofuentes.github-utilities.workflow-status",
+      "PropertyInspectorPath": "ui/workflow-status.html"
+    }
+  ],
+  "Author": "Pedro Fuentes",
+  "Category": "GitHub Utilities",
+  "CategoryIcon": "imgs/plugin-icon",
+  "CodePath": "bin/plugin.js",
+  "Description": "A set of Stream Deck utilities to display information from GitHub repositories, pull requests, issues, and more.",
+  "Icon": "imgs/plugin-icon",
+  "Name": "GitHub Utilities",
+  "Nodejs": {
+    "Version": "20",
+    "Debug": "enabled"
+  },
+  "OS": [
+    {
+      "Platform": "mac",
+      "MinimumVersion": "13"
+    },
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "SDKVersion": 2,
+  "Software": {
+    "MinimumVersion": "6.9"
+  },
+  "URL": "https://github.com/pedrofuentes/stream-deck-github-utilities",
+  "UUID": "com.pedrofuentes.github-utilities",
+  "Version": "1.0.0.0"
+}
