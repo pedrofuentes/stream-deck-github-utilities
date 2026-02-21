@@ -47,11 +47,15 @@ function makeHeadersRateLimited(): Headers {
 	});
 }
 
-function mockFetchResponse(data: unknown, status = 200): Response {
+function mockFetchResponse(data: unknown, status = 200, linkHeader?: string): Response {
+	const headers = makeHeaders();
+	if (linkHeader) {
+		headers.set("link", linkHeader);
+	}
 	return {
 		ok: status >= 200 && status < 300,
 		status,
-		headers: makeHeaders(),
+		headers,
 		json: () => Promise.resolve(data),
 		text: () => Promise.resolve(JSON.stringify(data)),
 	} as unknown as Response;
@@ -112,7 +116,7 @@ describe("Datasource API", () => {
 			expect(items[2]).toEqual({ label: "org/shared", value: "org/shared" });
 		});
 
-		it("uses correct URL with sort, direction, and affiliation params", async () => {
+		it("uses correct URL with sort, direction, visibility, and affiliation params", async () => {
 			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse([]));
 
 			await fetchUserRepos("ghp_test");
@@ -122,6 +126,7 @@ describe("Datasource API", () => {
 			expect(url).toContain("per_page=100");
 			expect(url).toContain("sort=pushed");
 			expect(url).toContain("direction=desc");
+			expect(url).toContain("visibility=all");
 			expect(url).toContain("affiliation=owner,collaborator,organization_member");
 		});
 
@@ -218,6 +223,90 @@ describe("Datasource API", () => {
 
 			const items = await fetchUserRepos("ghp_test");
 			expect(items).toHaveLength(100);
+		});
+
+		it("paginates through multiple pages of repos", async () => {
+			const page1Repos = Array.from({ length: 100 }, (_, i) => ({
+				full_name: `owner/public-${i}`,
+				private: false,
+				description: null,
+			}));
+			const page2Repos = [
+				{ full_name: "owner/private-1", private: true, description: null },
+				{ full_name: "owner/private-2", private: true, description: null },
+			];
+
+			vi.mocked(globalThis.fetch)
+				.mockResolvedValueOnce(
+					mockFetchResponse(
+						page1Repos,
+						200,
+						'<https://api.github.com/user/repos?page=2&per_page=100>; rel="next", <https://api.github.com/user/repos?page=2&per_page=100>; rel="last"',
+					),
+				)
+				.mockResolvedValueOnce(mockFetchResponse(page2Repos));
+
+			const items = await fetchUserRepos("ghp_test");
+
+			expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+			expect(items).toHaveLength(102);
+			expect(items[100].label).toContain("🔒");
+			expect(items[100].value).toBe("owner/private-1");
+			expect(items[101].value).toBe("owner/private-2");
+		});
+
+		it("stops paginating when no Link next header", async () => {
+			const repos = [
+				{ full_name: "owner/repo1", private: false, description: null },
+			];
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(repos));
+
+			const items = await fetchUserRepos("ghp_test");
+
+			expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+			expect(items).toHaveLength(1);
+		});
+
+		it("returns partial results when a subsequent page fails with network error", async () => {
+			const page1Repos = [
+				{ full_name: "owner/repo1", private: false, description: null },
+			];
+
+			vi.mocked(globalThis.fetch)
+				.mockResolvedValueOnce(
+					mockFetchResponse(
+						page1Repos,
+						200,
+						'<https://api.github.com/user/repos?page=2>; rel="next"',
+					),
+				)
+				.mockRejectedValueOnce(new Error("Network error"));
+
+			const items = await fetchUserRepos("ghp_test");
+
+			expect(items).toHaveLength(1);
+			expect(items[0].value).toBe("owner/repo1");
+		});
+
+		it("returns partial results when a subsequent page returns non-ok status", async () => {
+			const page1Repos = [
+				{ full_name: "owner/repo1", private: true, description: null },
+			];
+
+			vi.mocked(globalThis.fetch)
+				.mockResolvedValueOnce(
+					mockFetchResponse(
+						page1Repos,
+						200,
+						'<https://api.github.com/user/repos?page=2>; rel="next"',
+					),
+				)
+				.mockResolvedValueOnce(mockFetchResponse({ message: "rate limited" }, 403));
+
+			const items = await fetchUserRepos("ghp_test");
+
+			expect(items).toHaveLength(1);
+			expect(items[0].label).toContain("🔒");
 		});
 	});
 

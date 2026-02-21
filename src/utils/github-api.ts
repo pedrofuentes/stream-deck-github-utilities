@@ -545,7 +545,13 @@ export async function validateTokenStatus(token?: string): Promise<DataSourceIte
 			// Check for scopes needed by this plugin
 			if (!scopes.includes("repo") && !scopes.includes("public_repo")) {
 				items.push({
-					label: "⚠ Missing repo scope — only public data accessible",
+					label: "⚠ Missing repo scope — enable the repo scope on your token",
+					value: "",
+					disabled: true,
+				});
+			} else if (scopes.includes("public_repo") && !scopes.includes("repo")) {
+				items.push({
+					label: "⚠ Only public_repo scope — private repos won't appear. Enable the full repo scope.",
 					value: "",
 					disabled: true,
 				});
@@ -581,40 +587,65 @@ export async function fetchUserRepos(token?: string): Promise<DataSourceItem[]> 
 	}
 
 	const headers = buildHeaders(token);
-	const url = `${GITHUB_API_BASE}/user/repos?per_page=100&sort=pushed&direction=desc&affiliation=owner,collaborator,organization_member`;
+	let url: string | null = `${GITHUB_API_BASE}/user/repos?per_page=100&sort=pushed&direction=desc&visibility=all&affiliation=owner,collaborator,organization_member`;
 
-	let response: Response;
-	try {
-		response = await fetch(url, { headers });
-	} catch {
-		return [{ label: "⚠ Network error — check connection", value: "", disabled: true }];
-	}
+	const allRepos: Array<{ full_name: string; private: boolean; description: string | null }> = [];
 
-	if (!response.ok) {
-		if (response.status === 401) {
-			return [{ label: "⚠ Invalid or expired token", value: "", disabled: true }];
+	// Paginate through all pages of results
+	while (url) {
+		let response: Response;
+		try {
+			response = await fetch(url, { headers });
+		} catch {
+			if (allRepos.length > 0) break; // Return what we have so far
+			return [{ label: "⚠ Network error — check connection", value: "", disabled: true }];
 		}
-		if (response.status === 403) {
-			return [{ label: "⚠ Token lacks permission — enable Metadata read access", value: "", disabled: true }];
+
+		if (!response.ok) {
+			if (allRepos.length > 0) break; // Return what we have so far
+			if (response.status === 401) {
+				return [{ label: "⚠ Invalid or expired token", value: "", disabled: true }];
+			}
+			if (response.status === 403) {
+				return [{ label: "⚠ Token lacks permission — enable Metadata read access", value: "", disabled: true }];
+			}
+			return [{ label: `⚠ GitHub API error (${response.status})`, value: "", disabled: true }];
 		}
-		return [{ label: `⚠ GitHub API error (${response.status})`, value: "", disabled: true }];
+
+		let repos: Array<{ full_name: string; private: boolean; description: string | null }>;
+		try {
+			repos = (await response.json()) as typeof repos;
+		} catch {
+			if (allRepos.length > 0) break;
+			return [{ label: "⚠ Invalid response from GitHub", value: "", disabled: true }];
+		}
+
+		if (Array.isArray(repos)) {
+			allRepos.push(...repos);
+		}
+
+		// Parse Link header for next page
+		url = parseNextPageUrl(response.headers.get("link"));
 	}
 
-	let repos: Array<{ full_name: string; private: boolean; description: string | null }>;
-	try {
-		repos = (await response.json()) as typeof repos;
-	} catch {
-		return [{ label: "⚠ Invalid response from GitHub", value: "", disabled: true }];
-	}
-
-	if (!Array.isArray(repos) || repos.length === 0) {
+	if (allRepos.length === 0) {
 		return [{ label: "No repositories found", value: "", disabled: true }];
 	}
 
-	return repos.map((r) => ({
+	return allRepos.map((r) => ({
 		label: `${r.private ? "🔒 " : ""}${r.full_name}`,
 		value: r.full_name,
 	}));
+}
+
+/**
+ * Parses the GitHub `Link` header to extract the URL for the next page.
+ * Returns null if there is no next page.
+ */
+function parseNextPageUrl(linkHeader: string | null): string | null {
+	if (!linkHeader) return null;
+	const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+	return match ? match[1] : null;
 }
 
 /**

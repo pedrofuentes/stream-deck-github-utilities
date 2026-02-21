@@ -257,7 +257,7 @@
 				tokenStatus.textContent = "✓ Token valid — no repos found";
 				tokenStatus.className = "sdpi-status success";
 				repoStatus.innerHTML =
-					'Token works but returned no repositories. Ensure your token has the <strong>public_repo</strong> scope enabled. ' +
+					'Token works but returned no repositories. Ensure your token has the <strong>repo</strong> scope enabled (not just <strong>public_repo</strong>). ' +
 					'<a href="https://github.com/settings/tokens" target="_blank">Update token →</a>';
 			} else if (firstVal !== "") {
 				const count = items.filter(i => i.value !== "").length;
