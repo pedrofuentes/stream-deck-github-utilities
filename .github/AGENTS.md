@@ -173,14 +173,79 @@ tests/                 # Test files mirroring src/ structure (262 tests)
 | `npm run validate` | Stream Deck CLI validation |
 | `npm run pack` | Build + test + validate + package `.streamDeckPlugin` |
 
+## Branching Model (GitHub Flow)
+
+This project uses **GitHub Flow** — a simple branch-based workflow. **All work happens on feature/fix branches, never directly on `main`.**
+
+### Branch Naming Convention
+
+| Type | Pattern | Example |
+|---|---|---|
+| New feature | `feature/<short-name>` | `feature/pull-request-action` |
+| Bug fix | `fix/<short-name>` | `fix/private-repos-visibility` |
+| Docs/chore | `chore/<short-name>` | `chore/update-roadmap` |
+| Release prep | `release/v<version>` | `release/v1.2.0` |
+
+### Workflow — MANDATORY for every change
+
+1. **Create a branch** from `main`:
+   ```bash
+   git checkout main
+   git pull origin main
+   git checkout -b feature/my-feature
+   ```
+
+2. **Do all work on the branch** — commits, tests, build, CLI validation.
+
+3. **Test on the Stream Deck** (see Pre-Release Testing Checklist below) before merging.
+
+4. **Merge to `main`** when ready:
+   ```bash
+   git checkout main
+   git pull origin main
+   git merge feature/my-feature
+   ```
+
+5. **Tag and release** from `main` (see Release Process below).
+
+6. **Delete the branch** after merge:
+   ```bash
+   git branch -d feature/my-feature
+   git push origin --delete feature/my-feature
+   ```
+
+### Rules
+- **Never commit directly to `main`** — always use a branch.
+- **One branch per feature or fix** — keep changes focused.
+- **Branch from latest `main`** — pull before branching.
+- Version bumps and tagging happen on `main` after merge.
+
+## Pre-Release Testing Checklist
+
+Before asking the user for final testing, the agent MUST complete these steps:
+
+1. **Run the full test suite** — `npm test` (all tests must pass)
+2. **Build the plugin** — `npm run build` (must succeed with no errors)
+3. **Validate the manifest** — `streamdeck validate com.pedrofuentes.github-utilities.sdPlugin`
+4. **Restart the plugin on the device** — `streamdeck restart com.pedrofuentes.github-utilities`
+5. **Verify in Stream Deck logs** (optional) — check `com.pedrofuentes.github-utilities.sdPlugin/logs/` for runtime errors after restart
+6. **Inform the user** what was changed and ask them to verify the behavior on their device
+
+The agent should use the Stream Deck CLI (`streamdeck restart`, `streamdeck validate`, `streamdeck stop`) proactively to catch issues before the user has to manually test.
+
 ## Release Process
 
-1. All tests pass: `npm test`
-2. Build succeeds: `npm run build`
-3. Plugin validates: `npm run validate`
-4. Package: `streamdeck pack com.pedrofuentes.github-utilities.sdPlugin --output dist/`
-
-The resulting `.streamDeckPlugin` file in `dist/` is the distributable installer.
+1. **Ensure you are on `main`** with all feature branches already merged.
+2. All tests pass: `npm test`
+3. Build succeeds: `npm run build`
+4. Plugin validates: `streamdeck validate com.pedrofuentes.github-utilities.sdPlugin`
+5. Bump version in **both** `package.json` and `manifest.json` (`Version` field, 4-part: `X.Y.Z.0`).
+6. Commit the version bump: `git commit -am "chore: bump version to vX.Y.Z"`
+7. Package: `streamdeck pack com.pedrofuentes.github-utilities.sdPlugin --force --output .`
+8. Commit the `.streamDeckPlugin` artifact.
+9. Tag: `git tag vX.Y.Z`
+10. Push: `git push origin main --tags`
+11. Create GitHub release: `gh release create vX.Y.Z <artifact> --title "vX.Y.Z — <summary>" --notes "<changelog>"`
 
 ## Common Pitfalls
 
