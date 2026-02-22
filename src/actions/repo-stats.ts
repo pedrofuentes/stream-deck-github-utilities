@@ -30,11 +30,25 @@ import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { fetchRepoStats, fetchOpenPullRequestCount, getStatDisplay, getStatUrl, STAT_TYPES, type StatType } from "../utils/github-api";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderStatImage, renderLoadingImage, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
+import { MarqueeController } from "../utils/marquee-controller";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
 const MIN_REFRESH_INTERVAL = 30; // 30 seconds minimum
 const LONG_PRESS_THRESHOLD_MS = 500; // hold ≥ 500ms = long press
+const MARQUEE_INTERVAL_MS = 500; // marquee scroll speed
+const LINE1_MAX_VISIBLE = 14; // max chars at 18px (hardware-tested)
+const LINE2_MAX_VISIBLE = 16; // max chars at 18px for stat value
+
+/** Cached render data and marquee state per action instance. */
+interface MarqueeData {
+	line1: MarqueeController;
+	line2: MarqueeController;
+	timer: ReturnType<typeof setInterval> | null;
+	displayValue: string;
+	statType: StatType;
+	repoName: string;
+}
 
 @action({ UUID: "com.pedrofuentes.github-utilities.repo-stats" })
 export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
@@ -49,6 +63,9 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 
 	/** Timestamp when key was pressed down (for long/short press detection) */
 	private keyDownTime = new Map<string, number>();
+
+	/** Marquee scroll state per action instance */
+	private marqueeData = new Map<string, MarqueeData>();
 
 	/**
 	 * Called when the action becomes visible on the Stream Deck.
@@ -81,9 +98,11 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	 */
 	override onWillDisappear(ev: WillDisappearEvent<RepoStatsSettings>): void {
 		this.stopTimer(ev.action.id);
+		this.stopMarquee(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.keyDownTime.delete(ev.action.id);
+		this.marqueeData.delete(ev.action.id);
 	}
 
 	/**
@@ -225,8 +244,19 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 
 			const displayValue = getStatDisplay(stats, statType, formatCount);
 
-			await actionContext.setImage(renderStatImage(displayValue, statType, parsed.repo));
-			await actionContext.setTitle("");
+			// Update marquee controllers and cache render data
+			const md = this.getOrCreateMarquee(actionId);
+			md.line1.setText(parsed.repo);
+			md.line2.setText(displayValue);
+			md.displayValue = displayValue;
+			md.statType = statType;
+			md.repoName = parsed.repo;
+
+			// Render with current marquee window position
+			await this.renderWithMarquee(actionId);
+
+			// Start/stop marquee timer based on whether any line needs animation
+			this.updateMarqueeTimer(actionId);
 
 			// Store URL for key press
 			this.lastUrl.set(actionId, getStatUrl(parsed.owner, parsed.repo, statType));
@@ -235,6 +265,9 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : "Unknown error";
 			streamDeck.logger.error(`Failed to fetch repo stats for ${settings.repo}: ${message}`);
+
+			// Stop marquee on error — nothing to scroll
+			this.stopMarquee(actionId);
 
 			// Determine a short error label for the button
 			let errorLabel = "Error";
@@ -285,6 +318,82 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			clearInterval(timer);
 			this.timers.delete(actionId);
 			streamDeck.logger.debug(`Stopped timer for ${actionId}`);
+		}
+	}
+
+	// ── Marquee helpers ────────────────────────────────────────────────────
+
+	/**
+	 * Gets or creates marquee state for an action instance.
+	 */
+	private getOrCreateMarquee(actionId: string): MarqueeData {
+		let md = this.marqueeData.get(actionId);
+		if (!md) {
+			md = {
+				line1: new MarqueeController(LINE1_MAX_VISIBLE),
+				line2: new MarqueeController(LINE2_MAX_VISIBLE),
+				timer: null,
+				displayValue: "",
+				statType: "stars",
+				repoName: "",
+			};
+			this.marqueeData.set(actionId, md);
+		}
+		return md;
+	}
+
+	/**
+	 * Renders the button using the current marquee window position.
+	 * Uses cached render data so no API call is needed.
+	 */
+	private async renderWithMarquee(actionId: string): Promise<void> {
+		const md = this.marqueeData.get(actionId);
+		const actionContext = [...this.actions].find((a) => a.id === actionId);
+		if (!md || !actionContext?.isKey()) return;
+
+		const displayName = md.line1.needsAnimation()
+			? md.line1.getCurrentText()
+			: md.repoName;
+		const displayValue = md.line2.needsAnimation()
+			? md.line2.getCurrentText()
+			: md.displayValue;
+
+		await actionContext.setImage(renderStatImage(displayValue, md.statType, displayName));
+		await actionContext.setTitle("");
+	}
+
+	/**
+	 * Starts or stops the marquee animation timer based on whether any line
+	 * needs scrolling.
+	 */
+	private updateMarqueeTimer(actionId: string): void {
+		const md = this.marqueeData.get(actionId);
+		if (!md) return;
+
+		const needsAnimation = md.line1.needsAnimation() || md.line2.needsAnimation();
+
+		if (needsAnimation && !md.timer) {
+			md.timer = setInterval(() => {
+				const changed1 = md.line1.tick();
+				const changed2 = md.line2.tick();
+				if (changed1 || changed2) {
+					this.renderWithMarquee(actionId).catch(() => { /* marquee render error — ignore */ });
+				}
+			}, MARQUEE_INTERVAL_MS);
+		} else if (!needsAnimation && md.timer) {
+			clearInterval(md.timer);
+			md.timer = null;
+		}
+	}
+
+	/**
+	 * Stops the marquee animation timer for an action instance.
+	 */
+	private stopMarquee(actionId: string): void {
+		const md = this.marqueeData.get(actionId);
+		if (md?.timer) {
+			clearInterval(md.timer);
+			md.timer = null;
 		}
 	}
 }

@@ -59,3 +59,8 @@ export {
 	type KeyImageOptions,
 	type KeyIconImageOptions,
 } from "./button-renderer";
+export {
+	MarqueeController,
+	MARQUEE_PAUSE_TICKS,
+	MARQUEE_SEPARATOR,
+} from "./marquee-controller";

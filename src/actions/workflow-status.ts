@@ -44,10 +44,30 @@ import {
 	renderErrorImage,
 	renderUnconfiguredImage,
 } from "../utils/button-renderer";
+import { MarqueeController } from "../utils/marquee-controller";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 60; // 1 minute (workflows change faster than stats)
 const MIN_REFRESH_INTERVAL = 15; // 15 seconds minimum
+const MARQUEE_INTERVAL_MS = 500; // marquee scroll speed
+const LINE1_MAX_VISIBLE = 14; // max chars at 18px
+const LINE3_MAX_VISIBLE = 18; // max chars at 15px
+
+/** Render variant cache for marquee re-rendering without API calls. */
+type WfRenderVariant =
+	| { type: "deploying"; deployState: string }
+	| { type: "workflow"; statusLabel: string; displayStatus: string; deployLabel?: string }
+	| { type: "noRuns" };
+
+/** Cached render data and marquee state per action instance. */
+interface WfMarqueeData {
+	line1: MarqueeController;
+	line3: MarqueeController;
+	timer: ReturnType<typeof setInterval> | null;
+	repoName: string;
+	line3Text: string;
+	variant: WfRenderVariant;
+}
 
 @action({ UUID: "com.pedrofuentes.github-utilities.workflow-status" })
 export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings> {
@@ -59,6 +79,9 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 
 	/** Last known URL per action instance (for opening on key press) */
 	private lastUrl = new Map<string, string>();
+
+	/** Marquee scroll state per action instance */
+	private marqueeData = new Map<string, WfMarqueeData>();
 
 	/**
 	 * Called when the action becomes visible on the Stream Deck.
@@ -87,8 +110,10 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	 */
 	override onWillDisappear(ev: WillDisappearEvent<WorkflowStatusSettings>): void {
 		this.stopTimer(ev.action.id);
+		this.stopMarquee(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
+		this.marqueeData.delete(ev.action.id);
 	}
 
 	/**
@@ -197,41 +222,50 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			const activeDeployStates: DeploymentState[] = ["in_progress", "queued", "pending"];
 			const isDeploying = info.deployment && activeDeployStates.includes(info.deployment.state);
 
-			if (isDeploying && info.deployment) {
-				// Show deploying state prominently
-				const envName = info.deployment.environment || "deploy";
-				await actionContext.setImage(renderDeployingImage(envName, info.deployment.state, parsed.repo));
+			// Update marquee state with render variant and text
+			const md = this.getOrCreateMarquee(actionId);
+			md.repoName = parsed.repo;
+			md.line1.setText(parsed.repo);
 
-				// Store the deployment log URL, or fall back to latest run URL
+			if (isDeploying && info.deployment) {
+				const envName = info.deployment.environment || "deploy";
+				md.line3Text = envName;
+				md.line3.setText(envName);
+				md.variant = { type: "deploying", deployState: info.deployment.state };
+
 				this.lastUrl.set(
 					actionId,
 					info.deployment.log_url || info.latestRun?.html_url || `https://github.com/${parsed.owner}/${parsed.repo}/actions`,
 				);
 			} else if (info.latestRun) {
-				// Show the latest workflow run status
 				const displayStatus = getWorkflowDisplayStatus(info.latestRun);
 				const statusLabel = getWorkflowStatusLabel(displayStatus);
 
-				// Add deploy info as secondary line if available
 				let deployLabel: string | undefined;
 				if (info.deployment) {
 					const envName = info.deployment.environment || "deploy";
 					deployLabel = `${envName}: ${info.deployment.state}`;
 				}
 
-				await actionContext.setImage(renderWorkflowImage(statusLabel, displayStatus, parsed.repo, deployLabel));
+				const line3Text = deployLabel ?? statusLabel;
+				md.line3Text = line3Text;
+				md.line3.setText(line3Text);
+				md.variant = { type: "workflow", statusLabel, displayStatus, deployLabel };
 
-				// Store the workflow run URL
 				this.lastUrl.set(actionId, info.latestRun.html_url || `https://github.com/${parsed.owner}/${parsed.repo}/actions`);
 			} else {
-				// No workflow runs found
-				await actionContext.setImage(renderWorkflowImage("No Runs", "neutral", parsed.repo));
+				md.line3Text = "No Runs";
+				md.line3.setText("No Runs");
+				md.variant = { type: "noRuns" };
 
-				// Fall back to the repo's Actions tab
 				this.lastUrl.set(actionId, `https://github.com/${parsed.owner}/${parsed.repo}/actions`);
 			}
 
-			await actionContext.setTitle("");
+			// Render with current marquee window position
+			await this.renderWithMarquee(actionId);
+
+			// Start/stop marquee timer based on animation needs
+			this.updateMarqueeTimer(actionId);
 
 			streamDeck.logger.debug(
 				`Workflow status updated: ${settings.repo} run=${info.latestRun?.status ?? "none"} deploy=${info.deployment?.state ?? "none"}`,
@@ -239,6 +273,9 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : "Unknown error";
 			streamDeck.logger.error(`Failed to fetch workflow status for ${settings.repo}: ${message}`);
+
+			// Stop marquee on error — nothing to scroll
+			this.stopMarquee(actionId);
 
 			let errorLabel = "Error";
 			if (message.includes("rate limit")) {
@@ -288,6 +325,100 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			clearInterval(timer);
 			this.timers.delete(actionId);
 			streamDeck.logger.debug(`Stopped workflow timer for ${actionId}`);
+		}
+	}
+
+	// ── Marquee helpers ────────────────────────────────────────────────────
+
+	/**
+	 * Gets or creates marquee state for an action instance.
+	 */
+	private getOrCreateMarquee(actionId: string): WfMarqueeData {
+		let md = this.marqueeData.get(actionId);
+		if (!md) {
+			md = {
+				line1: new MarqueeController(LINE1_MAX_VISIBLE),
+				line3: new MarqueeController(LINE3_MAX_VISIBLE),
+				timer: null,
+				repoName: "",
+				line3Text: "",
+				variant: { type: "noRuns" },
+			};
+			this.marqueeData.set(actionId, md);
+		}
+		return md;
+	}
+
+	/**
+	 * Renders the button using the current marquee window position.
+	 * Uses cached render variant so no API call is needed.
+	 */
+	private async renderWithMarquee(actionId: string): Promise<void> {
+		const md = this.marqueeData.get(actionId);
+		const actionContext = [...this.actions].find((a) => a.id === actionId);
+		if (!md || !actionContext?.isKey()) return;
+
+		const displayName = md.line1.needsAnimation()
+			? md.line1.getCurrentText()
+			: md.repoName;
+		const displayLine3 = md.line3.needsAnimation()
+			? md.line3.getCurrentText()
+			: md.line3Text;
+
+		let image: string;
+		switch (md.variant.type) {
+			case "deploying":
+				image = renderDeployingImage(displayLine3, md.variant.deployState, displayName);
+				break;
+			case "workflow":
+				image = renderWorkflowImage(
+					md.variant.statusLabel,
+					md.variant.displayStatus,
+					displayName,
+					md.variant.deployLabel ? displayLine3 : undefined,
+				);
+				break;
+			case "noRuns":
+				image = renderWorkflowImage("No Runs", "neutral", displayName);
+				break;
+		}
+
+		await actionContext.setImage(image);
+		await actionContext.setTitle("");
+	}
+
+	/**
+	 * Starts or stops the marquee animation timer based on whether any line
+	 * needs scrolling.
+	 */
+	private updateMarqueeTimer(actionId: string): void {
+		const md = this.marqueeData.get(actionId);
+		if (!md) return;
+
+		const needsAnimation = md.line1.needsAnimation() || md.line3.needsAnimation();
+
+		if (needsAnimation && !md.timer) {
+			md.timer = setInterval(() => {
+				const changed1 = md.line1.tick();
+				const changed3 = md.line3.tick();
+				if (changed1 || changed3) {
+					this.renderWithMarquee(actionId).catch(() => { /* marquee render error — ignore */ });
+				}
+			}, MARQUEE_INTERVAL_MS);
+		} else if (!needsAnimation && md.timer) {
+			clearInterval(md.timer);
+			md.timer = null;
+		}
+	}
+
+	/**
+	 * Stops the marquee animation timer for an action instance.
+	 */
+	private stopMarquee(actionId: string): void {
+		const md = this.marqueeData.get(actionId);
+		if (md?.timer) {
+			clearInterval(md.timer);
+			md.timer = null;
 		}
 	}
 }
