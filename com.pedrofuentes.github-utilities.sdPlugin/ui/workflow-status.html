@@ -22,9 +22,15 @@
 							const ev = data.payload.event;
 							if (ev === "getRepos") {
 								window._repoItems = data.payload.items || [];
-								if (typeof window._onRepoData === "function") window._onRepoData();
-							} else if (ev === "getWorkflows" || ev === "getBranches" || ev === "getEnvironments") {
-								window["_" + ev + "Items"] = data.payload.items || [];
+							window.dispatchEvent(new CustomEvent('sdpi-datasource', {
+								detail: { event: 'getRepos', items: window._repoItems }
+							}));
+							if (typeof window._onRepoData === "function") window._onRepoData();
+						} else if (ev === "getWorkflows" || ev === "getBranches" || ev === "getEnvironments") {
+							window["_" + ev + "Items"] = data.payload.items || [];
+							window.dispatchEvent(new CustomEvent('sdpi-datasource', {
+								detail: { event: ev, items: data.payload.items || [] }
+							}));
 								if (typeof window._onFilterData === "function") window._onFilterData();
 							}
 						}
@@ -36,12 +42,18 @@
 	})();
 	</script>
 	<script src="sdpi-components.js"></script>
+	<script src="filterable-select.js"></script>
 	<script>
 	// Capture the action UUID from sdpi-components' connection handshake
 	(function() {
 		const origConnect = window.connectElgatoStreamDeckSocket;
 		window.connectElgatoStreamDeckSocket = function(port, uuid, registerEvent, info, actionInfo) {
 			window._sdUuid = uuid;
+			try {
+				var ai = typeof actionInfo === 'string' ? JSON.parse(actionInfo) : actionInfo;
+				window._sdAction = ai?.action || '';
+				window._actionSettings = ai?.payload?.settings || {};
+			} catch(e) {}
 			if (origConnect) origConnect.call(this, port, uuid, registerEvent, info, actionInfo);
 			// Explicitly request global settings so _globalSettings is populated
 			setTimeout(() => {
@@ -141,12 +153,7 @@
 	<span class="sdpi-heading">Repository</span>
 
 	<sdpi-item label="Repository">
-		<sdpi-select
-			setting="repo"
-			datasource="getRepos"
-			show-refresh
-			id="repoSelect"
-		></sdpi-select>
+		<div id="repoSelect"></div>
 	</sdpi-item>
 
 	<span id="repoStatus" class="sdpi-info">
@@ -160,30 +167,15 @@
 		<span class="sdpi-heading">Filters</span>
 
 		<sdpi-item label="Workflow">
-			<sdpi-select
-				setting="workflowFile"
-				datasource="getWorkflows"
-				show-refresh
-				id="workflowSelect"
-			></sdpi-select>
+			<div id="workflowSelect"></div>
 		</sdpi-item>
 
 		<sdpi-item label="Branch">
-			<sdpi-select
-				setting="branch"
-				datasource="getBranches"
-				show-refresh
-				id="branchSelect"
-			></sdpi-select>
+			<div id="branchSelect"></div>
 		</sdpi-item>
 
 		<sdpi-item label="Environment">
-			<sdpi-select
-				setting="environment"
-				datasource="getEnvironments"
-				show-refresh
-				id="envSelect"
-			></sdpi-select>
+			<div id="envSelect"></div>
 		</sdpi-item>
 
 		<span id="filterStatus" class="sdpi-info">
@@ -213,14 +205,60 @@
 
 	<script>
 		// ── Dropdown status updates ─────────────────────
-		const repoSelect = document.getElementById("repoSelect");
 		const tokenStatus = document.getElementById("tokenStatus");
 		const repoStatus = document.getElementById("repoStatus");
 		const filterGroup = document.getElementById("filterGroup");
 		const filterStatus = document.getElementById("filterStatus");
-		const workflowSelect = document.getElementById("workflowSelect");
-		const branchSelect = document.getElementById("branchSelect");
-		const envSelect = document.getElementById("envSelect");
+
+		// ── Filterable dropdowns ────────────────────────
+		const repoFS = new FilterableSelect({
+			container: document.getElementById('repoSelect'),
+			setting: 'repo',
+			datasource: 'getRepos',
+			placeholder: 'Choose a repository',
+			searchPlaceholder: 'Search repositories…',
+			threshold: 8,
+			onChange: function(value) {
+				if (value) {
+					filterGroup.classList.add("enabled");
+					filterStatus.textContent = "Loading filters…";
+					setTimeout(function() {
+						workflowFS.refresh();
+						branchFS.refresh();
+						envFS.refresh();
+					}, 600);
+				} else {
+					filterGroup.classList.remove("enabled");
+				}
+			},
+		});
+
+		const workflowFS = new FilterableSelect({
+			container: document.getElementById('workflowSelect'),
+			setting: 'workflowFile',
+			datasource: 'getWorkflows',
+			placeholder: 'All Workflows',
+			searchPlaceholder: 'Search workflows…',
+			threshold: 8,
+		});
+
+		const branchFS = new FilterableSelect({
+			container: document.getElementById('branchSelect'),
+			setting: 'branch',
+			datasource: 'getBranches',
+			placeholder: 'All Branches',
+			searchPlaceholder: 'Search branches…',
+			threshold: 8,
+		});
+
+		const envFS = new FilterableSelect({
+			container: document.getElementById('envSelect'),
+			setting: 'environment',
+			datasource: 'getEnvironments',
+			placeholder: 'All Environments',
+			searchPlaceholder: 'Search environments…',
+			threshold: 8,
+		});
 
 		/**
 		 * Updates tokenStatus / repoStatus based on the repo data
@@ -329,9 +367,7 @@
 			if (token) {
 				tokenStatus.textContent = "Token updated — loading repositories…";
 				tokenStatus.className = "sdpi-status loading";
-				if (repoSelect && typeof repoSelect.refresh === "function") {
-					repoSelect.refresh();
-				}
+				repoFS.refresh();
 			} else {
 				tokenStatus.textContent = "No token configured";
 				tokenStatus.className = "sdpi-status idle";
@@ -339,28 +375,9 @@
 			return true;
 		};
 
-		// When repo changes, enable and refresh the filters section
-		if (repoSelect) {
-			repoSelect.addEventListener("change", () => {
-				const value = repoSelect.value || repoSelect.getAttribute("value");
-				if (value) {
-					filterGroup.classList.add("enabled");
-					filterStatus.textContent = "Loading filters…";
-					setTimeout(() => {
-						[workflowSelect, branchSelect, envSelect].forEach(sel => {
-							if (sel && typeof sel.refresh === "function") sel.refresh();
-						});
-					}, 600);
-				} else {
-					filterGroup.classList.remove("enabled");
-				}
-			});
-		}
-
 		// Enable filters if repo is already set (e.g. re-opening PI)
 		setTimeout(() => {
-			const currentRepo = repoSelect?.value || repoSelect?.getAttribute("value");
-			if (currentRepo) {
+			if (repoFS.value) {
 				filterGroup.classList.add("enabled");
 			}
 		}, 1000);

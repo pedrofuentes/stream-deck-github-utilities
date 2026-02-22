@@ -60,6 +60,7 @@ Before every release, the agent MUST verify that **all user-facing documentation
 | Item | File(s) | What to verify |
 |---|---|---|
 | PI dropdowns match code | `ui/repo-stats.html`, `ui/workflow-status.html` | All options in `<select>` elements match the types defined in source code (e.g., `StatType`, workflow statuses) |
+| PI dynamic dropdowns | `ui/repo-stats.html`, `ui/workflow-status.html` | Datasource-driven dropdowns use `FilterableSelect` (not `<sdpi-select datasource>`); verify `filterable-select.js` is included |
 | PI help text is current | `ui/repo-stats.html`, `ui/workflow-status.html`, `ui/setup.html` | Instructions, token scope guidance, and descriptions reflect current behavior |
 | PI labels match button labels | `ui/*.html` vs `button-renderer.ts` | Dropdown labels should match what appears on the Stream Deck buttons |
 | README features list | `README.md` | All current actions, stat types, and behaviors are documented |
@@ -104,6 +105,8 @@ Before every release, the agent MUST verify that **all user-facing documentation
    - Use `sdpi-components.js` for UI components (already in `ui/` folder).
    - Use `setting="propertyName"` for per-action settings.
    - Use `global` attribute for plugin-wide settings (e.g., GitHub token).
+   - For **dynamic/datasource dropdowns** (repos, branches, etc.), use `FilterableSelect` from `filterable-select.js` instead of `<sdpi-select datasource="...">`. See [UI-DESIGN-GUIDE.md](UI-DESIGN-GUIDE.md) → "Filterable Dropdown Pattern".
+   - For **static dropdowns** (≤10 fixed options), use `<sdpi-select>` with inline `<option>` elements.
 
 5. **Create icons** in `com.pedrofuentes.github-utilities.sdPlugin/imgs/actions/<action-name>/`:
    - `icon.svg` — 20x20 for the action list in Stream Deck
@@ -308,6 +311,7 @@ Key rules (see full guide for details, code examples, and color palettes):
 - **GitHub dark theme** palette throughout — `#0d1117` background, accent colors per stat type
 - **Render all states**: data, loading, error, unconfigured, special
 - **Property Inspector**: sdpi-components, emoji prefixes in dropdowns, WebSocket interception for popup communication
+- **FilterableSelect** for dynamic datasource dropdowns (repos, branches, workflows) — search/filter when items > 8; use `<sdpi-select>` only for static lists
 - **Always format display values** — never show raw API data (capitalize, convert units, null fallbacks)
 
 ## Contributing Learnings Back to the Template

@@ -282,6 +282,133 @@ When a dropdown has many options (e.g., 10 stat types), use **emoji prefixes** f
 
 This makes it easy to identify options at a glance without reading every label.
 
+### Filterable Dropdown Pattern (`FilterableSelect`)
+
+For **dynamic/datasource-driven dropdowns** that can have many items (repos, branches, workflows), use the `FilterableSelect` combobox component instead of `<sdpi-select datasource="...">`.
+
+#### When to use
+
+| Dropdown type | Item count | Use FilterableSelect? |
+|---|---|---|
+| Repository list | 10–200+ | **Yes** — users with many repos need search |
+| Branch list | 5–100+ | **Yes** — repos can have dozens of branches |
+| Workflow list | 1–30+ | **Yes** — some orgs have many workflow files |
+| Environment list | 1–10 | **Yes** — for consistency with other filters |
+| Static options (stat type, refresh interval) | ≤10 fixed | **No** — use `<sdpi-select>` with inline `<option>` |
+
+**Rule of thumb**: If the dropdown is populated dynamically via a datasource, use `FilterableSelect`. If it has fixed/inline options known at build time, use `<sdpi-select>`.
+
+#### Architecture
+
+```
+┌─ <sdpi-item label="Repository"> ──────────┐
+│   ┌─ <div id="repoSelect"> ─────────────┐ │
+│   │  ┌ FilterableSelect ──────────────┐  │ │
+│   │  │ [  Selected Label          ▾ ] │  │ │   ← trigger button
+│   │  │ [ ↻ ]                          │  │ │   ← refresh button
+│   │  └────────────────────────────────┘  │ │
+│   └──────────────────────────────────────┘ │
+└────────────────────────────────────────────┘
+
+┌─ Dropdown (portalled to <body>) ───────────┐
+│ 🔍 Search repositories…                    │   ← search input (shown when items > threshold)
+├─────────────────────────────────────────────┤
+│ owner/repo-1                                │   ← scrollable list
+│ owner/repo-2                             ✓  │   ← selected item highlighted blue
+│ owner/repo-3                                │
+│ ...                                         │
+├─────────────────────────────────────────────┤
+│                               3 of 47       │   ← result count (when filtering)
+└─────────────────────────────────────────────┘
+```
+
+Key design decisions:
+1. **Dropdown portalled to `<body>`** — avoids overflow clipping by `<sdpi-item>` shadow DOM
+2. **`position: fixed`** — positioned relative to viewport, no scroll offset issues
+3. **Search input auto-hidden** — only shown when selectable items exceed `threshold` (default: 8)
+4. **Uses `sdpi-datasource` CustomEvents** — decoupled from specific data keys
+5. **Handles settings persistence** — sends `setSettings` via WebSocket directly (no sdpi-components dependency)
+6. **Error items shown as disabled** — items with `disabled: true` or `⚠` prefix are non-selectable
+
+#### API Reference
+
+```javascript
+// Initialize
+const repoFS = new FilterableSelect({
+    container: document.getElementById('repoSelect'),  // mount point (plain <div>)
+    setting: 'repo',                                    // Stream Deck setting key
+    datasource: 'getRepos',                             // PI datasource event name
+    placeholder: 'Choose a repository',                 // placeholder text
+    searchPlaceholder: 'Search repositories…',          // search input placeholder
+    threshold: 8,                                       // search shown when items > N
+    onChange: (value, label) => { ... },                 // called when value changes
+    onSelect: (value, label) => { ... },                // called on every selection
+});
+
+// Public methods
+repoFS.refresh();         // re-request data from plugin (shows spin animation)
+repoFS.value;             // get selected value
+repoFS.value = 'owner/r'; // set selected value programmatically
+repoFS.setItems(items);   // manually set items array
+repoFS.open() / close();  // programmatic open/close
+repoFS.destroy();         // clean up DOM
+
+// Listen for changes externally
+document.getElementById('repoSelect').addEventListener('change', (e) => {
+    console.log(e.detail.value, e.detail.label);
+});
+```
+
+#### Prerequisites (WebSocket Interceptor)
+
+FilterableSelect requires these `window` globals, set up by the PI HTML interceptors:
+
+```javascript
+// Set by WebSocket proxy (already in PI pages):
+window._sdWebSocket    // WebSocket instance for sending messages
+
+// Set by connectElgatoStreamDeckSocket wrapper:
+window._sdUuid         // Registration UUID (used as context)
+window._sdAction       // Action UUID (e.g. 'com.pedrofuentes.github-utilities.repo-stats')
+window._actionSettings // Current action settings from actionInfo
+
+// Dispatched by WebSocket message handler when datasource data arrives:
+window.dispatchEvent(new CustomEvent('sdpi-datasource', {
+    detail: { event: 'getRepos', items: [...] }
+}));
+```
+
+#### HTML Template
+
+Replace `<sdpi-select datasource="...">` with a plain `<div>`:
+
+```html
+<!-- Before (sdpi-components native) -->
+<sdpi-item label="Repository">
+    <sdpi-select setting="repo" datasource="getRepos" show-refresh id="repoSelect"></sdpi-select>
+</sdpi-item>
+
+<!-- After (FilterableSelect) -->
+<sdpi-item label="Repository">
+    <div id="repoSelect"></div>
+</sdpi-item>
+```
+
+Static dropdowns stay as `<sdpi-select>` with inline `<option>` elements — no change needed.
+
+#### Styling
+
+FilterableSelect uses sdpi-components CSS variables (`--input-bg-color`, `--font-color`, etc.) with dark theme fallbacks. The dropdown panel uses explicit colors for depth hierarchy:
+
+| Element | Color | Purpose |
+|---|---|---|
+| Trigger bg | `var(--input-bg-color, #3d3d3d)` | Matches native selects |
+| Dropdown bg | `#252525` | Darker for depth separation |
+| Search input bg | `#1a1a1a` | Even darker for focus area |
+| Selected item | `#264f78` bg, `#58a6ff` text | Blue accent for selection |
+| Hover item | `#383838` | Subtle highlight |
+| Disabled item | `#666` italic | Non-interactive items |
+
 ### WebSocket Interception Pattern
 
 To share settings between the Property Inspector and a settings popup (or to intercept data from the plugin), use the **WebSocket proxy pattern**:
@@ -379,6 +506,7 @@ This ensures the button always does something useful when pressed, even before t
 - ❌ Nested `<svg>` elements — Stream Deck renderer doesn't support them
 - ❌ Three-dot ellipsis (`...`) — use two dots (`..`) to save precious horizontal space
 - ❌ Returning raw API values to display — always format (capitalize, convert units, provide fallbacks)
+- ❌ Using `<sdpi-select datasource="...">` for large dynamic lists — use `FilterableSelect` instead (see above)
 
 ---
 

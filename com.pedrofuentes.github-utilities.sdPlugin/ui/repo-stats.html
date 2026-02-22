@@ -19,8 +19,9 @@
 						}
 						// Capture datasource responses from the plugin
 						if (data.event === "sendToPropertyInspector" && data.payload?.event === "getRepos") {
-							window._repoItems = data.payload.items || [];
-							if (typeof window._onRepoData === "function") window._onRepoData();
+							window._repoItems = data.payload.items || [];						window.dispatchEvent(new CustomEvent('sdpi-datasource', {
+							detail: { event: 'getRepos', items: window._repoItems }
+						}));							if (typeof window._onRepoData === "function") window._onRepoData();
 						}
 					} catch(e) {}
 				});
@@ -30,12 +31,18 @@
 	})();
 	</script>
 	<script src="sdpi-components.js"></script>
+	<script src="filterable-select.js"></script>
 	<script>
 	// Capture the action UUID from sdpi-components' connection handshake
 	(function() {
 		const origConnect = window.connectElgatoStreamDeckSocket;
 		window.connectElgatoStreamDeckSocket = function(port, uuid, registerEvent, info, actionInfo) {
 			window._sdUuid = uuid;
+			try {
+				var ai = typeof actionInfo === 'string' ? JSON.parse(actionInfo) : actionInfo;
+				window._sdAction = ai?.action || '';
+				window._actionSettings = ai?.payload?.settings || {};
+			} catch(e) {}
 			if (origConnect) origConnect.call(this, port, uuid, registerEvent, info, actionInfo);
 			// Explicitly request global settings so _globalSettings is populated
 			setTimeout(() => {
@@ -126,12 +133,7 @@
 	<span class="sdpi-heading">Repository</span>
 
 	<sdpi-item label="Repository">
-		<sdpi-select
-			setting="repo"
-			datasource="getRepos"
-			show-refresh
-			id="repoSelect"
-		></sdpi-select>
+		<div id="repoSelect"></div>
 	</sdpi-item>
 
 	<span id="repoStatus" class="sdpi-info">
@@ -145,6 +147,12 @@
 			<option value="issues">🔵 Open Issues</option>
 			<option value="forks">🔀 Forks</option>
 			<option value="watchers">👁️ Watchers</option>
+			<option value="pull_requests">🟢 Pull Requests</option>
+			<option value="language">💻 Language</option>
+			<option value="size">📦 Size</option>
+			<option value="license">📜 License</option>
+			<option value="default_branch">🌿 Default Branch</option>
+			<option value="visibility">🔒 Visibility</option>
 		</sdpi-select>
 	</sdpi-item>
 
@@ -167,9 +175,18 @@
 
 	<script>
 		// ── Repo dropdown status updates ────────────────
-		const repoSelect = document.getElementById("repoSelect");
 		const tokenStatus = document.getElementById("tokenStatus");
 		const repoStatus = document.getElementById("repoStatus");
+
+		// Filterable repo dropdown
+		const repoFS = new FilterableSelect({
+			container: document.getElementById('repoSelect'),
+			setting: 'repo',
+			datasource: 'getRepos',
+			placeholder: 'Choose a repository',
+			searchPlaceholder: 'Search repositories…',
+			threshold: 8,
+		});
 
 		/**
 		 * Updates tokenStatus / repoStatus based on the repo data
@@ -245,9 +262,7 @@
 			if (token) {
 				tokenStatus.textContent = "Token updated — loading repositories…";
 				tokenStatus.className = "sdpi-status loading";
-				if (repoSelect && typeof repoSelect.refresh === "function") {
-					repoSelect.refresh();
-				}
+				repoFS.refresh();
 			} else {
 				tokenStatus.textContent = "No token configured";
 				tokenStatus.className = "sdpi-status idle";
