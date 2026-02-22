@@ -432,6 +432,12 @@
 				self.setItems(e.detail.items || []);
 			}
 		});
+
+		// Listen for settings loaded after connectElgatoStreamDeckSocket fires
+		// (settings may not be available yet when the constructor runs)
+		window.addEventListener("sdpi-settings-loaded", function () {
+			self._loadInitialValue();
+		});
 	};
 
 	// ── Data & Settings ─────────────────────────────────────────────

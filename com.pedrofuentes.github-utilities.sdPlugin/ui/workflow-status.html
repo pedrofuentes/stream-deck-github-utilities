@@ -17,6 +17,13 @@
 						if (data.event === "didReceiveGlobalSettings") {
 							window._globalSettings = data.payload?.settings || {};
 						}
+						// Keep _actionSettings in sync when plugin updates settings
+						if (data.event === "didReceiveSettings") {
+							window._actionSettings = data.payload?.settings || {};
+							window.dispatchEvent(new CustomEvent('sdpi-settings-loaded', {
+								detail: { settings: window._actionSettings }
+							}));
+						}
 						// Capture datasource responses from the plugin
 						if (data.event === "sendToPropertyInspector" && data.payload?.event) {
 							const ev = data.payload.event;
@@ -55,6 +62,10 @@
 				window._actionSettings = ai?.payload?.settings || {};
 			} catch(e) {}
 			if (origConnect) origConnect.call(this, port, uuid, registerEvent, info, actionInfo);
+			// Notify FilterableSelect instances that settings are now available
+			window.dispatchEvent(new CustomEvent('sdpi-settings-loaded', {
+				detail: { settings: window._actionSettings }
+			}));
 			// Explicitly request global settings so _globalSettings is populated
 			setTimeout(() => {
 				const ws = window._sdWebSocket;
