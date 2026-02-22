@@ -11,9 +11,9 @@ Before asking the user for testing, the agent MUST complete ALL of these steps i
 1. **Documentation & PI verification** — run the checklist from AGENTS.md Critical Rule #4. Compare PI HTML dropdowns, labels, and help text against source code types. Fix mismatches before proceeding.
 2. **Run the full test suite** — `npm test` (all tests must pass, zero failures)
 3. **Build the plugin** — `npm run build` (must succeed with no errors)
-4. **Validate the manifest** — `streamdeck validate com.pedrofuentes.github-utilities.sdPlugin`
+4. **Validate the manifest** — `streamdeck validate release/com.pedrofuentes.github-utilities.sdPlugin`
 5. **Restart the plugin on the device** — `streamdeck restart com.pedrofuentes.github-utilities`
-6. **Check Stream Deck logs** (optional) — inspect `com.pedrofuentes.github-utilities.sdPlugin/logs/` for runtime errors after restart
+6. **Check Stream Deck logs** (optional) — inspect `release/com.pedrofuentes.github-utilities.sdPlugin/logs/` for runtime errors after restart
 
 ### Stream Deck CLI for Testing
 

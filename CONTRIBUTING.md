@@ -103,9 +103,9 @@ Follow these steps and refer to the existing **Repo Stats** and **Workflow Statu
    - Handle `onWillAppear`, `onWillDisappear`, `onKeyDown`, `onDidReceiveSettings`
    - For polling: use `Map<string, Timer>` keyed by `ev.action.id`
 3. **Register** in `src/plugin.ts`
-4. **Add manifest entry** in `com.pedrofuentes.github-utilities.sdPlugin/manifest.json`
-5. **Create Property Inspector** in `com.pedrofuentes.github-utilities.sdPlugin/ui/` using `sdpi-components.js`
-6. **Create icons** in `com.pedrofuentes.github-utilities.sdPlugin/imgs/actions/your-action/` (icon.svg 20x20, key.svg 144x144)
+4. **Add manifest entry** in `plugin/manifest.json`
+5. **Create Property Inspector** in `plugin/ui/` using `sdpi-components.js`
+6. **Create icons** in `plugin/imgs/actions/your-action/` (icon.svg 20x20, key.svg 144x144)
 7. **Use button renderer** from `src/utils/button-renderer.ts` for button SVGs
 8. **Write tests** in `tests/actions/your-action.test.ts` — mock SDK with `vi.hoisted()` + `vi.mock()`
 9. **Update README** features section and roadmap
@@ -158,7 +158,7 @@ This command will:
 1. Build the TypeScript source
 2. Run the full test suite (all tests must pass)
 3. Validate the plugin manifest
-4. Create a `.streamDeckPlugin` file in the `dist/` directory
+4. Create a `.streamDeckPlugin` file in the `release/` directory
 
 **Only maintainers create release packages.** Contributors should focus on code changes and tests.
 

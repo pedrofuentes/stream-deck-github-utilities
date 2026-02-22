@@ -1,15 +1,15 @@
 # GitHub Utilities for Stream Deck — Roadmap
 
-> **Version**: v1.1.0 (current)
-> **Last Updated**: $(date)
-> **Status**: Draft for review and discussion
+> **Version**: v1.2.0 (current)
+> **Last Updated**: February 2026
+> **Status**: Active — Phase 1 complete, Phase 2 next
 
 ---
 
 ## Table of Contents
 
 - [Current State](#current-state)
-- [Phase 1 — Quick Wins & Improvements](#phase-1--quick-wins--improvements)
+- [Completed — Phase 1](#completed--phase-1)
 - [Phase 2 — New Actions (High Value)](#phase-2--new-actions-high-value)
 - [Phase 3 — Advanced Actions](#phase-3--advanced-actions)
 - [Phase 4 — Stream Deck+ & Polish](#phase-4--stream-deck--polish)
@@ -22,81 +22,52 @@
 
 ## Current State
 
-### Existing Actions (v1.1.0)
+### Existing Actions (v1.2.0)
 
 | Action | Description | API Endpoints Used |
 |--------|-------------|-------------------|
-| **Repo Stats** | Displays stars, issues, forks, or watchers count | `GET /repos/{owner}/{repo}` |
+| **Repo Stats** | Displays 10 stat types (stars, issues, forks, watchers, PRs, language, size, license, default branch, visibility) with short-press cycling and long-press URL opening | `GET /repos/{owner}/{repo}`, `GET /repos/{owner}/{repo}/pulls` |
 | **Workflow Status** | Shows latest workflow run status with deployment info; opens URL on press | `GET /repos/{owner}/{repo}/actions/runs`, `GET /repos/{owner}/{repo}/deployments`, `GET /repos/{owner}/{repo}/deployments/{id}/statuses` |
 
 ### Existing Infrastructure
 
-- GitHub REST API client (`github-api.ts`, 770 lines) with error handling, rate limit parsing
-- SVG-based icon rendering (`button-renderer.ts`) with dynamic status colors
-- Property Inspector with data source APIs for repo, workflow, branch, environment dropdowns
+- GitHub REST API client (`github-api.ts`, ~945 lines) with error handling, rate limit parsing, datasource APIs
+- SVG-based icon rendering (`button-renderer.ts`) with dynamic status colors, 14 status icons
+- Marquee scrolling controller (`marquee-controller.ts`) for long text on buttons
+- Property Inspector with FilterableSelect, searchable dropdowns for repos, workflows, branches, environments
+- PI data provider (`pi-data-provider.ts`) for WebSocket-based PI ↔ plugin communication
 - Global settings for GitHub token, per-action settings for configuration
-- 265 tests across 9 test files
+- Short press / long press differentiation (≥500ms threshold)
+- 345 tests across 10 test files
 
 ---
 
-## Phase 1 — Quick Wins & Improvements
+## Completed — Phase 1
 
-Low-effort, high-impact improvements to existing actions.
+All Phase 1 quick wins were shipped in **v1.2.0**.
 
-### 1.1 Repo Stats: Open URL on Press
-**Effort**: Small | **Priority**: High
+### ✅ 1.1 Repo Stats: Open URL on Press
+Long-press (≥500ms) opens the relevant GitHub page for the current stat type:
+- **Stars** → stargazers, **Issues** → issues, **Forks** → network/members, **Watchers** → watchers
+- **Pull Requests** → pulls, **Language/Size/License/Branch/Visibility** → repo page
 
-Currently Repo Stats refreshes on press. Add URL opening like Workflow Status.
+### ✅ 1.2 Repo Stats: Additional Stat Types
+Six new stat types added (10 total): Pull Requests, Language, Size (auto-formatted KB/MB/GB), License, Default Branch, Visibility. Topics was deferred — all others shipped.
 
-- **Stars** → `https://github.com/{owner}/{repo}/stargazers`
-- **Issues** → `https://github.com/{owner}/{repo}/issues`
-- **Forks** → `https://github.com/{owner}/{repo}/network/members`
-- **Watchers** → `https://github.com/{owner}/{repo}/watchers`
+### ✅ 1.5 Long Press vs Short Press
+Implemented via `onKeyDown`/`onKeyUp` timing with a 500ms threshold:
+- **Short press** → Cycle to next stat type
+- **Long press** → Open URL in browser
 
-**API**: No new endpoints needed.
-**Token**: No additional permissions.
+### ✅ Marquee Scrolling (bonus)
+Added `MarqueeController` for text that exceeds button width — smooth horizontal scrolling on both value and label lines.
 
-### 1.2 Repo Stats: Additional Stat Types
-**Effort**: Small | **Priority**: Medium
+### ✅ FilterableSelect PI Component (bonus)
+Added searchable/filterable dropdowns for repositories, workflows, branches, and environments in the Property Inspector.
 
-The repo API already returns many more fields we can expose:
-
-| New Stat Type | API Field | Description |
-|--------------|-----------|-------------|
-| Pull Requests | `GET /repos/{owner}/{repo}/pulls` | Open PR count |
-| Language | `language` field on repo | Primary language |
-| Size | `size` field on repo | Repo size in KB |
-| License | `license.spdx_id` on repo | License type |
-| Default Branch | `default_branch` on repo | Branch name |
-| Visibility | `private`/`visibility` on repo | Public/Private |
-| Topics | `topics` on repo | List of topics |
-
-**Token**: `Pull requests: Read` for PR count. Others already available via `Metadata: Read`.
-
-### 1.3 Workflow Status: Show Run Duration
-**Effort**: Small | **Priority**: Low
-
-Display run duration on the button (e.g., "2m 34s") using `run_started_at` and `updated_at` from the runs API response.
-
-**API**: Already available in current response.
-**Token**: No additional permissions.
-
-### 1.4 Error State Improvements
-**Effort**: Small | **Priority**: Medium
-
-- Show rate limit remaining count when approaching the limit
-- Display time until rate limit reset
-- Distinct visual for auth errors vs network errors vs rate limit
-- Use `showAlert()` for transient errors
-
-### 1.5 Long Press vs Short Press
-**Effort**: Medium | **Priority**: Medium
-
-Differentiate between short press and long press:
-- **Short press** → Open URL in browser
-- **Long press** → Force refresh data
-
-Can be implemented by tracking `onKeyDown` / `onKeyUp` timing.
+### Remaining (not yet started)
+- **1.3 Workflow Status: Show Run Duration** — Display run duration on the button
+- **1.4 Error State Improvements** — Rate limit display, distinct error visuals, `showAlert()` for transient errors
 
 ---
 
@@ -473,7 +444,8 @@ Summary of which permissions each action/feature requires with a **fine-grained 
 ### Already Required (Current Actions)
 | Permission | Level | Used By |
 |-----------|-------|---------|
-| Metadata | Read | Repo Stats (stars, forks, watchers, language, tags, topics, contributors, stats) |
+| Metadata | Read | Repo Stats (stars, forks, watchers, language, size, license, default branch, visibility) |
+| Pull requests | Read | Repo Stats — PR count (added in v1.2.0) |
 | Actions | Read | Workflow Status (runs, workflows, environments) |
 | Deployments | Read | Workflow Status (deployments, deployment statuses) |
 
@@ -481,7 +453,6 @@ Summary of which permissions each action/feature requires with a **fine-grained 
 
 | Permission | Level | Required For |
 |-----------|-------|-------------|
-| Pull requests | Read | PR Counter (2.1), PR Review Status (5.4), Repo Stats PR count (1.2) |
 | Issues | Read | Issue Counter (2.2), Milestone Progress (3.7) |
 | Contents | Read | Release Monitor (2.3), Commit Activity (2.4), Branch Comparison (2.5) |
 | Administration | Read | Repository Traffic (3.1) |
@@ -581,7 +552,7 @@ SDK capabilities available for enhancing the plugin.
 ### Currently Used
 - `SingletonAction` — Base class for actions
 - `onWillAppear` / `onWillDisappear` — Lifecycle management
-- `onKeyDown` — Button press handling
+- `onKeyDown` / `onKeyUp` — Button press handling (with long-press detection)
 - `onDidReceiveSettings` — Settings change handling
 - `onSendToPlugin` — PI data source communication
 - `setImage()` — Dynamic SVG rendering on buttons
@@ -611,38 +582,40 @@ SDK capabilities available for enhancing the plugin.
 
 ## Implementation Priority Matrix
 
-| Feature | Effort | Impact | Priority | Phase |
-|---------|--------|--------|----------|-------|
-| Repo Stats: Open URL | Small | High | **P0** | 1 |
-| PR Counter | Medium | High | **P0** | 2 |
-| Issue Counter | Medium | High | **P0** | 2 |
-| Release Monitor | Medium | High | **P1** | 2 |
-| Long Press vs Short Press | Medium | Medium | **P1** | 1 |
-| Repo Stats: Additional Types | Small | Medium | **P1** | 1 |
-| Commit Activity | Medium | Medium | **P1** | 2 |
-| Branch Comparison | Medium | Medium | **P2** | 2 |
-| Encoder/Dial for Repo Stats | Medium | Medium | **P2** | 4 |
-| Encoder/Dial for Workflow | Medium | Medium | **P2** | 4 |
-| Dependabot Alerts | Medium | Medium | **P2** | 3 |
-| Code Scanning Alerts | Medium | Medium | **P2** | 3 |
-| Repository Traffic | Medium | Medium | **P2** | 3 |
-| Security Dashboard | Large | Medium | **P2** | 3 |
-| Visual Polish | Medium | Medium | **P2** | 4 |
-| Workflow Dispatch | Large | Medium | **P3** | 5 |
-| Milestone Progress | Medium | Low | **P3** | 3 |
-| GitHub Pages Status | Medium | Low | **P3** | 3 |
-| Bundled Profiles | Small | Low | **P3** | 4 |
-| PR Review Status | Large | Medium | **P3** | 5 |
-| Organization Dashboard | Large | Low | **P4** | 5 |
-| Notifications (classic token) | Large | Medium | **P4** | 5 |
+| Feature | Effort | Impact | Priority | Phase | Status |
+|---------|--------|--------|----------|-------|--------|
+| ~~Repo Stats: Open URL~~ | Small | High | ~~P0~~ | 1 | ✅ v1.2.0 |
+| ~~Long Press vs Short Press~~ | Medium | Medium | ~~P1~~ | 1 | ✅ v1.2.0 |
+| ~~Repo Stats: Additional Types~~ | Small | Medium | ~~P1~~ | 1 | ✅ v1.2.0 |
+| PR Counter | Medium | High | **P0** | 2 | Next |
+| Issue Counter | Medium | High | **P0** | 2 | Next |
+| Release Monitor | Medium | High | **P1** | 2 | Planned |
+| Workflow: Show Run Duration | Small | Low | **P1** | 1 | Planned |
+| Error State Improvements | Small | Medium | **P1** | 1 | Planned |
+| Commit Activity | Medium | Medium | **P1** | 2 | Planned |
+| Branch Comparison | Medium | Medium | **P2** | 2 | — |
+| Encoder/Dial for Repo Stats | Medium | Medium | **P2** | 4 | — |
+| Encoder/Dial for Workflow | Medium | Medium | **P2** | 4 | — |
+| Dependabot Alerts | Medium | Medium | **P2** | 3 | — |
+| Code Scanning Alerts | Medium | Medium | **P2** | 3 | — |
+| Repository Traffic | Medium | Medium | **P2** | 3 | — |
+| Security Dashboard | Large | Medium | **P2** | 3 | — |
+| Visual Polish | Medium | Medium | **P2** | 4 | — |
+| Workflow Dispatch | Large | Medium | **P3** | 5 | — |
+| Milestone Progress | Medium | Low | **P3** | 3 | — |
+| GitHub Pages Status | Medium | Low | **P3** | 3 | — |
+| Bundled Profiles | Small | Low | **P3** | 4 | — |
+| PR Review Status | Large | Medium | **P3** | 5 | — |
+| Organization Dashboard | Large | Low | **P4** | 5 | — |
+| Notifications (classic token) | Large | Medium | **P4** | 5 | — |
 
 ---
 
 ## Suggested Next Steps
 
-1. **v1.2.0**: Implement Phase 1 quick wins (Repo Stats URL + additional stat types + long press)
+1. ~~**v1.2.0**: Phase 1 quick wins (Repo Stats URL + additional stat types + long press)~~ ✅ **Done**
 2. **v1.3.0**: PR Counter + Issue Counter actions (most universally useful new actions)
-3. **v1.4.0**: Release Monitor + Commit Activity
+3. **v1.4.0**: Release Monitor + Commit Activity + remaining Phase 1 polish (run duration, error improvements)
 4. **v2.0.0**: Stream Deck+ support (dials/encoders), security actions, visual overhaul
 
 ---
@@ -655,3 +628,4 @@ SDK capabilities available for enhancing the plugin.
 - **Caching strategy**: As we add more actions, consider a shared cache layer to avoid redundant API calls across actions monitoring the same repo.
 - **Rate limiting**: With more actions, rate limit management becomes critical. Consider a request queue/throttle system.
 - **Multi-repo monitoring**: Several features could benefit from a "repo group" concept where users configure multiple repos and see aggregate data.
+- **Topics stat type**: Deferred from v1.2.0 — needs UI design for displaying a list on a small button (marquee list? count only?).

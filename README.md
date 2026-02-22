@@ -103,7 +103,7 @@ npm install
 npm run build
 
 # Link the plugin to Stream Deck for development
-streamdeck link com.pedrofuentes.github-utilities.sdPlugin
+streamdeck link release/com.pedrofuentes.github-utilities.sdPlugin
 ```
 
 ## Development
@@ -199,7 +199,7 @@ Release packages are built using the Stream Deck CLI. The `pack` script enforces
 npm run pack
 ```
 
-This produces a `.streamDeckPlugin` file in the `dist/` directory.
+This produces a `.streamDeckPlugin` file in the `release/` directory.
 
 ## Roadmap
 
