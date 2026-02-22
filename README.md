@@ -3,8 +3,8 @@
 A [Stream Deck](https://www.elgato.com/stream-deck) plugin that provides utilities to display information from GitHub directly on your Stream Deck device.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities/releases)
-[![Tests](https://img.shields.io/badge/tests-345%20passed-brightgreen.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities)
+[![Version](https://img.shields.io/badge/version-1.3.2-blue.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities/releases)
+[![Tests](https://img.shields.io/badge/tests-351%20passed-brightgreen.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities)
 
 ## Overview
 
@@ -161,7 +161,7 @@ npm run watch
 │   │   └── index.ts                               # Barrel exports
 │   ├── types.ts                                   # Shared type definitions
 │   └── plugin.ts                                  # Plugin entry point
-├── tests/                                         # Test files (345 tests)
+├── tests/                                         # Test files (351 tests)
 │   ├── actions/                                   # Action tests
 │   └── utils/                                     # Utility tests
 ├── rollup.config.mjs                              # Rollup bundler config
