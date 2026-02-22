@@ -22,12 +22,14 @@ const {
 	mockRegisterAction,
 	mockLoggerDebug,
 	mockLoggerError,
+	mockOpenUrl,
 } = vi.hoisted(() => ({
 	mockGetGlobalSettings: vi.fn(),
 	mockSetGlobalSettings: vi.fn(),
 	mockRegisterAction: vi.fn(),
 	mockLoggerDebug: vi.fn(),
 	mockLoggerError: vi.fn(),
+	mockOpenUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@elgato/streamdeck", () => {
@@ -45,6 +47,9 @@ vi.mock("@elgato/streamdeck", () => {
 			settings: {
 				getGlobalSettings: mockGetGlobalSettings,
 				setGlobalSettings: mockSetGlobalSettings,
+			},
+			system: {
+				openUrl: mockOpenUrl,
 			},
 			logger: {
 				setLevel: vi.fn(),
@@ -91,6 +96,13 @@ function createWillAppearEvent(actionMock: ReturnType<typeof createMockKeyAction
 }
 
 function createKeyDownEvent(actionMock: ReturnType<typeof createMockKeyAction>, settings: Record<string, unknown> = {}) {
+	return {
+		action: actionMock,
+		payload: { settings },
+	};
+}
+
+function createKeyUpEvent(actionMock: ReturnType<typeof createMockKeyAction>, settings: Record<string, unknown> = {}) {
 	return {
 		action: actionMock,
 		payload: { settings },
@@ -263,26 +275,44 @@ describe("RepoStatsAction", () => {
 
 	// ── onKeyDown ───────────────────────────────
 
+	// ── Key press behavior (long/short press) ──
+
 	describe("onKeyDown", () => {
-		it("does nothing when repo is not configured", async () => {
+		it("records timestamp but does not open URL or cycle stat", async () => {
 			const mockAction = createMockKeyAction("action-4");
-			const ev = createKeyDownEvent(mockAction, {});
+			const settings = { repo: "owner/repo", statType: "stars" };
+			const ev = createKeyDownEvent(mockAction, settings);
 
 			await action.onKeyDown?.(ev as never);
 
-			// setImage should not be called for unconfigured key press
-			expect(mockAction.setImage).not.toHaveBeenCalled();
+			expect(mockOpenUrl).not.toHaveBeenCalled();
+			expect(mockAction.setSettings).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("onKeyUp — short press (cycle stat type)", () => {
+		it("does nothing when repo is not configured", async () => {
+			const mockAction = createMockKeyAction("action-sp-1");
+			const now = 1000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, {}) as never);
+
+			vi.spyOn(Date, "now").mockReturnValue(now + 100);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, {}) as never);
+
+			expect(mockOpenUrl).not.toHaveBeenCalled();
+			expect(mockAction.setSettings).not.toHaveBeenCalled();
 		});
 
-		it("shows loading and refreshes when repo is configured", async () => {
-			const mockAction = createMockKeyAction("action-5");
-			const settings = { repo: "owner/repo", statType: "issues" };
+		it("cycles from stars to issues on short press", async () => {
+			const mockAction = createMockKeyAction("action-sp-2");
+			const settings = { repo: "owner/repo", statType: "stars" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
 				configurable: true,
 			});
-
 			mockGetGlobalSettings.mockResolvedValue({});
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,
@@ -307,20 +337,354 @@ describe("RepoStatsAction", () => {
 				text: () => Promise.resolve(""),
 			} as unknown as Response);
 
-			// First appear to set up settings
+			const now = 1000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+
+			// Short press: 100ms later
+			vi.spyOn(Date, "now").mockReturnValue(now + 100);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			expect(mockOpenUrl).not.toHaveBeenCalled();
+			expect(mockAction.setSettings).toHaveBeenCalledWith(
+				expect.objectContaining({ statType: "issues" }),
+			);
+		});
+
+		it("cycles from visibility (last) back to stars (first)", async () => {
+			const mockAction = createMockKeyAction("action-sp-3");
+			const settings = { repo: "owner/repo", statType: "visibility" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockGetGlobalSettings.mockResolvedValue({});
+			vi.mocked(globalThis.fetch).mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers: new Headers({
+					"x-ratelimit-limit": "5000",
+					"x-ratelimit-remaining": "4999",
+					"x-ratelimit-reset": "9999999999",
+					"x-ratelimit-used": "1",
+				}),
+				json: () =>
+					Promise.resolve({
+						stargazers_count: 100,
+						open_issues_count: 42,
+						forks_count: 20,
+						watchers_count: 50,
+						full_name: "owner/repo",
+						description: null,
+						visibility: "public",
+						html_url: "https://github.com/owner/repo",
+					}),
+				text: () => Promise.resolve(""),
+			} as unknown as Response);
+
+			const now = 2000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+
+			vi.spyOn(Date, "now").mockReturnValue(now + 50);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			expect(mockAction.setSettings).toHaveBeenCalledWith(
+				expect.objectContaining({ statType: "stars" }),
+			);
+		});
+
+		it("defaults to stars then cycles to issues when statType is not set", async () => {
+			const mockAction = createMockKeyAction("action-sp-4");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockGetGlobalSettings.mockResolvedValue({});
+			vi.mocked(globalThis.fetch).mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers: new Headers({
+					"x-ratelimit-limit": "5000",
+					"x-ratelimit-remaining": "4999",
+					"x-ratelimit-reset": "9999999999",
+					"x-ratelimit-used": "1",
+				}),
+				json: () =>
+					Promise.resolve({
+						stargazers_count: 100,
+						open_issues_count: 42,
+						forks_count: 20,
+						watchers_count: 50,
+						full_name: "owner/repo",
+						description: null,
+						visibility: "public",
+						html_url: "https://github.com/owner/repo",
+					}),
+				text: () => Promise.resolve(""),
+			} as unknown as Response);
+
+			const now = 3000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+
+			vi.spyOn(Date, "now").mockReturnValue(now + 200);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			// Default statType is "stars" → next is "issues"
+			expect(mockAction.setSettings).toHaveBeenCalledWith(
+				expect.objectContaining({ statType: "issues" }),
+			);
+		});
+
+		it("refreshes the display after cycling stat type", async () => {
+			const mockAction = createMockKeyAction("action-sp-5");
+			const settings = { repo: "owner/repo", statType: "forks" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockGetGlobalSettings.mockResolvedValue({});
+			vi.mocked(globalThis.fetch).mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers: new Headers({
+					"x-ratelimit-limit": "5000",
+					"x-ratelimit-remaining": "4999",
+					"x-ratelimit-reset": "9999999999",
+					"x-ratelimit-used": "1",
+				}),
+				json: () =>
+					Promise.resolve({
+						stargazers_count: 100,
+						open_issues_count: 42,
+						forks_count: 20,
+						watchers_count: 50,
+						full_name: "owner/repo",
+						description: null,
+						visibility: "public",
+						html_url: "https://github.com/owner/repo",
+					}),
+				text: () => Promise.resolve(""),
+			} as unknown as Response);
+
+			// Appear first so the action is known
 			const appearEv = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(appearEv as never);
 
 			mockAction.setImage.mockClear();
+			vi.mocked(globalThis.fetch).mockClear();
 
-			// Now key down
-			const ev = createKeyDownEvent(mockAction, settings);
-			await action.onKeyDown?.(ev as never);
+			const now = 4000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
 
-			// Should have shown loading then refreshed
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+
+			vi.spyOn(Date, "now").mockReturnValue(now + 150);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			// Should have triggered a fetch for the new stat
+			expect(globalThis.fetch).toHaveBeenCalled();
+			// Should have updated the image with new stat display
 			expect(mockAction.setImage).toHaveBeenCalled();
-			// First call should be Loading image
-			expect(decodeSvg(mockAction.setImage.mock.calls[0][0] as string)).toContain("Loading");
+		});
+	});
+
+	describe("onKeyUp — long press (open URL)", () => {
+		it("opens the stat URL after data loads", async () => {
+			const mockAction = createMockKeyAction("action-lp-1");
+			const settings = { repo: "owner/repo", statType: "issues" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockGetGlobalSettings.mockResolvedValue({});
+			vi.mocked(globalThis.fetch).mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers: new Headers({
+					"x-ratelimit-limit": "5000",
+					"x-ratelimit-remaining": "4999",
+					"x-ratelimit-reset": "9999999999",
+					"x-ratelimit-used": "1",
+				}),
+				json: () =>
+					Promise.resolve({
+						stargazers_count: 100,
+						open_issues_count: 42,
+						forks_count: 20,
+						watchers_count: 50,
+						full_name: "owner/repo",
+						description: null,
+						visibility: "public",
+						html_url: "https://github.com/owner/repo",
+					}),
+				text: () => Promise.resolve(""),
+			} as unknown as Response);
+
+			// Appear to populate lastUrl
+			const appearEv = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(appearEv as never);
+			mockOpenUrl.mockClear();
+
+			const now = 5000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+
+			// Long press: 600ms later
+			vi.spyOn(Date, "now").mockReturnValue(now + 600);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/issues");
+			expect(mockAction.setSettings).not.toHaveBeenCalled();
+		});
+
+		it("opens stargazers URL for stars stat type", async () => {
+			const mockAction = createMockKeyAction("action-lp-2");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockGetGlobalSettings.mockResolvedValue({});
+			vi.mocked(globalThis.fetch).mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers: new Headers({
+					"x-ratelimit-limit": "5000",
+					"x-ratelimit-remaining": "4999",
+					"x-ratelimit-reset": "9999999999",
+					"x-ratelimit-used": "1",
+				}),
+				json: () =>
+					Promise.resolve({
+						stargazers_count: 100,
+						open_issues_count: 42,
+						forks_count: 20,
+						watchers_count: 50,
+						full_name: "owner/repo",
+						description: null,
+						visibility: "public",
+						html_url: "https://github.com/owner/repo",
+					}),
+				text: () => Promise.resolve(""),
+			} as unknown as Response);
+
+			const appearEv = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(appearEv as never);
+			mockOpenUrl.mockClear();
+
+			const now = 6000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+
+			vi.spyOn(Date, "now").mockReturnValue(now + 700);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/stargazers");
+		});
+
+		it("falls back to constructed URL when lastUrl is not set", async () => {
+			const mockAction = createMockKeyAction("action-lp-3");
+			const settings = { repo: "owner/repo", statType: "forks" };
+
+			const now = 7000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+
+			// Don't appear first — just press directly
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+
+			vi.spyOn(Date, "now").mockReturnValue(now + 500);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/forks");
+		});
+
+		it("does not open URL on long press when repo is not configured", async () => {
+			const mockAction = createMockKeyAction("action-lp-4");
+
+			const now = 8000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, {}) as never);
+
+			vi.spyOn(Date, "now").mockReturnValue(now + 1000);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, {}) as never);
+
+			expect(mockOpenUrl).not.toHaveBeenCalled();
+		});
+
+		it("treats exactly 500ms as long press", async () => {
+			const mockAction = createMockKeyAction("action-lp-5");
+			const settings = { repo: "owner/repo", statType: "forks" };
+
+			const now = 9000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+
+			vi.spyOn(Date, "now").mockReturnValue(now + 500);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			expect(mockOpenUrl).toHaveBeenCalled();
+			expect(mockAction.setSettings).not.toHaveBeenCalled();
+		});
+
+		it("treats 499ms as short press", async () => {
+			const mockAction = createMockKeyAction("action-lp-6");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockGetGlobalSettings.mockResolvedValue({});
+			vi.mocked(globalThis.fetch).mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers: new Headers({
+					"x-ratelimit-limit": "5000",
+					"x-ratelimit-remaining": "4999",
+					"x-ratelimit-reset": "9999999999",
+					"x-ratelimit-used": "1",
+				}),
+				json: () =>
+					Promise.resolve({
+						stargazers_count: 100,
+						open_issues_count: 42,
+						forks_count: 20,
+						watchers_count: 50,
+						full_name: "owner/repo",
+						description: null,
+						visibility: "public",
+						html_url: "https://github.com/owner/repo",
+					}),
+				text: () => Promise.resolve(""),
+			} as unknown as Response);
+
+			const now = 10000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+
+			vi.spyOn(Date, "now").mockReturnValue(now + 499);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			expect(mockOpenUrl).not.toHaveBeenCalled();
+			expect(mockAction.setSettings).toHaveBeenCalledWith(
+				expect.objectContaining({ statType: "issues" }),
+			);
 		});
 	});
 

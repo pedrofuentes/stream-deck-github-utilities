@@ -9,8 +9,12 @@
 export { isValidGitHubToken, maskToken, formatCount, isValidRepoIdentifier, parseRepoIdentifier } from "./github";
 export {
 	fetchRepoStats,
+	fetchOpenPullRequestCount,
 	getStatValue,
 	getStatLabel,
+	getStatUrl,
+	getStatDisplay,
+	formatRepoSize,
 	parseRateLimitHeaders,
 	GitHubApiError,
 	fetchLatestWorkflowRun,

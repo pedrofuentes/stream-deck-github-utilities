@@ -30,7 +30,13 @@ export const COLORS = {
 		issues: "#3fb950",
 		forks: "#58a6ff",
 		watchers: "#d2a8ff",
-	},
+		pull_requests: "#3fb950",
+		language: "#f78166",
+		size: "#8b949e",
+		license: "#d29922",
+		default_branch: "#58a6ff",
+		visibility: "#8b949e",
+	} as Record<string, string>,
 	error: "#f85149",
 	workflow: {
 		success: "#3fb950",
@@ -106,12 +112,14 @@ export function getStatusIcon(status: string, color: string): string {
 export type KeyImageOptions = {
 	/** Line 1: identifier / name (top, dimmed, 18 px) */
 	line1?: string;
-	/** Line 2: main status label (center, bold, white, 30 px) */
+	/** Line 2: main status label (center, bold, white, 30 px default) */
 	line2: string;
 	/** Line 3: metadata / detail (bottom, dimmed, 15 px) */
 	line3?: string;
 	/** Color for the accent bar at the top */
 	statusColor: string;
+	/** Optional font size override for line2 (default: 30) */
+	line2FontSize?: number;
 };
 
 export type KeyIconImageOptions = {
@@ -143,7 +151,9 @@ export type KeyIconImageOptions = {
  */
 export function renderKeyImage(options: KeyImageOptions): string {
 	const line1 = options.line1 ? escapeXml(truncate(options.line1, 14)) : "";
-	const line2 = escapeXml(truncate(options.line2, 12));
+	const line2FontSize = options.line2FontSize ?? 30;
+	const maxLine2Chars = line2FontSize <= 22 ? 16 : 12;
+	const line2 = escapeXml(truncate(options.line2, maxLine2Chars));
 	const line3 = options.line3 ? escapeXml(truncate(options.line3, 18)) : "";
 
 	const hasLine1 = !!options.line1;
@@ -174,7 +184,7 @@ export function renderKeyImage(options: KeyImageOptions): string {
   <rect width="144" height="144" rx="16" fill="${COLORS.background}"/>
   <rect y="0" width="144" height="6" rx="3" fill="${options.statusColor}"/>
   ${hasLine1 ? `<text x="72" y="${line1Y}" text-anchor="middle" fill="${COLORS.textMuted}" font-size="18" font-family="${FONT}">${line1}</text>` : ""}
-  <text x="72" y="${line2Y}" text-anchor="middle" fill="${COLORS.text}" font-size="30" font-weight="bold" font-family="${FONT}">${line2}</text>
+  <text x="72" y="${line2Y}" text-anchor="middle" fill="${COLORS.text}" font-size="${line2FontSize}" font-weight="bold" font-family="${FONT}">${line2}</text>
   ${hasLine3 ? `<text x="72" y="${line3Y}" text-anchor="middle" fill="${COLORS.textMuted}" font-size="15" font-family="${FONT}">${line3}</text>` : ""}
 </svg>`;
 
@@ -244,18 +254,32 @@ const STAT_LABELS: Record<StatType, string> = {
 	issues: "Issues",
 	forks: "Forks",
 	watchers: "Watchers",
+	pull_requests: "Pull Requests",
+	language: "Language",
+	size: "Size",
+	license: "License",
+	default_branch: "Branch",
+	visibility: "Visibility",
 };
 
 /**
- * Renders a repo stat image (stars, issues, forks, watchers).
- * Layout: repo name / count / stat label
+ * Renders a repo stat image.
+ * Layout: repo name / display value / stat label
+ * Adjusts font size dynamically for longer text values.
  */
-export function renderStatImage(count: string, statType: StatType, repoName?: string): string {
+export function renderStatImage(displayValue: string, statType: StatType, repoName?: string): string {
+	// Determine font size based on value length (text stats can be longer)
+	let fontSize = 30;
+	if (displayValue.length > 9) fontSize = 18;
+	else if (displayValue.length > 6) fontSize = 22;
+	else if (displayValue.length > 4) fontSize = 26;
+
 	return renderKeyImage({
 		line1: repoName,
-		line2: count,
+		line2: displayValue,
 		line3: STAT_LABELS[statType],
-		statusColor: COLORS.accent[statType],
+		statusColor: COLORS.accent[statType] ?? COLORS.textMuted,
+		line2FontSize: fontSize,
 	});
 }
 

@@ -10,7 +10,13 @@
 import type { JsonValue } from "@elgato/utils";
 
 /** Stat types supported by the plugin */
-export type StatType = "stars" | "issues" | "forks" | "watchers";
+export type StatType = "stars" | "issues" | "forks" | "watchers" | "pull_requests" | "language" | "size" | "license" | "default_branch" | "visibility";
+
+/** Ordered list of all stat types (used for cycling on short press) */
+export const STAT_TYPES: readonly StatType[] = ["stars", "issues", "forks", "watchers", "pull_requests", "language", "size", "license", "default_branch", "visibility"] as const;
+
+/** Stat types that display a numeric count */
+export type NumericStatType = "stars" | "issues" | "forks" | "watchers" | "pull_requests";
 
 /** Subset of the GitHub repository response we care about */
 export interface RepoStats {
@@ -22,6 +28,11 @@ export interface RepoStats {
 	description: string | null;
 	visibility: string;
 	html_url: string;
+	language: string | null;
+	size: number;
+	license: string | null;
+	default_branch: string;
+	open_pull_request_count?: number;
 }
 
 /** Rate limit information from response headers */
@@ -133,6 +144,10 @@ export async function fetchRepoStats(
 
 	const data = (await response.json()) as Record<string, unknown>;
 
+	// Extract license SPDX ID if available
+	const licenseObj = data.license as Record<string, unknown> | null;
+	const licenseId = licenseObj?.spdx_id as string | null;
+
 	return {
 		stargazers_count: (data.stargazers_count as number) ?? 0,
 		open_issues_count: (data.open_issues_count as number) ?? 0,
@@ -142,11 +157,15 @@ export async function fetchRepoStats(
 		description: (data.description as string | null) ?? null,
 		visibility: (data.visibility as string) ?? "unknown",
 		html_url: (data.html_url as string) ?? `https://github.com/${owner}/${repo}`,
+		language: (data.language as string | null) ?? null,
+		size: (data.size as number) ?? 0,
+		license: licenseId && licenseId !== "NOASSERTION" ? licenseId : null,
+		default_branch: (data.default_branch as string) ?? "main",
 	};
 }
 
 /**
- * Extracts the count for a specific stat type from repo stats.
+ * Extracts the count for a numeric stat type from repo stats.
  */
 export function getStatValue(stats: RepoStats, statType: StatType): number {
 	switch (statType) {
@@ -158,7 +177,49 @@ export function getStatValue(stats: RepoStats, statType: StatType): number {
 			return stats.forks_count;
 		case "watchers":
 			return stats.watchers_count;
+		case "pull_requests":
+			return stats.open_pull_request_count ?? 0;
+		case "size":
+			return stats.size;
+		default:
+			return 0;
 	}
+}
+
+/**
+ * Returns the display string for a stat type.
+ * Numeric stats get formatted with formatCount; text stats return the raw value.
+ */
+export function getStatDisplay(stats: RepoStats, statType: StatType, formatCountFn: (n: number) => string): string {
+	switch (statType) {
+		case "stars":
+		case "issues":
+		case "forks":
+		case "watchers":
+		case "pull_requests":
+			return formatCountFn(getStatValue(stats, statType));
+		case "language":
+			return stats.language ?? "None";
+		case "size":
+			return formatRepoSize(stats.size);
+		case "license":
+			return stats.license ?? "None";
+		case "default_branch":
+			return stats.default_branch;
+		case "visibility":
+			return stats.visibility === "private" ? "Private" : "Public";
+	}
+}
+
+/**
+ * Formats a repository size (in KB from the GitHub API) to a human-readable string.
+ */
+export function formatRepoSize(sizeKb: number): string {
+	if (sizeKb < 1024) return `${sizeKb} KB`;
+	const mb = sizeKb / 1024;
+	if (mb < 1024) return `${mb.toFixed(1)} MB`;
+	const gb = mb / 1024;
+	return `${gb.toFixed(1)} GB`;
 }
 
 /**
@@ -174,7 +235,91 @@ export function getStatLabel(statType: StatType): string {
 			return "Forks";
 		case "watchers":
 			return "Watchers";
+		case "pull_requests":
+			return "Pull Requests";
+		case "language":
+			return "Language";
+		case "size":
+			return "Size";
+		case "license":
+			return "License";
+		case "default_branch":
+			return "Branch";
+		case "visibility":
+			return "Visibility";
 	}
+}
+
+/**
+ * Returns the GitHub web URL for a specific stat type's detail page.
+ *
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param statType - Which stat to link to
+ * @returns The URL to open in the browser
+ */
+export function getStatUrl(owner: string, repo: string, statType: StatType): string {
+	const base = `https://github.com/${owner}/${repo}`;
+	switch (statType) {
+		case "stars":
+			return `${base}/stargazers`;
+		case "issues":
+			return `${base}/issues`;
+		case "forks":
+			return `${base}/forks`;
+		case "watchers":
+			return `${base}/watchers`;
+		case "pull_requests":
+			return `${base}/pulls`;
+		case "language":
+			return `${base}`;
+		case "size":
+			return `${base}`;
+		case "license":
+			return `${base}`;
+		case "default_branch":
+			return `${base}/tree/${repo}`;
+		case "visibility":
+			return `${base}/settings`;
+	}
+}
+
+/**
+ * Fetches the count of open pull requests for a repository.
+ *
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param token - GitHub personal access token
+ * @returns Number of open pull requests
+ */
+export async function fetchOpenPullRequestCount(
+	owner: string,
+	repo: string,
+	token?: string,
+): Promise<number> {
+	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls?state=open&per_page=1`;
+	const headers = buildHeaders(token);
+
+	const response = await fetch(url, { headers });
+
+	if (!response.ok) {
+		return 0; // Graceful fallback — PR count is supplementary data
+	}
+
+	// Use the array length of a full page, or parse Link header for total count
+	const pulls = (await response.json()) as unknown[];
+
+	// If we got exactly 1 result and there's a "last" page in the Link header,
+	// parse the total from it. Otherwise just use the array length.
+	const linkHeader = response.headers.get("link");
+	if (linkHeader) {
+		const lastMatch = linkHeader.match(/<[^>]+[?&]page=(\d+)[^>]*>;\s*rel="last"/);
+		if (lastMatch) {
+			return parseInt(lastMatch[1], 10);
+		}
+	}
+
+	return pulls.length;
 }
 
 // ─── Workflow Status API ─────────────────────────────────────

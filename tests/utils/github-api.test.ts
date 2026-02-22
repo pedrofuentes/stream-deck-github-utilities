@@ -11,8 +11,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
 	fetchRepoStats,
+	fetchOpenPullRequestCount,
 	getStatValue,
 	getStatLabel,
+	getStatUrl,
+	getStatDisplay,
+	formatRepoSize,
 	parseRateLimitHeaders,
 	GitHubApiError,
 	type RepoStats,
@@ -43,6 +47,29 @@ function mockRepoResponse(overrides: Partial<RepoStats> = {}): RepoStats {
 		description: "A JavaScript library for building user interfaces",
 		visibility: "public",
 		html_url: "https://github.com/facebook/react",
+		language: "JavaScript",
+		size: 248320,
+		license: "MIT",
+		default_branch: "main",
+		...overrides,
+	};
+}
+
+/** Raw API response body (license is an object, not a string) */
+function mockRawApiResponse(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+	return {
+		stargazers_count: 42000,
+		open_issues_count: 150,
+		forks_count: 8500,
+		watchers_count: 42000,
+		full_name: "facebook/react",
+		description: "A JavaScript library for building user interfaces",
+		visibility: "public",
+		html_url: "https://github.com/facebook/react",
+		language: "JavaScript",
+		size: 248320,
+		license: { spdx_id: "MIT", name: "MIT License" },
+		default_branch: "main",
 		...overrides,
 	};
 }
@@ -77,7 +104,7 @@ describe("github-api", () => {
 
 	describe("fetchRepoStats", () => {
 		it("fetches repo stats successfully without token", async () => {
-			const data = mockRepoResponse();
+			const data = mockRawApiResponse();
 			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(data));
 
 			const result = await fetchRepoStats("facebook", "react");
@@ -85,6 +112,10 @@ describe("github-api", () => {
 			expect(result.stargazers_count).toBe(42000);
 			expect(result.forks_count).toBe(8500);
 			expect(result.full_name).toBe("facebook/react");
+			expect(result.language).toBe("JavaScript");
+			expect(result.license).toBe("MIT");
+			expect(result.default_branch).toBe("main");
+			expect(result.size).toBe(248320);
 
 			// Verify correct URL was called
 			const callArgs = vi.mocked(globalThis.fetch).mock.calls[0];
@@ -96,7 +127,7 @@ describe("github-api", () => {
 		});
 
 		it("fetches repo stats with a PAT token", async () => {
-			const data = mockRepoResponse();
+			const data = mockRawApiResponse();
 			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(data));
 
 			await fetchRepoStats("facebook", "react", "ghp_abc123");
@@ -110,7 +141,7 @@ describe("github-api", () => {
 
 		it("URL-encodes owner and repo names with special characters", async () => {
 			vi.mocked(globalThis.fetch).mockResolvedValue(
-				mockFetchResponse(mockRepoResponse({ full_name: "my-org/my repo" })),
+				mockFetchResponse(mockRawApiResponse({ full_name: "my-org/my repo" })),
 			);
 
 			await fetchRepoStats("my-org", "my repo");
@@ -132,6 +163,10 @@ describe("github-api", () => {
 			expect(result.description).toBeNull();
 			expect(result.visibility).toBe("unknown");
 			expect(result.html_url).toBe("https://github.com/owner/repo");
+			expect(result.language).toBeNull();
+			expect(result.size).toBe(0);
+			expect(result.license).toBeNull();
+			expect(result.default_branch).toBe("main");
 		});
 
 		// ── Error handling ──────────────────────────
@@ -282,6 +317,26 @@ describe("github-api", () => {
 		it("returns watchers_count for 'watchers'", () => {
 			expect(getStatValue(stats, "watchers")).toBe(42000);
 		});
+
+		it("returns open_pull_request_count for 'pull_requests'", () => {
+			const withPRs = mockRepoResponse({ open_pull_request_count: 7 });
+			expect(getStatValue(withPRs, "pull_requests")).toBe(7);
+		});
+
+		it("returns 0 for pull_requests when count not set", () => {
+			expect(getStatValue(stats, "pull_requests")).toBe(0);
+		});
+
+		it("returns size for 'size'", () => {
+			expect(getStatValue(stats, "size")).toBe(248320);
+		});
+
+		it("returns 0 for text-based stat types", () => {
+			expect(getStatValue(stats, "language")).toBe(0);
+			expect(getStatValue(stats, "license")).toBe(0);
+			expect(getStatValue(stats, "default_branch")).toBe(0);
+			expect(getStatValue(stats, "visibility")).toBe(0);
+		});
 	});
 
 	// ── getStatLabel ────────────────────────────
@@ -292,8 +347,170 @@ describe("github-api", () => {
 			["issues", "Issues"],
 			["forks", "Forks"],
 			["watchers", "Watchers"],
+			["pull_requests", "Pull Requests"],
+			["language", "Language"],
+			["size", "Size"],
+			["license", "License"],
+			["default_branch", "Branch"],
+			["visibility", "Visibility"],
 		] as [StatType, string][])("returns '%s' -> '%s'", (type, expected) => {
 			expect(getStatLabel(type)).toBe(expected);
+		});
+	});
+
+	// ── getStatUrl ────────────────────────────────────────
+
+	describe("getStatUrl", () => {
+		it.each([
+			["stars", "https://github.com/owner/repo/stargazers"],
+			["issues", "https://github.com/owner/repo/issues"],
+			["forks", "https://github.com/owner/repo/forks"],
+			["watchers", "https://github.com/owner/repo/watchers"],
+			["pull_requests", "https://github.com/owner/repo/pulls"],
+			["language", "https://github.com/owner/repo"],
+			["size", "https://github.com/owner/repo"],
+			["license", "https://github.com/owner/repo"],
+			["visibility", "https://github.com/owner/repo/settings"],
+		] as [StatType, string][])("returns correct URL for '%s'", (type, expected) => {
+			expect(getStatUrl("owner", "repo", type)).toBe(expected);
+		});
+	});
+
+	// ── getStatDisplay ────────────────────────────────────
+
+	describe("getStatDisplay", () => {
+		const mockFormat = (n: number): string => n.toString();
+		const stats = mockRepoResponse();
+
+		it("formats numeric stats with formatCount", () => {
+			expect(getStatDisplay(stats, "stars", mockFormat)).toBe("42000");
+			expect(getStatDisplay(stats, "issues", mockFormat)).toBe("150");
+			expect(getStatDisplay(stats, "forks", mockFormat)).toBe("8500");
+			expect(getStatDisplay(stats, "watchers", mockFormat)).toBe("42000");
+		});
+
+		it("returns language name", () => {
+			expect(getStatDisplay(stats, "language", mockFormat)).toBe("JavaScript");
+		});
+
+		it("returns 'None' for null language", () => {
+			const noLang = mockRepoResponse({ language: null });
+			expect(getStatDisplay(noLang, "language", mockFormat)).toBe("None");
+		});
+
+		it("formats repo size", () => {
+			expect(getStatDisplay(stats, "size", mockFormat)).toBe("242.5 MB");
+		});
+
+		it("returns license SPDX ID", () => {
+			expect(getStatDisplay(stats, "license", mockFormat)).toBe("MIT");
+		});
+
+		it("returns 'None' for null license", () => {
+			const noLicense = mockRepoResponse({ license: null });
+			expect(getStatDisplay(noLicense, "license", mockFormat)).toBe("None");
+		});
+
+		it("returns default branch name", () => {
+			expect(getStatDisplay(stats, "default_branch", mockFormat)).toBe("main");
+		});
+
+		it("returns visibility as Public or Private", () => {
+			expect(getStatDisplay(stats, "visibility", mockFormat)).toBe("Public");
+			const priv = mockRepoResponse({ visibility: "private" });
+			expect(getStatDisplay(priv, "visibility", mockFormat)).toBe("Private");
+		});
+
+		it("formats pull request count", () => {
+			const withPRs = mockRepoResponse({ open_pull_request_count: 12 });
+			expect(getStatDisplay(withPRs, "pull_requests", mockFormat)).toBe("12");
+		});
+	});
+
+	// ── formatRepoSize ─────────────────────────────────────
+
+	describe("formatRepoSize", () => {
+		it("formats sizes under 1024 KB as KB", () => {
+			expect(formatRepoSize(512)).toBe("512 KB");
+			expect(formatRepoSize(0)).toBe("0 KB");
+		});
+
+		it("formats sizes as MB", () => {
+			expect(formatRepoSize(1024)).toBe("1.0 MB");
+			expect(formatRepoSize(248320)).toBe("242.5 MB");
+		});
+
+		it("formats sizes as GB", () => {
+			expect(formatRepoSize(1048576)).toBe("1.0 GB");
+			expect(formatRepoSize(2621440)).toBe("2.5 GB");
+		});
+	});
+
+	// ── fetchOpenPullRequestCount ───────────────────────
+
+	describe("fetchOpenPullRequestCount", () => {
+		it("returns count from Link header last page", async () => {
+			const headers = mockHeaders();
+			headers.set("link", '<https://api.github.com/repos/o/r/pulls?page=23&per_page=1>; rel="last"');
+			vi.mocked(globalThis.fetch).mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers,
+				json: () => Promise.resolve([{ id: 1 }]),
+			} as unknown as Response);
+
+			const count = await fetchOpenPullRequestCount("owner", "repo", "ghp_test");
+			expect(count).toBe(23);
+		});
+
+		it("returns array length when no Link header", async () => {
+			vi.mocked(globalThis.fetch).mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers: mockHeaders(),
+				json: () => Promise.resolve([{ id: 1 }]),
+			} as unknown as Response);
+
+			const count = await fetchOpenPullRequestCount("owner", "repo");
+			expect(count).toBe(1);
+		});
+
+		it("returns 0 when no open PRs", async () => {
+			vi.mocked(globalThis.fetch).mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers: mockHeaders(),
+				json: () => Promise.resolve([]),
+			} as unknown as Response);
+
+			const count = await fetchOpenPullRequestCount("owner", "repo");
+			expect(count).toBe(0);
+		});
+
+		it("returns 0 on API error", async () => {
+			vi.mocked(globalThis.fetch).mockResolvedValue({
+				ok: false,
+				status: 403,
+				headers: mockHeaders(),
+				json: () => Promise.resolve({ message: "forbidden" }),
+			} as unknown as Response);
+
+			const count = await fetchOpenPullRequestCount("owner", "repo");
+			expect(count).toBe(0);
+		});
+
+		it("calls correct URL with state=open and per_page=1", async () => {
+			vi.mocked(globalThis.fetch).mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers: mockHeaders(),
+				json: () => Promise.resolve([]),
+			} as unknown as Response);
+
+			await fetchOpenPullRequestCount("owner", "repo", "ghp_test");
+
+			const url = vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
+			expect(url).toContain("/pulls?state=open&per_page=1");
 		});
 	});
 });
