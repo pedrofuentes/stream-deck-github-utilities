@@ -302,6 +302,77 @@ The test flow must include:
 - **Regression checks** for existing features that could be affected
 - **Edge cases** worth checking on hardware (long text, missing data, error states)
 
+### Manual Test Flow Style Guide
+
+Follow these rules when writing test flows:
+
+1. **Group test cases by feature/fix** — each gets its own `####` heading and table
+2. **Steps are atomic** — one action per row, not "do A then B then check C"
+3. **Expected results are specific** — say exactly what URL opens, what text appears, what accent color shows. Never "it works"
+4. **Include the exact values** where possible — `https://github.com/{owner}/{repo}/pulls` not "the pulls page"
+5. **Cover null/empty/edge cases** — "Select Language for a repo with no language → Shows N/A"
+6. **Regression checks are mandatory** — always verify existing features still work after changes
+7. **Prerequisites section** lists what should already be done (agent restart, device connected)
+8. **Use ⬜ checkboxes** in the Pass column for the user to mentally track
+
+### Example: Real Test Flow (v1.2.0)
+
+This is a real test flow delivered for the v1.2.0 release. Future agents should match this level of detail and structure:
+
+```markdown
+## Manual Test Flow — v1.2.0 (Repo Stats Enhancements)
+
+### Prerequisites
+- [ ] Plugin restarted via CLI (agent should have done this)
+- [ ] Stream Deck device connected and visible
+
+### Test Cases
+
+#### 1. Open URL on Key Press (Repo Stats)
+| # | Step | Expected Result | Pass? |
+|---|------|----------------|-------|
+| 1 | Configure a Repo Stats button with **Stars** stat type | Button displays star count | ⬜ |
+| 2 | **Press** the Stars button | Browser opens `https://github.com/{owner}/{repo}/stargazers` | ⬜ |
+| 3 | Configure a Repo Stats button with **Open Issues** stat type | Button displays issue count | ⬜ |
+| 4 | **Press** the Issues button | Browser opens `https://github.com/{owner}/{repo}/issues` | ⬜ |
+| 5 | Configure a Repo Stats button with **Forks** | Button displays fork count | ⬜ |
+| 6 | **Press** the Forks button | Browser opens `https://github.com/{owner}/{repo}/forks` | ⬜ |
+
+#### 2. New Stat Types — Property Inspector Dropdown
+| # | Step | Expected Result | Pass? |
+|---|------|----------------|-------|
+| 1 | Open Property Inspector for a Repo Stats action | Dropdown shows **10 options**: Stars, Open Issues, Forks, Watchers, Pull Requests, Language, Size, License, Default Branch, Visibility | ⬜ |
+| 2 | Each option has an emoji prefix | ⭐ 🔵 🔀 👁️ 🟢 💻 📦 📜 🌿 🔒 | ⬜ |
+
+#### 3. New Stat Types — Button Display
+| # | Step | Expected Result | Pass? |
+|---|------|----------------|-------|
+| 1 | Select **Pull Requests** for a public repo with PRs | Shows open PR count as a number (e.g., "12") with green accent | ⬜ |
+| 2 | Select **Language** for a repo with a language set | Shows language name (e.g., "TypeScript") with orange accent; text fits button | ⬜ |
+| 3 | Select **Size** | Shows human-readable size (e.g., "4.2 MB") with gray accent | ⬜ |
+| 4 | Select **License** for a repo with a license | Shows SPDX ID (e.g., "MIT", "Apache-2.0") with yellow accent | ⬜ |
+| 5 | Select **Default Branch** | Shows branch name (e.g., "main") with blue accent | ⬜ |
+| 6 | Select **Visibility** for a public repo | Shows "Public" with gray accent | ⬜ |
+| 7 | Select **Visibility** for a private repo | Shows "Private" with gray accent | ⬜ |
+| 8 | Select **Language** for a repo with no language | Shows "N/A" | ⬜ |
+| 9 | Select **License** for a repo with no license | Shows "None" | ⬜ |
+
+#### 4. New Stat Types — URL Opening
+| # | Step | Expected Result | Pass? |
+|---|------|----------------|-------|
+| 1 | Press button set to **Pull Requests** | Opens `https://github.com/{owner}/{repo}/pulls` | ⬜ |
+| 2 | Press button set to **Language** | Opens `https://github.com/{owner}/{repo}` (repo root) | ⬜ |
+| 3 | Press button set to **Visibility** | Opens `https://github.com/{owner}/{repo}/settings` | ⬜ |
+
+### Regression Checks
+| # | Step | Expected Result | Pass? |
+|---|------|----------------|-------|
+| 1 | Verify existing **Stars** button still refreshes on interval | Count updates automatically | ⬜ |
+| 2 | Verify **Workflow Status** action still works | Status displays correctly, press opens workflow URL | ⬜ |
+| 3 | Remove/clear the token and verify error state | Buttons show appropriate error message | ⬜ |
+| 4 | Re-add token and verify recovery | Buttons recover and display data again | ⬜ |
+```
+
 ### Testing Rules Summary
 
 | Rule | Details |
