@@ -1,0 +1,225 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="960" viewBox="0 0 1920 960">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1920" height="960" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="960" y="80" text-anchor="middle" fill="#ffffff" font-size="48" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Every State Has a Unique Look</text>
+  <text x="960" y="120" text-anchor="middle" fill="#8b949e" font-size="26" font-family="Arial,Helvetica,sans-serif">Color-coded buttons with status-specific icons — always know what's happening</text>
+
+  <!-- Workflow Status Icons Section -->
+  <text x="140" y="195" fill="#ffffff" font-size="30" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Workflow Status Icons</text>
+
+  <!-- Row 1: Workflow statuses -->
+  <g transform="translate(100, 220)">
+    <!-- Success -->
+    <rect x="0" y="0" width="140" height="140" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="0" y="0" width="140" height="6" rx="3" fill="#3fb950"/>
+    <g transform="translate(40, 32) scale(1.6)">
+      <polyline points="8,19 15,26 28,12" fill="none" stroke="#3fb950" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <text x="70" y="120" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Success</text>
+
+    <!-- Failure -->
+    <rect x="165" y="0" width="140" height="140" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="165" y="0" width="140" height="6" rx="3" fill="#f85149"/>
+    <g transform="translate(205, 32) scale(1.6)">
+      <line x1="10" y1="10" x2="26" y2="26" stroke="#f85149" stroke-width="3.5" stroke-linecap="round"/>
+      <line x1="26" y1="10" x2="10" y2="26" stroke="#f85149" stroke-width="3.5" stroke-linecap="round"/>
+    </g>
+    <text x="235" y="120" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Failure</text>
+
+    <!-- In Progress -->
+    <rect x="330" y="0" width="140" height="140" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="330" y="0" width="140" height="6" rx="3" fill="#d29922"/>
+    <g transform="translate(370, 32) scale(1.6)">
+      <path d="M18,6 A12,12 0 1,1 6,18" fill="none" stroke="#d29922" stroke-width="3" stroke-linecap="round"/>
+      <polygon points="6,12 6,20 11,16" fill="#d29922"/>
+    </g>
+    <text x="400" y="120" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">In Progress</text>
+
+    <!-- Cancelled -->
+    <rect x="495" y="0" width="140" height="140" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="495" y="0" width="140" height="6" rx="3" fill="#8b949e"/>
+    <g transform="translate(535, 32) scale(1.6)">
+      <circle cx="18" cy="18" r="11" fill="none" stroke="#8b949e" stroke-width="2.5"/>
+      <line x1="10" y1="26" x2="26" y2="10" stroke="#8b949e" stroke-width="2.5" stroke-linecap="round"/>
+    </g>
+    <text x="565" y="120" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Cancelled</text>
+
+    <!-- Queued -->
+    <rect x="660" y="0" width="140" height="140" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="660" y="0" width="140" height="6" rx="3" fill="#58a6ff"/>
+    <g transform="translate(700, 32) scale(1.6)">
+      <circle cx="18" cy="18" r="11" fill="none" stroke="#58a6ff" stroke-width="2.5"/>
+      <line x1="18" y1="11" x2="18" y2="18" stroke="#58a6ff" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="18" y1="18" x2="24" y2="18" stroke="#58a6ff" stroke-width="2.5" stroke-linecap="round"/>
+    </g>
+    <text x="730" y="120" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Queued</text>
+
+    <!-- Pending -->
+    <rect x="825" y="0" width="140" height="140" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="825" y="0" width="140" height="6" rx="3" fill="#58a6ff"/>
+    <g transform="translate(865, 36) scale(1.6)">
+      <circle cx="8" cy="18" r="3" fill="#58a6ff"/>
+      <circle cx="18" cy="18" r="3" fill="#58a6ff"/>
+      <circle cx="28" cy="18" r="3" fill="#58a6ff"/>
+    </g>
+    <text x="895" y="120" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Pending</text>
+
+    <!-- Deploying -->
+    <rect x="990" y="0" width="140" height="140" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="990" y="0" width="140" height="6" rx="3" fill="#a371f7"/>
+    <g transform="translate(1030, 32) scale(1.6)">
+      <polygon points="18,6 28,28 18,22 8,28" fill="#a371f7"/>
+    </g>
+    <text x="1060" y="120" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Deploying</text>
+  </g>
+
+  <!-- Row 2: More workflow statuses -->
+  <g transform="translate(100, 390)">
+    <!-- Waiting -->
+    <rect x="0" y="0" width="140" height="140" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="0" y="0" width="140" height="6" rx="3" fill="#d29922"/>
+    <g transform="translate(40, 32) scale(1.6)">
+      <circle cx="18" cy="18" r="11" fill="none" stroke="#d29922" stroke-width="2.5"/>
+      <line x1="18" y1="11" x2="18" y2="18" stroke="#d29922" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="18" y1="18" x2="24" y2="18" stroke="#d29922" stroke-width="2.5" stroke-linecap="round"/>
+    </g>
+    <text x="70" y="120" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Waiting</text>
+
+    <!-- Skipped -->
+    <rect x="165" y="0" width="140" height="140" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="165" y="0" width="140" height="6" rx="3" fill="#8b949e"/>
+    <g transform="translate(205, 32) scale(1.6)">
+      <line x1="8" y1="18" x2="28" y2="18" stroke="#8b949e" stroke-width="3" stroke-linecap="round"/>
+      <polyline points="20,10 28,18 20,26" fill="none" stroke="#8b949e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <text x="235" y="120" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Skipped</text>
+
+    <!-- Timed Out -->
+    <rect x="330" y="0" width="140" height="140" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="330" y="0" width="140" height="6" rx="3" fill="#f85149"/>
+    <g transform="translate(370, 32) scale(1.6)">
+      <circle cx="18" cy="18" r="11" fill="none" stroke="#f85149" stroke-width="2.5"/>
+      <line x1="14" y1="14" x2="22" y2="22" stroke="#f85149" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="22" y1="14" x2="14" y2="22" stroke="#f85149" stroke-width="2.5" stroke-linecap="round"/>
+    </g>
+    <text x="400" y="120" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Timed Out</text>
+
+    <!-- Action Required -->
+    <rect x="495" y="0" width="140" height="140" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="495" y="0" width="140" height="6" rx="3" fill="#d29922"/>
+    <g transform="translate(535, 32) scale(1.6)">
+      <polygon points="18,6 32,30 4,30" fill="none" stroke="#d29922" stroke-width="2.5" stroke-linejoin="round"/>
+      <line x1="18" y1="15" x2="18" y2="22" stroke="#d29922" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="18" cy="26" r="1.5" fill="#d29922"/>
+    </g>
+    <text x="565" y="120" text-anchor="middle" fill="#8b949e" font-size="12" font-family="Arial,Helvetica,sans-serif">Action Required</text>
+
+    <!-- Neutral -->
+    <rect x="660" y="0" width="140" height="140" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="660" y="0" width="140" height="6" rx="3" fill="#8b949e"/>
+    <g transform="translate(700, 32) scale(1.6)">
+      <line x1="8" y1="18" x2="28" y2="18" stroke="#8b949e" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <text x="730" y="120" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Neutral</text>
+
+    <!-- Requested -->
+    <rect x="825" y="0" width="140" height="140" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="825" y="0" width="140" height="6" rx="3" fill="#58a6ff"/>
+    <g transform="translate(865, 32) scale(1.6)">
+      <circle cx="18" cy="18" r="11" fill="none" stroke="#58a6ff" stroke-width="2.5"/>
+      <circle cx="18" cy="18" r="4" fill="#58a6ff"/>
+    </g>
+    <text x="895" y="120" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Requested</text>
+
+    <!-- Stale -->
+    <rect x="990" y="0" width="140" height="140" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="990" y="0" width="140" height="6" rx="3" fill="#8b949e"/>
+    <g transform="translate(1030, 32) scale(1.6)">
+      <line x1="8" y1="18" x2="28" y2="18" stroke="#8b949e" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <text x="1060" y="120" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Stale</text>
+  </g>
+
+  <!-- Special States Section -->
+  <text x="140" y="600" fill="#ffffff" font-size="30" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Special Button States</text>
+
+  <g transform="translate(100, 630)">
+    <!-- Loading -->
+    <rect x="0" y="0" width="180" height="180" rx="20" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="0" y="0" width="180" height="6" rx="3" fill="#8b949e"/>
+    <text x="90" y="105" text-anchor="middle" fill="#e6edf3" font-size="30" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Loading</text>
+    <text x="90" y="165" text-anchor="middle" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Loading state</text>
+
+    <!-- Error -->
+    <rect x="220" y="0" width="180" height="180" rx="20" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="220" y="0" width="180" height="6" rx="3" fill="#f85149"/>
+    <text x="310" y="95" text-anchor="middle" fill="#e6edf3" font-size="26" font-weight="bold" font-family="Arial,Helvetica,sans-serif">API Error</text>
+    <text x="310" y="130" text-anchor="middle" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Press to retry</text>
+    <text x="310" y="165" text-anchor="middle" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Error state</text>
+
+    <!-- Setup -->
+    <rect x="440" y="0" width="180" height="180" rx="20" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="440" y="0" width="180" height="6" rx="3" fill="#8b949e"/>
+    <text x="530" y="95" text-anchor="middle" fill="#e6edf3" font-size="30" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Setup</text>
+    <text x="530" y="128" text-anchor="middle" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Open Settings</text>
+    <text x="530" y="165" text-anchor="middle" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Unconfigured</text>
+
+    <!-- No Runs -->
+    <rect x="660" y="0" width="180" height="180" rx="20" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="660" y="0" width="180" height="6" rx="3" fill="#8b949e"/>
+    <text x="750" y="105" text-anchor="middle" fill="#e6edf3" font-size="26" font-weight="bold" font-family="Arial,Helvetica,sans-serif">No Runs</text>
+    <text x="750" y="165" text-anchor="middle" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">No workflow runs</text>
+  </g>
+
+  <!-- Right side: Color legend -->
+  <g transform="translate(1300, 220)">
+    <rect x="0" y="0" width="500" height="480" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+
+    <text x="30" y="42" fill="#ffffff" font-size="24" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Color Palette</text>
+
+    <!-- Color swatches -->
+    <rect x="30" y="65" width="24" height="24" rx="4" fill="#3fb950"/>
+    <text x="66" y="84" fill="#e6edf3" font-size="17" font-family="Arial,Helvetica,sans-serif">Green — Success, Issues, PRs</text>
+
+    <rect x="30" y="105" width="24" height="24" rx="4" fill="#f85149"/>
+    <text x="66" y="124" fill="#e6edf3" font-size="17" font-family="Arial,Helvetica,sans-serif">Red — Failure, Timed Out</text>
+
+    <rect x="30" y="145" width="24" height="24" rx="4" fill="#d29922"/>
+    <text x="66" y="164" fill="#e6edf3" font-size="17" font-family="Arial,Helvetica,sans-serif">Yellow — In Progress, Waiting</text>
+
+    <rect x="30" y="185" width="24" height="24" rx="4" fill="#58a6ff"/>
+    <text x="66" y="204" fill="#e6edf3" font-size="17" font-family="Arial,Helvetica,sans-serif">Blue — Queued, Forks, Branch</text>
+
+    <rect x="30" y="225" width="24" height="24" rx="4" fill="#a371f7"/>
+    <text x="66" y="244" fill="#e6edf3" font-size="17" font-family="Arial,Helvetica,sans-serif">Purple — Deploying</text>
+
+    <rect x="30" y="265" width="24" height="24" rx="4" fill="#d2a8ff"/>
+    <text x="66" y="284" fill="#e6edf3" font-size="17" font-family="Arial,Helvetica,sans-serif">Light Purple — Watchers</text>
+
+    <rect x="30" y="305" width="24" height="24" rx="4" fill="#e3b341"/>
+    <text x="66" y="324" fill="#e6edf3" font-size="17" font-family="Arial,Helvetica,sans-serif">Gold — Stars</text>
+
+    <rect x="30" y="345" width="24" height="24" rx="4" fill="#f78166"/>
+    <text x="66" y="364" fill="#e6edf3" font-size="17" font-family="Arial,Helvetica,sans-serif">Salmon — Language</text>
+
+    <rect x="30" y="385" width="24" height="24" rx="4" fill="#8b949e"/>
+    <text x="66" y="404" fill="#e6edf3" font-size="17" font-family="Arial,Helvetica,sans-serif">Gray — Neutral, Cancelled, Size</text>
+
+    <rect x="30" y="425" width="24" height="24" rx="4" fill="#d29922"/>
+    <text x="66" y="444" fill="#e6edf3" font-size="17" font-family="Arial,Helvetica,sans-serif">Amber — License</text>
+  </g>
+
+  <!-- Bottom bar -->
+  <rect x="0" y="920" width="1920" height="40" fill="#161b22"/>
+  <rect x="0" y="920" width="1920" height="1" fill="#30363d"/>
+  <text x="960" y="948" text-anchor="middle" fill="#8b949e" font-size="18" font-family="Arial,Helvetica,sans-serif">14 workflow status icons · 10 stat types · 4 special states · GitHub dark theme throughout</text>
+</svg>

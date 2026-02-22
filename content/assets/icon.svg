@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="288" height="288" viewBox="0 0 288 288">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+    <linearGradient id="accent-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e3b341"/>
+      <stop offset="25%" stop-color="#3fb950"/>
+      <stop offset="50%" stop-color="#58a6ff"/>
+      <stop offset="75%" stop-color="#d2a8ff"/>
+      <stop offset="100%" stop-color="#f78166"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="288" height="288" rx="32" fill="url(#bg)"/>
+
+  <!-- Accent bar at top -->
+  <rect x="24" y="16" width="240" height="6" rx="3" fill="url(#accent-grad)"/>
+
+  <!-- Central icon: stylized dashboard grid (2x2 keys) -->
+  <g transform="translate(64, 56)">
+    <!-- Top-left key: Stars (gold) -->
+    <rect x="0" y="0" width="72" height="72" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="0" y="0" width="72" height="4" rx="2" fill="#e3b341"/>
+    <text x="36" y="45" text-anchor="middle" fill="#e6edf3" font-size="28" font-weight="bold" font-family="Arial,Helvetica,sans-serif">★</text>
+
+    <!-- Top-right key: Issues (green) -->
+    <rect x="88" y="0" width="72" height="72" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="88" y="0" width="72" height="4" rx="2" fill="#3fb950"/>
+    <!-- Checkmark icon -->
+    <polyline points="113,33 127,47 147,25" fill="none" stroke="#3fb950" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Bottom-left key: Forks (blue) -->
+    <rect x="0" y="88" width="72" height="72" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="0" y="88" width="72" height="4" rx="2" fill="#58a6ff"/>
+    <text x="36" y="134" text-anchor="middle" fill="#e6edf3" font-size="22" font-weight="bold" font-family="Arial,Helvetica,sans-serif">42</text>
+
+    <!-- Bottom-right key: Deploy (purple) -->
+    <rect x="88" y="88" width="72" height="72" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="88" y="88" width="72" height="4" rx="2" fill="#a371f7"/>
+    <!-- Rocket icon -->
+    <polygon points="124,104 134,128 124,122 114,128" fill="#a371f7"/>
+  </g>
+
+  <!-- Plugin name -->
+  <text x="144" y="240" text-anchor="middle" fill="#ffffff" font-size="22" font-weight="bold" font-family="Arial,Helvetica,sans-serif">GitHub</text>
+  <text x="144" y="266" text-anchor="middle" fill="#8b949e" font-size="18" font-family="Arial,Helvetica,sans-serif">Utilities</text>
+</svg>

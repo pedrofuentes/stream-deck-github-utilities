@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="960" viewBox="0 0 1920 960">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1920" height="960" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="960" y="80" text-anchor="middle" fill="#ffffff" font-size="48" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Cycle Stats with a Single Press</text>
+  <text x="960" y="120" text-anchor="middle" fill="#8b949e" font-size="26" font-family="Arial,Helvetica,sans-serif">Short press to flip through metrics — long press to open in browser</text>
+
+  <!-- Center: Cycling animation sequence -->
+  <g transform="translate(460, 200)">
+    <!-- Key frame 1: Stars -->
+    <rect x="0" y="0" width="180" height="180" rx="20" fill="#161b22" stroke="#e3b341" stroke-width="2"/>
+    <rect x="0" y="0" width="180" height="7" rx="3.5" fill="#e3b341"/>
+    <text x="90" y="56" text-anchor="middle" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">react</text>
+    <text x="90" y="106" text-anchor="middle" fill="#e6edf3" font-size="40" font-weight="bold" font-family="Arial,Helvetica,sans-serif">228k</text>
+    <text x="90" y="148" text-anchor="middle" fill="#8b949e" font-size="18" font-family="Arial,Helvetica,sans-serif">Stars</text>
+
+    <!-- Arrow: tap -->
+    <text x="218" y="100" fill="#8b949e" font-size="32" font-family="Arial,Helvetica,sans-serif">→</text>
+    <text x="208" y="130" fill="#58a6ff" font-size="14" font-weight="bold" font-family="Arial,Helvetica,sans-serif">tap</text>
+
+    <!-- Key frame 2: Issues -->
+    <rect x="270" y="0" width="180" height="180" rx="20" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+    <rect x="270" y="0" width="180" height="7" rx="3.5" fill="#3fb950"/>
+    <text x="360" y="56" text-anchor="middle" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">react</text>
+    <text x="360" y="106" text-anchor="middle" fill="#e6edf3" font-size="40" font-weight="bold" font-family="Arial,Helvetica,sans-serif">892</text>
+    <text x="360" y="148" text-anchor="middle" fill="#8b949e" font-size="18" font-family="Arial,Helvetica,sans-serif">Issues</text>
+
+    <!-- Arrow: tap -->
+    <text x="488" y="100" fill="#8b949e" font-size="32" font-family="Arial,Helvetica,sans-serif">→</text>
+    <text x="478" y="130" fill="#58a6ff" font-size="14" font-weight="bold" font-family="Arial,Helvetica,sans-serif">tap</text>
+
+    <!-- Key frame 3: Forks -->
+    <rect x="540" y="0" width="180" height="180" rx="20" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+    <rect x="540" y="0" width="180" height="7" rx="3.5" fill="#58a6ff"/>
+    <text x="630" y="56" text-anchor="middle" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">react</text>
+    <text x="630" y="106" text-anchor="middle" fill="#e6edf3" font-size="40" font-weight="bold" font-family="Arial,Helvetica,sans-serif">47.1k</text>
+    <text x="630" y="148" text-anchor="middle" fill="#8b949e" font-size="18" font-family="Arial,Helvetica,sans-serif">Forks</text>
+
+    <!-- Arrow: tap -->
+    <text x="758" y="100" fill="#8b949e" font-size="32" font-family="Arial,Helvetica,sans-serif">→</text>
+    <text x="748" y="130" fill="#58a6ff" font-size="14" font-weight="bold" font-family="Arial,Helvetica,sans-serif">tap</text>
+
+    <!-- Key frame 4: Watchers -->
+    <rect x="810" y="0" width="180" height="180" rx="20" fill="#161b22" stroke="#d2a8ff" stroke-width="2"/>
+    <rect x="810" y="0" width="180" height="7" rx="3.5" fill="#d2a8ff"/>
+    <text x="900" y="56" text-anchor="middle" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">react</text>
+    <text x="900" y="106" text-anchor="middle" fill="#e6edf3" font-size="40" font-weight="bold" font-family="Arial,Helvetica,sans-serif">6.6k</text>
+    <text x="900" y="148" text-anchor="middle" fill="#8b949e" font-size="18" font-family="Arial,Helvetica,sans-serif">Watchers</text>
+  </g>
+
+  <!-- Dots indicating cycle continues -->
+  <g transform="translate(910, 450)">
+    <circle cx="80" cy="0" r="4" fill="#8b949e"/>
+    <circle cx="100" cy="0" r="4" fill="#8b949e"/>
+    <circle cx="120" cy="0" r="4" fill="#8b949e"/>
+    <text x="100" y="30" text-anchor="middle" fill="#8b949e" font-size="16" font-family="Arial,Helvetica,sans-serif">cycles through all 10 stat types</text>
+  </g>
+
+  <!-- Long Press Section -->
+  <g transform="translate(160, 520)">
+    <rect x="0" y="0" width="720" height="200" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+
+    <text x="40" y="45" fill="#ffffff" font-size="26" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Long Press (≥ 500ms)</text>
+    <text x="40" y="78" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">Opens the repository or workflow run in your browser</text>
+
+    <!-- Key with press indicator -->
+    <rect x="40" y="100" width="100" height="100" rx="12" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+    <rect x="40" y="100" width="100" height="5" rx="2.5" fill="#e3b341"/>
+    <text x="90" y="146" text-anchor="middle" fill="#e6edf3" font-size="22" font-weight="bold" font-family="Arial,Helvetica,sans-serif">228k</text>
+    <text x="90" y="172" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Stars</text>
+
+    <!-- Press and hold indicator -->
+    <text x="160" y="152" fill="#8b949e" font-size="16" font-family="Arial,Helvetica,sans-serif">hold</text>
+    <line x1="195" y1="148" x2="260" y2="148" stroke="#58a6ff" stroke-width="2" stroke-dasharray="6,3"/>
+    <polygon points="256,142 268,148 256,154" fill="#58a6ff" stroke="none"/>
+
+    <!-- Browser icon mockup -->
+    <rect x="280" y="108" width="380" height="80" rx="8" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+    <rect x="280" y="108" width="380" height="24" rx="8" fill="#1c2128"/>
+    <circle cx="298" cy="120" r="5" fill="#f85149"/>
+    <circle cx="314" cy="120" r="5" fill="#d29922"/>
+    <circle cx="330" cy="120" r="5" fill="#3fb950"/>
+    <rect x="350" y="114" width="250" height="12" rx="4" fill="#0d1117"/>
+    <text x="360" y="124" fill="#8b949e" font-size="9" font-family="Arial,Helvetica,sans-serif">github.com/facebook/react</text>
+    <text x="380" y="162" fill="#e6edf3" font-size="16" font-family="Arial,Helvetica,sans-serif">Opens in default browser</text>
+  </g>
+
+  <!-- Marquee Section -->
+  <g transform="translate(1000, 520)">
+    <rect x="0" y="0" width="780" height="200" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+
+    <text x="40" y="45" fill="#ffffff" font-size="26" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Marquee Scrolling</text>
+    <text x="40" y="78" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">Long text scrolls smoothly instead of truncating</text>
+
+    <!-- Key with scrolling text -->
+    <rect x="40" y="100" width="140" height="100" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="40" y="100" width="140" height="5" rx="2.5" fill="#f78166"/>
+    <text x="110" y="142" text-anchor="middle" fill="#8b949e" font-size="14" font-family="Arial,Helvetica,sans-serif">next.js</text>
+    <text x="110" y="168" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="bold" font-family="Arial,Helvetica,sans-serif">TypeScr..</text>
+    <text x="110" y="188" text-anchor="middle" fill="#8b949e" font-size="12" font-family="Arial,Helvetica,sans-serif">Language</text>
+
+    <text x="200" y="156" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">→</text>
+
+    <rect x="230" y="100" width="140" height="100" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="230" y="100" width="140" height="5" rx="2.5" fill="#f78166"/>
+    <text x="300" y="142" text-anchor="middle" fill="#8b949e" font-size="14" font-family="Arial,Helvetica,sans-serif">next.js</text>
+    <text x="300" y="168" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="bold" font-family="Arial,Helvetica,sans-serif">peScript</text>
+    <text x="300" y="188" text-anchor="middle" fill="#8b949e" font-size="12" font-family="Arial,Helvetica,sans-serif">Language</text>
+
+    <text x="390" y="156" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">→</text>
+
+    <rect x="420" y="100" width="140" height="100" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <rect x="420" y="100" width="140" height="5" rx="2.5" fill="#f78166"/>
+    <text x="490" y="142" text-anchor="middle" fill="#8b949e" font-size="14" font-family="Arial,Helvetica,sans-serif">next.js</text>
+    <text x="490" y="168" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="bold" font-family="Arial,Helvetica,sans-serif">ript    </text>
+    <text x="490" y="188" text-anchor="middle" fill="#8b949e" font-size="12" font-family="Arial,Helvetica,sans-serif">Language</text>
+
+    <!-- Subtitle -->
+    <text x="600" y="156" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Smooth</text>
+    <text x="600" y="176" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">scrolling</text>
+  </g>
+
+  <!-- Feature callouts at bottom -->
+  <rect x="0" y="870" width="1920" height="90" fill="#161b22"/>
+  <rect x="0" y="870" width="1920" height="1" fill="#30363d"/>
+
+  <g transform="translate(0, 925)">
+    <text x="384" y="0" text-anchor="middle" fill="#e3b341" font-size="20" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Short Press = Cycle Stats</text>
+    <text x="960" y="0" text-anchor="middle" fill="#58a6ff" font-size="20" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Long Press = Open Browser</text>
+    <text x="1536" y="0" text-anchor="middle" fill="#f78166" font-size="20" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Marquee = Smooth Scrolling</text>
+  </g>
+</svg>

@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitHub Utilities — Marketplace Content</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    padding: 2rem;
+    line-height: 1.6;
+  }
+
+  .page-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #30363d;
+  }
+
+  .page-header h1 {
+    font-size: 1.8rem;
+    margin-bottom: 0.5rem;
+    color: #ffffff;
+  }
+
+  .page-header p {
+    color: #8b949e;
+    font-size: 0.95rem;
+  }
+
+  .instructions {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 2rem;
+    font-size: 0.9rem;
+    color: #8b949e;
+  }
+
+  .instructions strong { color: #58a6ff; }
+  .instructions code {
+    background: #0d1117;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: #e6edf3;
+  }
+  .instructions ol { margin: 0.5rem 0 0 1.5rem; }
+  .instructions li { margin-bottom: 0.25rem; }
+
+  .section { margin-bottom: 2.5rem; }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  .section-header h2 {
+    font-size: 1.3rem;
+    color: #ffffff;
+  }
+
+  .char-counter {
+    font-size: 0.85rem;
+    color: #8b949e;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  .char-counter.over-limit { color: #f85149; font-weight: bold; }
+
+  .content-box {
+    background: #ffffff;
+    color: #1a1a1a;
+    border-radius: 8px;
+    padding: 1.5rem 2rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    cursor: text;
+    border: 2px solid #30363d;
+  }
+
+  .content-box h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #1a1a1a; }
+  .content-box h2 { font-size: 1.2rem; margin-top: 1.2rem; margin-bottom: 0.4rem; color: #1a1a1a; }
+  .content-box h3 { font-size: 1.05rem; margin-top: 1rem; margin-bottom: 0.3rem; color: #1a1a1a; }
+  .content-box p { margin-bottom: 0.6rem; }
+  .content-box ul { margin: 0.4rem 0 0.8rem 1.5rem; }
+  .content-box li { margin-bottom: 0.25rem; }
+  .content-box ol { margin: 0.4rem 0 0.8rem 1.5rem; }
+  .content-box hr { border: none; border-top: 1px solid #ddd; margin: 1rem 0; }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid #30363d;
+    margin-bottom: 0;
+  }
+
+  .tab-btn {
+    padding: 0.6rem 1.2rem;
+    background: transparent;
+    border: none;
+    color: #8b949e;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-family: inherit;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .tab-btn:hover { color: #e6edf3; }
+
+  .tab-btn.active {
+    color: #58a6ff;
+    border-bottom-color: #58a6ff;
+    font-weight: 600;
+  }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .tab-content-wrapper {
+    margin-top: 0.75rem;
+  }
+
+  .limit-label {
+    font-size: 0.8rem;
+    color: #8b949e;
+    margin-top: 0.25rem;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>GitHub Utilities — Marketplace Content</h1>
+  <p>Copy-paste ready content for the Elgato Marketplace developer portal</p>
+</div>
+
+<div class="instructions">
+  <strong>How to use this file:</strong>
+  <ol>
+    <li>Open this file in your web browser (double-click the .html file)</li>
+    <li>Click inside a <strong>white content box</strong> below</li>
+    <li>Press <code>Ctrl+A</code> to select all text inside the box</li>
+    <li>Press <code>Ctrl+C</code> to copy</li>
+    <li>Go to the Elgato Marketplace developer portal WYSIWYG editor</li>
+    <li>Click inside the editor, press <code>Ctrl+A</code> then <code>Ctrl+V</code> to replace content</li>
+    <li>Verify the formatting (bold, lists, headings) looks correct</li>
+  </ol>
+  <p style="margin-top: 0.75rem;">
+    <strong>Note:</strong> The white background on content boxes ensures copy-pasted text
+    retains proper formatting in the WYSIWYG editor. Do not change box backgrounds to dark.
+  </p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- DESCRIPTION -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<div class="section">
+  <div class="section-header">
+    <h2>📝 Description</h2>
+    <span class="char-counter" id="desc-counter">— / 4,000</span>
+  </div>
+
+  <div class="content-box" id="desc-content">
+
+    <h1>GitHub Utilities for Stream Deck</h1>
+
+    <p><strong>Your GitHub dashboard, one glance away.</strong> Monitor repositories, track CI/CD pipelines, and watch deployments — all from your Stream Deck.</p>
+
+    <p>GitHub Utilities puts the metrics that matter right at your fingertips. No more switching to browser tabs to check build status or star counts. Every button updates automatically, so your Stream Deck always shows the latest data.</p>
+
+    <hr>
+
+    <h2>🔢 Repo Stats</h2>
+    <p>Turn any Stream Deck key into a live repository dashboard. Pick a stat, pick a repo — done.</p>
+    <ul>
+      <li><strong>Stars</strong> — stargazer count with gold accent</li>
+      <li><strong>Open Issues</strong> — issue count with green accent</li>
+      <li><strong>Forks</strong> — fork count with blue accent</li>
+      <li><strong>Watchers</strong> — watcher count with purple accent</li>
+      <li><strong>Pull Requests</strong> — open PR count with green accent</li>
+      <li><strong>Language</strong> — primary language with salmon accent</li>
+      <li><strong>Size</strong> — repository size (auto-formatted KB/MB/GB)</li>
+      <li><strong>License</strong> — license type display</li>
+      <li><strong>Default Branch</strong> — branch name display</li>
+      <li><strong>Visibility</strong> — public/private status</li>
+    </ul>
+    <p><strong>Short press</strong> cycles through stat types on the fly. <strong>Long press</strong> opens the repository in your browser. Text too long? It scrolls automatically with a smooth marquee animation.</p>
+
+    <hr>
+
+    <h2>⚙️ Workflow Status</h2>
+    <p>Monitor GitHub Actions workflows and deployments in real time.</p>
+    <ul>
+      <li><strong>Latest run status</strong> — see success, failure, running, queued, cancelled, and more at a glance</li>
+      <li><strong>Color-coded icons</strong> — green for success, red for failure, yellow for in-progress, blue for queued, purple for deploying</li>
+      <li><strong>Deployment tracking</strong> — active deployments show a dedicated view with environment name</li>
+      <li><strong>Smart filtering</strong> — optionally filter by workflow file, branch, or deployment environment</li>
+      <li><strong>Press to refresh</strong> — instant status update on key press</li>
+    </ul>
+    <p>14 distinct status states, each with its own icon and color, so you always know exactly what's happening.</p>
+
+    <hr>
+
+    <h2>🎯 Smart Property Inspector</h2>
+    <p>Configuration is effortless with the intelligent Property Inspector.</p>
+    <ul>
+      <li><strong>One-time token setup</strong> — enter your GitHub PAT once, it's shared across all buttons</li>
+      <li><strong>Searchable dropdowns</strong> — type to filter through repositories, workflows, branches, and environments</li>
+      <li><strong>Auto-populated lists</strong> — repos load from your account, sorted by most recently pushed</li>
+      <li><strong>Cascading filters</strong> — selecting a repo automatically loads its workflows, branches, and environments</li>
+      <li><strong>Private repo support</strong> — private repositories shown with a lock icon indicator</li>
+    </ul>
+
+    <hr>
+
+    <h2>🔒 Privacy First</h2>
+    <p>Your credentials never leave your machine. The GitHub Personal Access Token is stored locally in Stream Deck's plugin settings — it's never transmitted to any third-party server.</p>
+
+    <hr>
+
+    <h2>📋 Requirements</h2>
+    <ul>
+      <li>Stream Deck software version 6.9 or higher</li>
+      <li>macOS 13+ or Windows 10+</li>
+      <li>A GitHub Personal Access Token (free — fine-grained tokens recommended)</li>
+    </ul>
+
+    <hr>
+
+    <h2>🚀 Getting Started</h2>
+    <ol>
+      <li><strong>Install</strong> the plugin from the Elgato Marketplace</li>
+      <li><strong>Create</strong> a GitHub Personal Access Token at github.com/settings/tokens with Metadata (read), Actions (read), and Deployments (read) permissions</li>
+      <li><strong>Drag</strong> a Repo Stats or Workflow Status action onto your Stream Deck</li>
+      <li><strong>Paste</strong> your token in the Settings panel — repositories load automatically</li>
+      <li><strong>Select</strong> a repository and configure your preferred stat or workflow filter</li>
+      <li><strong>Done!</strong> Your button updates automatically on a configurable interval</li>
+    </ol>
+
+    <hr>
+
+    <p>Built with the official Elgato Stream Deck SDK. Open source under the MIT License.</p>
+
+  </div>
+  <div class="limit-label">Limit: 4,000 characters</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- RELEASE NOTES -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<div class="section">
+  <div class="section-header">
+    <h2>📋 Release Notes</h2>
+    <span class="char-counter" id="rn-counter">— / 1,500</span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="rn-132">v1.3.2</button>
+    <button class="tab-btn" data-tab="rn-131">v1.3.1</button>
+    <button class="tab-btn" data-tab="rn-130">v1.3.0</button>
+    <button class="tab-btn" data-tab="rn-120">v1.2.0</button>
+    <button class="tab-btn" data-tab="rn-111">v1.1.1</button>
+    <button class="tab-btn" data-tab="rn-110">v1.1.0</button>
+  </div>
+
+  <div class="tab-content-wrapper">
+
+    <!-- v1.3.2 -->
+    <div class="tab-panel active" id="rn-132">
+      <div class="content-box rn-box">
+        <h2>v1.3.2 — 2026-02-21</h2>
+        <p>SDK compatibility and maintenance update.</p>
+        <ul>
+          <li>Fixed SDK version compatibility (updated to SDKVersion 3)</li>
+          <li>Adopted stream-deck-template collaboration protocol for standardized development practices</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- v1.3.1 -->
+    <div class="tab-panel" id="rn-131">
+      <div class="content-box rn-box">
+        <h2>v1.3.1 — 2026-02-21</h2>
+        <p>Packaging fix for reliable installation.</p>
+        <ul>
+          <li>Fixed plugin packaging by bundling all dependencies directly into the plugin binary</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- v1.3.0 -->
+    <div class="tab-panel" id="rn-130">
+      <div class="content-box rn-box">
+        <h2>v1.3.0 — 2026-02-21</h2>
+        <p>Setup experience improvements.</p>
+        <ul>
+          <li>Added "Setup" state — buttons now show a clear prompt when your GitHub token or repository isn't configured yet, guiding you to open Settings</li>
+          <li>Restructured plugin directory layout for cleaner builds</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- v1.2.0 -->
+    <div class="tab-panel" id="rn-120">
+      <div class="content-box rn-box">
+        <h2>v1.2.0 — 2026-02-21</h2>
+        <p>Major usability upgrade with new interaction patterns and smarter dropdowns.</p>
+        <ul>
+          <li><strong>Short press cycles stat types</strong> — tap a Repo Stats button to quickly flip through Stars, Issues, Forks, and all other stats without opening settings</li>
+          <li><strong>Long press opens GitHub</strong> — hold a button for 500ms+ to open the repository or workflow run directly in your browser</li>
+          <li><strong>Marquee scrolling</strong> — long text values now scroll smoothly instead of being truncated</li>
+          <li><strong>Searchable dropdowns</strong> — the Property Inspector now features type-to-filter for repositories, workflows, branches, and environments</li>
+          <li>Fixed dropdown positioning when near the bottom of the Property Inspector viewport</li>
+          <li>Fixed saved settings not restoring correctly when reopening the Property Inspector</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- v1.1.1 -->
+    <div class="tab-panel" id="rn-111">
+      <div class="content-box rn-box">
+        <h2>v1.1.1 — 2026-02-21</h2>
+        <p>Private repository visibility fix.</p>
+        <ul>
+          <li>Fixed private repositories not appearing in the repository dropdown</li>
+          <li>Updated setup instructions with repository scope guidance for fine-grained tokens</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- v1.1.0 -->
+    <div class="tab-panel" id="rn-110">
+      <div class="content-box rn-box">
+        <h2>v1.1.0 — 2026-02-20</h2>
+        <p>First feature release with workflow interaction and full action suite.</p>
+        <ul>
+          <li><strong>Repo Stats action</strong> — display stars, issues, forks, watchers, PRs, language, size, license, default branch, and visibility for any GitHub repository</li>
+          <li><strong>Workflow Status action</strong> — monitor GitHub Actions workflow runs with color-coded status icons and deployment tracking</li>
+          <li><strong>Open in browser</strong> — press the Workflow Status button to open the latest workflow run in your browser</li>
+          <li>Auto-refresh with configurable intervals</li>
+          <li>Error states with retry hints</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ── Tab switching ──────────────────────────────────────────────────────
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      // Deactivate all tabs
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+
+      // Activate clicked tab
+      btn.classList.add('active');
+      const panel = document.getElementById(btn.dataset.tab);
+      if (panel) panel.classList.add('active');
+
+      // Update release notes counter for the active tab
+      updateReleaseNotesCounter();
+    });
+  });
+
+  // ── Character counters ─────────────────────────────────────────────────
+  function countChars(el) {
+    return (el.innerText || el.textContent || '').length;
+  }
+
+  function updateCounter(counterId, contentEl, limit) {
+    const counter = document.getElementById(counterId);
+    if (!counter || !contentEl) return;
+    const count = countChars(contentEl);
+    counter.textContent = count.toLocaleString() + ' / ' + limit.toLocaleString();
+    if (count > limit) {
+      counter.classList.add('over-limit');
+    } else {
+      counter.classList.remove('over-limit');
+    }
+  }
+
+  function updateDescriptionCounter() {
+    const descContent = document.getElementById('desc-content');
+    updateCounter('desc-counter', descContent, 4000);
+  }
+
+  function updateReleaseNotesCounter() {
+    const activePanel = document.querySelector('.tab-panel.active .rn-box');
+    updateCounter('rn-counter', activePanel, 1500);
+  }
+
+  // Initial counts
+  updateDescriptionCounter();
+  updateReleaseNotesCounter();
+</script>
+
+</body>
+</html>

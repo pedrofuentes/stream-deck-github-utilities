@@ -21,6 +21,7 @@
     "streamdeck:stop": "streamdeck stop com.pedrofuentes.github-utilities",
     "streamdeck:validate": "streamdeck validate release/com.pedrofuentes.github-utilities.sdPlugin",
     "streamdeck:pack": "npm run build && streamdeck pack release/com.pedrofuentes.github-utilities.sdPlugin --output release/",
+    "content:assets": "npx tsx scripts/convert-content-assets.ts",
     "streamdeck:dev": "streamdeck dev",
     "streamdeck:dev:disable": "streamdeck dev --disable"
   },
@@ -45,6 +46,7 @@
     "@elgato/streamdeck": "^2.0.0"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-node-resolve": "^16.0.0",
     "@rollup/plugin-typescript": "^12.1.0",
@@ -55,6 +57,7 @@
     "eslint": "^9.0.0",
     "rollup": "^4.9.0",
     "tslib": "^2.6.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.3.0",
     "vitest": "^3.0.0"
   },

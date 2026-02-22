@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="960" viewBox="0 0 1920 960">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1920" height="960" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="960" y="80" text-anchor="middle" fill="#ffffff" font-size="48" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Easy 3-Step Setup</text>
+  <text x="960" y="120" text-anchor="middle" fill="#8b949e" font-size="26" font-family="Arial,Helvetica,sans-serif">Configure once, monitor forever</text>
+
+  <!-- Step 1: Token -->
+  <g transform="translate(80, 180)">
+    <!-- Step number -->
+    <circle cx="40" cy="40" r="36" fill="#58a6ff" opacity="0.15"/>
+    <text x="40" y="52" text-anchor="middle" fill="#58a6ff" font-size="36" font-weight="bold" font-family="Arial,Helvetica,sans-serif">1</text>
+
+    <text x="100" y="38" fill="#ffffff" font-size="28" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Enter Your GitHub Token</text>
+    <text x="100" y="66" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">Paste once — shared across all buttons</text>
+
+    <!-- Settings mockup -->
+    <rect x="40" y="100" width="480" height="320" rx="12" fill="#1c2128" stroke="#30363d" stroke-width="1.5"/>
+
+    <!-- Token field -->
+    <text x="70" y="140" fill="#8b949e" font-size="16" font-family="Arial,Helvetica,sans-serif">GitHub Token</text>
+    <rect x="70" y="152" width="420" height="36" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+    <text x="82" y="176" fill="#8b949e" font-size="14" font-family="Arial,Helvetica,sans-serif">ghp_xxxx•••••••xxxx</text>
+    <circle cx="464" cy="170" r="8" fill="#3fb950" opacity="0.9"/>
+    <polyline points="459,170 462,173 469,167" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Token info -->
+    <text x="70" y="220" fill="#3fb950" font-size="14" font-family="Arial,Helvetica,sans-serif">✓ Token verified — 42 repos found</text>
+
+    <!-- Permissions list -->
+    <text x="70" y="260" fill="#8b949e" font-size="15" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Required Permissions:</text>
+    <text x="90" y="285" fill="#e6edf3" font-size="14" font-family="Arial,Helvetica,sans-serif">• Metadata — read</text>
+    <text x="90" y="305" fill="#e6edf3" font-size="14" font-family="Arial,Helvetica,sans-serif">• Actions — read</text>
+    <text x="90" y="325" fill="#e6edf3" font-size="14" font-family="Arial,Helvetica,sans-serif">• Deployments — read</text>
+
+    <text x="70" y="365" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Fine-grained personal access token recommended</text>
+  </g>
+
+  <!-- Step 2: Configure -->
+  <g transform="translate(680, 180)">
+    <circle cx="40" cy="40" r="36" fill="#3fb950" opacity="0.15"/>
+    <text x="40" y="52" text-anchor="middle" fill="#3fb950" font-size="36" font-weight="bold" font-family="Arial,Helvetica,sans-serif">2</text>
+
+    <text x="100" y="38" fill="#ffffff" font-size="28" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Pick a Repo &amp; Stat</text>
+    <text x="100" y="66" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">Searchable dropdowns load automatically</text>
+
+    <!-- Property Inspector mockup -->
+    <rect x="40" y="100" width="480" height="320" rx="12" fill="#1c2128" stroke="#30363d" stroke-width="1.5"/>
+
+    <!-- Repository field -->
+    <text x="70" y="140" fill="#8b949e" font-size="16" font-family="Arial,Helvetica,sans-serif">Repository</text>
+    <rect x="70" y="152" width="420" height="36" rx="6" fill="#0d1117" stroke="#58a6ff" stroke-width="1.5"/>
+    <text x="82" y="176" fill="#e6edf3" font-size="14" font-family="Arial,Helvetica,sans-serif">facebook/react</text>
+
+    <!-- Dropdown items preview -->
+    <rect x="70" y="192" width="420" height="120" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+    <rect x="70" y="192" width="420" height="30" rx="0" fill="#1c2128"/>
+    <text x="82" y="212" fill="#e6edf3" font-size="13" font-family="Arial,Helvetica,sans-serif">🔒 my-org/private-api</text>
+    <text x="82" y="242" fill="#58a6ff" font-size="13" font-family="Arial,Helvetica,sans-serif">facebook/react</text>
+    <text x="82" y="268" fill="#e6edf3" font-size="13" font-family="Arial,Helvetica,sans-serif">vercel/next.js</text>
+    <text x="82" y="294" fill="#e6edf3" font-size="13" font-family="Arial,Helvetica,sans-serif">microsoft/vscode</text>
+
+    <!-- Stat Type -->
+    <text x="70" y="340" fill="#8b949e" font-size="16" font-family="Arial,Helvetica,sans-serif">Stat Type</text>
+    <rect x="70" y="352" width="420" height="36" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+    <text x="82" y="376" fill="#e6edf3" font-size="14" font-family="Arial,Helvetica,sans-serif">⭐ Stars</text>
+  </g>
+
+  <!-- Step 3: Done -->
+  <g transform="translate(1280, 180)">
+    <circle cx="40" cy="40" r="36" fill="#e3b341" opacity="0.15"/>
+    <text x="40" y="52" text-anchor="middle" fill="#e3b341" font-size="36" font-weight="bold" font-family="Arial,Helvetica,sans-serif">3</text>
+
+    <text x="100" y="38" fill="#ffffff" font-size="28" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Done! Live Data</text>
+    <text x="100" y="66" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">Auto-refreshes on a configurable interval</text>
+
+    <!-- Result keys -->
+    <g transform="translate(40, 100)">
+      <!-- Key showing result -->
+      <rect x="70" y="0" width="200" height="200" rx="22" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+      <rect x="70" y="0" width="200" height="8" rx="4" fill="#e3b341"/>
+      <text x="170" y="65" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">react</text>
+      <text x="170" y="118" text-anchor="middle" fill="#e6edf3" font-size="42" font-weight="bold" font-family="Arial,Helvetica,sans-serif">228k</text>
+      <text x="170" y="165" text-anchor="middle" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">Stars</text>
+    </g>
+
+    <!-- Interaction hints -->
+    <g transform="translate(60, 330)">
+      <rect x="0" y="0" width="440" height="90" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+      <text x="24" y="32" fill="#58a6ff" font-size="16" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Interactions</text>
+      <text x="24" y="56" fill="#e6edf3" font-size="14" font-family="Arial,Helvetica,sans-serif">Short press → Cycle through stats</text>
+      <text x="24" y="78" fill="#e6edf3" font-size="14" font-family="Arial,Helvetica,sans-serif">Long press (500ms+) → Open in browser</text>
+    </g>
+  </g>
+
+  <!-- Connecting arrows -->
+  <g stroke="#30363d" stroke-width="2" fill="none">
+    <line x1="600" y1="400" x2="680" y2="400" stroke-dasharray="6,4"/>
+    <polygon points="676,394 688,400 676,406" fill="#30363d" stroke="none"/>
+
+    <line x1="1200" y1="400" x2="1280" y2="400" stroke-dasharray="6,4"/>
+    <polygon points="1276,394 1288,400 1276,406" fill="#30363d" stroke="none"/>
+  </g>
+
+  <!-- Bottom bar -->
+  <rect x="0" y="900" width="1920" height="60" fill="#161b22"/>
+  <rect x="0" y="900" width="1920" height="1" fill="#30363d"/>
+  <text x="960" y="940" text-anchor="middle" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">One token. All buttons. Automatic updates.</text>
+</svg>

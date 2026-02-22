@@ -36,6 +36,16 @@ release/               # Assembled plugin directory (gitignored — build output
     └── logs/          # Runtime logs
 
 tests/                 # Test files mirroring src/ structure
+
+content/               # Elgato Marketplace listing content
+├── CONTENT-GUIDE.md   # Agent instructions for marketplace content management
+├── description.md     # Plugin description (source of truth for text)
+├── release-notes.md   # Release notes history
+├── marketplace-content.html  # Copy-paste HTML for the WYSIWYG editor
+└── assets/            # SVG sources + generated PNGs for marketplace listing
+
+scripts/               # Utility scripts
+└── convert-content-assets.ts  # SVG → PNG converter for marketplace assets
 ```
 
 ## Critical Rules
@@ -201,6 +211,7 @@ Before every release, the agent MUST verify that **all user-facing documentation
 | `npm run lint` | ESLint check |
 | `npm run validate` | Stream Deck CLI validation |
 | `npm run pack` | Build + test + validate + package `.streamDeckPlugin` |
+| `npm run content:assets` | Convert marketplace SVGs to PNGs (`content/assets/`) |
 
 ## Branching Model (GitHub Flow)
 
@@ -294,6 +305,21 @@ Key rules:
     git branch -d feature/my-feature
     git push origin --delete feature/my-feature
     ```
+
+### Post-Release — Update Elgato Marketplace Content
+
+After every release, update the marketplace listing content:
+
+1. Write release notes in `content/release-notes.md`
+2. Review `content/description.md` — update if features changed
+3. Update `content/marketplace-content.html` with matching HTML
+4. Update gallery SVGs in `content/assets/` if key display changed
+5. Run `npm run content:assets` to regenerate PNGs
+6. Commit content changes with the version bump
+7. After GitHub Release: open HTML file in browser, copy, paste into Elgato Marketplace WYSIWYG
+8. After GitHub Release: upload new asset PNGs if changed
+
+See [content/CONTENT-GUIDE.md](content/CONTENT-GUIDE.md) for full details.
 
 ## Common Pitfalls
 
@@ -404,6 +430,7 @@ The template also maintains merged guides that this plugin may benefit from:
 |-------|-----|
 | Testing Protocol | `https://raw.githubusercontent.com/pedrofuentes/stream-deck-template/main/scaffold/.github/TESTING-PROTOCOL.md` |
 | UI/UX Design Guide | `https://raw.githubusercontent.com/pedrofuentes/stream-deck-template/main/scaffold/.github/UI-DESIGN-GUIDE.md` |
+| Marketplace Content | [content/CONTENT-GUIDE.md](content/CONTENT-GUIDE.md) (local — agent instructions for marketplace listing) |
 
 Read these before writing tests or making UI changes — they contain hardware-tested
 patterns and failure logs from multiple plugins.

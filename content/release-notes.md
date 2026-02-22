@@ -1,0 +1,69 @@
+<!-- 
+  Release Notes — Stream Deck GitHub Utilities
+  Most recent version first.
+  Character limit per entry: 1,500
+-->
+
+## v1.3.2 — 2026-02-21
+<!-- Characters: ~220 / 1,500 -->
+
+SDK compatibility and maintenance update.
+
+- Fixed SDK version compatibility (updated to SDKVersion 3)
+- Adopted stream-deck-template collaboration protocol for standardized development practices
+
+---
+
+## v1.3.1 — 2026-02-21
+<!-- Characters: ~160 / 1,500 -->
+
+Packaging fix for reliable installation.
+
+- Fixed plugin packaging by bundling all dependencies (including @elgato/streamdeck and ws) directly into the plugin binary
+
+---
+
+## v1.3.0 — 2026-02-21
+<!-- Characters: ~250 / 1,500 -->
+
+Setup experience improvements.
+
+- Added "Setup" state — buttons now show a clear prompt when your GitHub token or repository isn't configured yet, guiding you to open Settings
+- Restructured plugin directory layout for cleaner builds
+
+---
+
+## v1.2.0 — 2026-02-21
+<!-- Characters: ~550 / 1,500 -->
+
+Major usability upgrade with new interaction patterns and smarter dropdowns.
+
+- **Short press cycles stat types** — tap a Repo Stats button to quickly flip through Stars, Issues, Forks, and all other stats without opening settings
+- **Long press opens GitHub** — hold a button for 500ms+ to open the repository or workflow run directly in your browser
+- **Marquee scrolling** — long text values (language names, branch names, license types) now scroll smoothly instead of being truncated
+- **Searchable dropdowns** — the Property Inspector now features FilterableSelect dropdowns with type-to-filter for repositories, workflows, branches, and environments
+- Fixed dropdown positioning when near the bottom of the Property Inspector viewport
+- Fixed FilterableSelect not restoring previously saved settings when reopening the Property Inspector
+
+---
+
+## v1.1.1 — 2026-02-21
+<!-- Characters: ~180 / 1,500 -->
+
+Private repository visibility fix.
+
+- Fixed private repositories not appearing in the repository dropdown by adding visibility=all parameter and pagination support
+- Updated setup instructions with repository scope guidance for fine-grained tokens
+
+---
+
+## v1.1.0 — 2026-02-20
+<!-- Characters: ~290 / 1,500 -->
+
+First feature release with workflow interaction and full action suite.
+
+- **Repo Stats action** — display stars, issues, forks, watchers, PRs, language, size, license, default branch, and visibility for any GitHub repository
+- **Workflow Status action** — monitor GitHub Actions workflow runs with color-coded status icons and deployment tracking
+- **Open in browser** — press the Workflow Status button to open the latest workflow run in your browser
+- Auto-refresh with configurable intervals
+- Error states with retry hints
