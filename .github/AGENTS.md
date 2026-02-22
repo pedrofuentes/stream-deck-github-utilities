@@ -51,6 +51,25 @@ tests/                 # Test files mirroring src/ structure (262 tests)
 - Update `CONTRIBUTING.md` when changing development workflows or requirements.
 - Use JSDoc comments on all exported functions and classes.
 
+### 4. Documentation & PI Verification (Pre-Release Gate)
+
+Before every release, the agent MUST verify that **all user-facing documentation and Property Inspector HTML files** are up to date with the current feature set. This is a **mandatory check** — not optional.
+
+**Checklist (agent must review each item):**
+
+| Item | File(s) | What to verify |
+|---|---|---|
+| PI dropdowns match code | `ui/repo-stats.html`, `ui/workflow-status.html` | All options in `<select>` elements match the types defined in source code (e.g., `StatType`, workflow statuses) |
+| PI help text is current | `ui/repo-stats.html`, `ui/workflow-status.html`, `ui/setup.html` | Instructions, token scope guidance, and descriptions reflect current behavior |
+| PI labels match button labels | `ui/*.html` vs `button-renderer.ts` | Dropdown labels should match what appears on the Stream Deck buttons |
+| README features list | `README.md` | All current actions, stat types, and behaviors are documented |
+| README screenshots/examples | `README.md` | Any referenced screenshots or examples still match the current UI |
+| Setup instructions | `ui/setup.html` | Token scope requirements, setup steps are accurate |
+| Manifest action names | `manifest.json` | Action `Name` and `Tooltip` fields match current functionality |
+| JSDoc on exports | `src/**/*.ts` | All exported functions have up-to-date JSDoc comments |
+
+**How to verify:** The agent should read each PI HTML file and compare dropdown options, labels, and text against the current source code types and constants. Flag any mismatches and fix them before proceeding to build.
+
 ## How to Add a New Action
 
 1. **Create the action class** in `src/actions/<action-name>.ts`:
@@ -226,7 +245,7 @@ This project uses **GitHub Flow** — a simple branch-based workflow. **All work
 
 Testing has two mandatory phases. **Neither can be skipped.**
 
-1. **Phase 1 — Automated** (agent): `npm test` → `npm run build` → `streamdeck validate` → `streamdeck restart` → check logs
+1. **Phase 1 — Automated** (agent): Doc & PI verification → `npm test` → `npm run build` → `streamdeck validate` → `streamdeck restart` → check logs
 2. **Phase 2 — Manual** (user): Agent provides a structured test flow; user tests on physical Stream Deck; user must confirm before release
 
 Key rules:
@@ -240,26 +259,27 @@ Key rules:
 **IMPORTANT: Steps 1–7 MUST complete before the agent proceeds to step 8. The user's explicit confirmation is a hard gate.**
 
 1. **Ensure you are on the feature/fix branch** (not `main` yet).
-2. All tests pass: `npm test`
-3. Build succeeds: `npm run build`
-4. Plugin validates: `streamdeck validate com.pedrofuentes.github-utilities.sdPlugin`
-5. Restart plugin: `streamdeck restart com.pedrofuentes.github-utilities`
-6. **Agent provides manual test flow** — structured test cases with steps and expected results (see Testing Protocol).
-7. **⛔ GATE: Wait for user to confirm testing passed** — the agent MUST NOT proceed until the user explicitly says testing is good. If user reports issues, fix and loop back to step 2.
-8. Merge to `main`:
+2. **Documentation & PI verification** — run the checklist from Critical Rule #4. Fix any mismatches before proceeding.
+3. All tests pass: `npm test`
+4. Build succeeds: `npm run build`
+5. Plugin validates: `streamdeck validate com.pedrofuentes.github-utilities.sdPlugin`
+6. Restart plugin: `streamdeck restart com.pedrofuentes.github-utilities`
+7. **Agent provides manual test flow** — structured test cases with steps and expected results (see Testing Protocol).
+8. **⛔ GATE: Wait for user to confirm testing passed** — the agent MUST NOT proceed until the user explicitly says testing is good. If user reports issues, fix and loop back to step 2.
+9. Merge to `main`:
    ```bash
    git checkout main
    git pull origin main
    git merge feature/my-feature
    ```
-9. Bump version in **both** `package.json` and `manifest.json` (`Version` field, 4-part: `X.Y.Z.0`).
-10. Commit the version bump: `git commit -am "chore: bump version to vX.Y.Z"`
-11. Package: `streamdeck pack com.pedrofuentes.github-utilities.sdPlugin --force --output .`
-12. Commit the `.streamDeckPlugin` artifact.
-13. Tag: `git tag vX.Y.Z`
-14. Push: `git push origin main --tags`
-15. Create GitHub release: `gh release create vX.Y.Z <artifact> --title "vX.Y.Z — <summary>" --notes "<changelog>"`
-16. Delete the feature branch:
+10. Bump version in **both** `package.json` and `manifest.json` (`Version` field, 4-part: `X.Y.Z.0`).
+11. Commit the version bump: `git commit -am "chore: bump version to vX.Y.Z"`
+12. Package: `streamdeck pack com.pedrofuentes.github-utilities.sdPlugin --force --output .`
+13. Commit the `.streamDeckPlugin` artifact.
+14. Tag: `git tag vX.Y.Z`
+15. Push: `git push origin main --tags`
+16. Create GitHub release: `gh release create vX.Y.Z <artifact> --title "vX.Y.Z — <summary>" --notes "<changelog>"`
+17. Delete the feature branch:
     ```bash
     git branch -d feature/my-feature
     git push origin --delete feature/my-feature
