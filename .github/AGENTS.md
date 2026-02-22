@@ -197,7 +197,7 @@ This project uses **GitHub Flow** — a simple branch-based workflow. **All work
 
 2. **Do all work on the branch** — commits, tests, build, CLI validation.
 
-3. **Test on the Stream Deck** (see Pre-Release Testing Checklist below) before merging.
+3. **Test on the Stream Deck** (see Testing Protocol below) — both automated checks AND user real-life testing must pass before merging.
 
 4. **Merge to `main`** when ready:
    ```bash
@@ -220,32 +220,128 @@ This project uses **GitHub Flow** — a simple branch-based workflow. **All work
 - **Branch from latest `main`** — pull before branching.
 - Version bumps and tagging happen on `main` after merge.
 
-## Pre-Release Testing Checklist
+## Testing Protocol
 
-Before asking the user for final testing, the agent MUST complete these steps:
+Testing has **two mandatory phases** that MUST both complete before any release. The agent handles automated checks; the user performs real-life verification on hardware. **Neither phase can be skipped.**
 
-1. **Run the full test suite** — `npm test` (all tests must pass)
+### Phase 1: Automated Pre-Release Checks (Agent Responsibility)
+
+Before asking the user for testing, the agent MUST complete ALL of these steps in order:
+
+1. **Run the full test suite** — `npm test` (all tests must pass, zero failures)
 2. **Build the plugin** — `npm run build` (must succeed with no errors)
 3. **Validate the manifest** — `streamdeck validate com.pedrofuentes.github-utilities.sdPlugin`
 4. **Restart the plugin on the device** — `streamdeck restart com.pedrofuentes.github-utilities`
-5. **Verify in Stream Deck logs** (optional) — check `com.pedrofuentes.github-utilities.sdPlugin/logs/` for runtime errors after restart
-6. **Inform the user** what was changed and ask them to verify the behavior on their device
+5. **Check Stream Deck logs** (optional) — inspect `com.pedrofuentes.github-utilities.sdPlugin/logs/` for runtime errors after restart
 
-The agent should use the Stream Deck CLI (`streamdeck restart`, `streamdeck validate`, `streamdeck stop`) proactively to catch issues before the user has to manually test.
+#### Stream Deck CLI for Testing
+
+The `streamdeck` CLI provides these testing-relevant commands:
+
+| Command | Purpose | Automated? |
+|---|---|---|
+| `streamdeck validate <path>` | Validates manifest structure & schemas | ✅ Agent runs this |
+| `streamdeck restart <uuid>` | Hot-reloads plugin on device (no manual restart needed) | ✅ Agent runs this |
+| `streamdeck stop <uuid>` | Stops plugin (useful for debugging) | ✅ Agent can use |
+| `streamdeck dev` | Enables developer mode for debugging | ✅ Agent can enable |
+| `streamdeck pack <path>` | Packages `.streamDeckPlugin` artifact | ✅ Agent runs at release |
+
+**What the CLI CANNOT do** (and why real-life testing is mandatory):
+- No simulated button presses or key events
+- No visual verification of button rendering on OLED hardware
+- No screenshot capture from Stream Deck buttons
+- No automated UI/integration testing
+- No way to verify Property Inspector dropdowns or settings panels
+- No way to verify URL-opening behavior on key press
+
+The CLI is a pre-flight tool — it catches structural and build errors but **cannot replace human verification on hardware**.
+
+### Phase 2: Manual Real-Life Testing (User Responsibility — MANDATORY)
+
+**The agent MUST always ask the user to test on their physical Stream Deck before any release.** This is non-negotiable. The agent must:
+
+1. **Provide a detailed manual test flow** (see format below) listing every test case with expected results
+2. **Wait for explicit user confirmation** that testing passed before proceeding to merge/tag/release
+3. **Never skip this step** — even for "small" changes, things can look different on OLED hardware
+
+If the user reports issues during testing, the agent must fix them and restart from Phase 1.
+
+### Manual Test Flow Format
+
+**Every time the agent is about to ask the user to test**, it MUST provide a structured test flow using this format. The test flow should cover ALL new functionality and any areas that could be affected by the changes:
+
+```markdown
+## Manual Test Flow — v{version} ({summary})
+
+### Prerequisites
+- [ ] Plugin restarted via CLI (agent should have done this)
+- [ ] Stream Deck device connected and visible
+
+### Test Cases
+
+#### {Feature/Fix Name}
+| # | Step | Expected Result | Pass? |
+|---|------|----------------|-------|
+| 1 | {action to perform} | {what should happen} | ⬜ |
+| 2 | {action to perform} | {what should happen} | ⬜ |
+
+#### {Another Feature/Fix Name}
+| # | Step | Expected Result | Pass? |
+|---|------|----------------|-------|
+| 1 | {action to perform} | {what should happen} | ⬜ |
+
+### Regression Checks
+| # | Step | Expected Result | Pass? |
+|---|------|----------------|-------|
+| 1 | {verify existing feature still works} | {expected behavior} | ⬜ |
+```
+
+The test flow must include:
+- **All new features** with step-by-step verification
+- **All bug fixes** with steps to verify the bug is resolved
+- **Regression checks** for existing features that could be affected
+- **Edge cases** worth checking on hardware (long text, missing data, error states)
+
+### Testing Rules Summary
+
+| Rule | Details |
+|---|---|
+| Agent runs automated checks | Tests, build, validate, restart — every time |
+| Agent provides manual test flow | Structured table with steps & expected results |
+| User tests on real hardware | Physical Stream Deck, not just "looks good in code" |
+| User must confirm before release | Explicit "all good" or issue report |
+| Failures loop back to Phase 1 | Fix → re-test → re-validate → re-ask user |
+| No exceptions for "small" changes | OLED rendering, button behavior, PI panels can all surprise |
 
 ## Release Process
 
-1. **Ensure you are on `main`** with all feature branches already merged.
+**IMPORTANT: Steps 1–7 MUST complete before the agent proceeds to step 8. The user's explicit confirmation is a hard gate.**
+
+1. **Ensure you are on the feature/fix branch** (not `main` yet).
 2. All tests pass: `npm test`
 3. Build succeeds: `npm run build`
 4. Plugin validates: `streamdeck validate com.pedrofuentes.github-utilities.sdPlugin`
-5. Bump version in **both** `package.json` and `manifest.json` (`Version` field, 4-part: `X.Y.Z.0`).
-6. Commit the version bump: `git commit -am "chore: bump version to vX.Y.Z"`
-7. Package: `streamdeck pack com.pedrofuentes.github-utilities.sdPlugin --force --output .`
-8. Commit the `.streamDeckPlugin` artifact.
-9. Tag: `git tag vX.Y.Z`
-10. Push: `git push origin main --tags`
-11. Create GitHub release: `gh release create vX.Y.Z <artifact> --title "vX.Y.Z — <summary>" --notes "<changelog>"`
+5. Restart plugin: `streamdeck restart com.pedrofuentes.github-utilities`
+6. **Agent provides manual test flow** — structured test cases with steps and expected results (see Testing Protocol).
+7. **⛔ GATE: Wait for user to confirm testing passed** — the agent MUST NOT proceed until the user explicitly says testing is good. If user reports issues, fix and loop back to step 2.
+8. Merge to `main`:
+   ```bash
+   git checkout main
+   git pull origin main
+   git merge feature/my-feature
+   ```
+9. Bump version in **both** `package.json` and `manifest.json` (`Version` field, 4-part: `X.Y.Z.0`).
+10. Commit the version bump: `git commit -am "chore: bump version to vX.Y.Z"`
+11. Package: `streamdeck pack com.pedrofuentes.github-utilities.sdPlugin --force --output .`
+12. Commit the `.streamDeckPlugin` artifact.
+13. Tag: `git tag vX.Y.Z`
+14. Push: `git push origin main --tags`
+15. Create GitHub release: `gh release create vX.Y.Z <artifact> --title "vX.Y.Z — <summary>" --notes "<changelog>"`
+16. Delete the feature branch:
+    ```bash
+    git branch -d feature/my-feature
+    git push origin --delete feature/my-feature
+    ```
 
 ## Common Pitfalls
 
