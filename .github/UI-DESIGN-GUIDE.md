@@ -409,6 +409,33 @@ FilterableSelect uses sdpi-components CSS variables (`--input-bg-color`, `--font
 | Hover item | `#383838` | Subtle highlight |
 | Disabled item | `#666` italic | Non-interactive items |
 
+#### Viewport-Aware Positioning (Critical)
+
+The Stream Deck Property Inspector panel has a **small, fixed-height viewport**. Dropdowns near the bottom of the page will be clipped if they open downward. FilterableSelect handles this automatically:
+
+1. **Measure space** — on every `open()`, measure `spaceBelow` (viewport bottom minus trigger bottom) and `spaceAbove` (trigger top)
+2. **Flip decision** — if `spaceBelow < min(naturalHeight, 120px)` AND `spaceAbove > spaceBelow`, open upward
+3. **Dynamic max-height** — constrain `.fs-list` max-height to `availableSpace - chrome` (search input + count footer ≈ 65px)
+4. **Flip layout** — when opening upward, use `flex-direction: column-reverse` so search stays closest to the trigger
+5. **Reset on close** — clear dynamic sizing so next open re-measures fresh
+
+```javascript
+// Simplified positioning logic
+var spaceBelow = viewportH - rect.bottom - gap;
+var spaceAbove = rect.top - gap;
+var openAbove = spaceBelow < minUsable && spaceAbove > spaceBelow;
+
+if (openAbove) {
+    dropdown.style.bottom = (viewportH - rect.top + gap) + 'px';
+    dropdown.classList.add('flip-up');  // column-reverse
+} else {
+    dropdown.style.top = (rect.bottom + gap) + 'px';
+}
+list.style.maxHeight = (availableSpace - chrome) + 'px';
+```
+
+**Why this matters**: The PI panel is typically 300-500px tall. A dropdown with 50+ repos at ~26px each needs ~1300px — it will always overflow. Without flip+constrain, the bottom items are completely invisible and unreachable.
+
 ### WebSocket Interception Pattern
 
 To share settings between the Property Inspector and a settings popup (or to intercept data from the plugin), use the **WebSocket proxy pattern**:
@@ -507,6 +534,7 @@ This ensures the button always does something useful when pressed, even before t
 - ❌ Three-dot ellipsis (`...`) — use two dots (`..`) to save precious horizontal space
 - ❌ Returning raw API values to display — always format (capitalize, convert units, provide fallbacks)
 - ❌ Using `<sdpi-select datasource="...">` for large dynamic lists — use `FilterableSelect` instead (see above)
+- ❌ Custom dropdowns without viewport-aware positioning — PI panel is small; always measure space and flip/constrain
 
 ---
 
@@ -560,3 +588,6 @@ These were discovered through trial-and-error on hardware and are **not document
 5. **Background color**: `#0d1117` (GitHub dark) reads better than pure `#000000` on OLED despite both being "dark."
 6. **Two-dot truncation**: `..` instead of `...` saves one character — meaningful at 12-char limits.
 7. **Dynamic font sizing thresholds**: The 30/26/22/18px breakpoints at 4/6/9 characters were tuned by testing real stat values on hardware.
+8. **PI viewport is small and fixed** — the Property Inspector panel is typically 300–500px tall. Any custom dropdown, tooltip, or overlay MUST measure available viewport space and flip/constrain itself. Native `<select>` gets this for free from the OS; custom dropdowns do not.
+9. **`position: fixed` + portalling to `<body>`** — custom overlays inside `<sdpi-item>` shadow DOM get clipped. Portal the dropdown to `<body>` and use `position: fixed` with `getBoundingClientRect()` for reliable positioning.
+10. **Flex `column-reverse` for flip-up menus** — when a dropdown opens upward, reverse the flex direction so the search input stays adjacent to the trigger button (closest to the user's click point), maintaining natural interaction flow.
