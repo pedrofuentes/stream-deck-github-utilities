@@ -105,7 +105,7 @@ Before every release, the agent MUST verify that **all user-facing documentation
    - Use `sdpi-components.js` for UI components (already in `ui/` folder).
    - Use `setting="propertyName"` for per-action settings.
    - Use `global` attribute for plugin-wide settings (e.g., GitHub token).
-   - For **dynamic/datasource dropdowns** (repos, branches, etc.), use `FilterableSelect` from `filterable-select.js` instead of `<sdpi-select datasource="...">`. See [UI-DESIGN-GUIDE.md](UI-DESIGN-GUIDE.md) → "Filterable Dropdown Pattern".
+   - For **dynamic/datasource dropdowns** (repos, branches, etc.), use `FilterableSelect` from `filterable-select.js` instead of `<sdpi-select datasource="...">`. See [UI-DESIGN-GUIDE.md](.github/UI-DESIGN-GUIDE.md) → "Filterable Dropdown Pattern".
    - For **static dropdowns** (≤10 fixed options), use `<sdpi-select>` with inline `<option>` elements.
 
 5. **Create icons** in `com.pedrofuentes.github-utilities.sdPlugin/imgs/actions/<action-name>/`:
@@ -244,7 +244,7 @@ This project uses **GitHub Flow** — a simple branch-based workflow. **All work
 
 ## Testing Protocol
 
-> **Full reference:** [TESTING-PROTOCOL.md](TESTING-PROTOCOL.md) — read when preparing a release or providing test flows.
+> **Full reference:** [TESTING-PROTOCOL.md](.github/TESTING-PROTOCOL.md) — read when preparing a release or providing test flows.
 
 Testing has two mandatory phases. **Neither can be skipped.**
 
@@ -300,7 +300,7 @@ Key rules:
 
 ## UI & Design Guidelines
 
-> **Full reference:** [UI-DESIGN-GUIDE.md](UI-DESIGN-GUIDE.md) — read when designing buttons, Property Inspector panels, or any visual element.
+> **Full reference:** [UI-DESIGN-GUIDE.md](.github/UI-DESIGN-GUIDE.md) — read when designing buttons, Property Inspector panels, or any visual element.
 
 Key rules (see full guide for details, code examples, and color palettes):
 

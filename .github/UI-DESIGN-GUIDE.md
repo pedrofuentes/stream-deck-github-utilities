@@ -1,6 +1,6 @@
 # UI & Design Guidelines
 
-> Referenced from [AGENTS.md](AGENTS.md). Load this file when designing buttons, Property Inspector panels, or any visual element.
+> Referenced from [AGENTS.md](../AGENTS.md). Load this file when designing buttons, Property Inspector panels, or any visual element.
 
 These guidelines cover both **Stream Deck button design** (SVG on OLED hardware) and **Property Inspector / Settings** design (HTML panels in the Stream Deck desktop app). They are based on **real implementation experience** — every rule below was learned by building, testing on hardware, and iterating.
 

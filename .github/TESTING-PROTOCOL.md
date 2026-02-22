@@ -1,6 +1,6 @@
 # Testing Protocol
 
-> Referenced from [AGENTS.md](AGENTS.md). Load this file when preparing a release, running tests, or providing manual test flows.
+> Referenced from [AGENTS.md](../AGENTS.md). Load this file when preparing a release, running tests, or providing manual test flows.
 
 Testing has **two mandatory phases** that MUST both complete before any release. The agent handles automated checks; the user performs real-life verification on hardware. **Neither phase can be skipped.**
 
