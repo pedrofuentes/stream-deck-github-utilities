@@ -321,28 +321,89 @@ Key rules (see full guide for details, code examples, and color palettes):
 - **FilterableSelect** for dynamic datasource dropdowns (repos, branches, workflows) — search/filter when items > 8; use `<sdpi-select>` only for static lists
 - **Always format display values** — never show raw API data (capitalize, convert units, null fallbacks)
 
-## Contributing Learnings Back to the Template
+## Template Collaboration Protocol
 
-This plugin is part of a family of Stream Deck plugins that share a common template and knowledge base:
+This plugin is part of the **stream-deck-template** knowledge-sharing ecosystem.
+All Stream Deck plugins share the same SDK, hardware constraints, and pitfalls.
+Learnings discovered here benefit every other plugin.
 
 - **Template repo**: https://github.com/pedrofuentes/stream-deck-template
-- **Local path**: `S:\Pedro\Projects\stream-deck-template`
+- **This plugin's contributions**: `contributions/github-utilities.md` in the template repo
+- **Consolidated knowledge**: `LEARNINGS.md` in the template repo
 
-As an agent working on this plugin, you should **proactively offer to contribute new learnings** back to the template after completing significant work. This helps all future plugins benefit from discoveries made here.
+### Reading Knowledge From the Template
 
-### How to contribute
+Before starting major work on a new feature, refactor, or release, fetch and read
+the latest `LEARNINGS.md` from the template:
 
-1. Write new findings to `S:\Pedro\Projects\stream-deck-template\contributions\github-utilities.md` using the format documented in `S:\Pedro\Projects\stream-deck-template\COLLABORATION.md`.
-2. Commit and push (or open a PR) to `https://github.com/pedrofuentes/stream-deck-template` with a conventional commit: `docs(github-utilities): add learnings about <topic>`.
+```
+https://raw.githubusercontent.com/pedrofuentes/stream-deck-template/main/LEARNINGS.md
+```
 
-### When to offer
+This contains detailed, code-level patterns for:
+- SVG rendering compatibility and OLED-tested color palettes
+- Property Inspector patterns (popup windows, dropdown hydration, FilterableSelect, settings race conditions)
+- Architecture patterns (global settings pub/sub, service layer isolation, PollingCoordinator, resource managers)
+- Adaptive polling, rate limit handling, key-press cycling, short/long press detection
+- Marquee animations, compact number formatting, accent bar layout, viewport-aware dropdowns
+- Testing patterns (singleton store resets, fixture organization, SVG assertion helpers)
+- Build pipeline, validate:consistency script, release checklist, PI verification gate
+- Common mistakes table with 23+ entries
 
+### Contributing Knowledge Back
+
+After completing significant work, **proactively offer** to contribute new learnings
+to the template. This is expected — not optional.
+
+**How:**
+1. Fetch the template's contribution file for this plugin:
+   `https://raw.githubusercontent.com/pedrofuentes/stream-deck-template/main/contributions/github-utilities.md`
+2. Read it to understand what has already been contributed
+3. Write new findings using the format below
+4. Push to the template repo (clone it, or ask the user to switch workspaces)
+5. Commit with: `docs(github-utilities): add learnings about <topic>`
+
+**Contribution format:**
+```markdown
+## [Category] — [Short Title]
+
+**Discovered in**: github-utilities
+**Date**: <date>
+**Severity**: critical | important | nice-to-know
+
+**Problem**: What went wrong or what was unclear
+**Solution**: What fixed it
+**Code example** (if applicable)
+**Prevention**: How to avoid this in the future
+```
+
+**When to offer a contribution:**
 - After solving a non-obvious bug or hardware quirk
 - After implementing a reusable pattern (polling, caching, UI component)
 - After discovering a manifest or SDK constraint
-- After a release
-- When the session is wrapping up
+- After a release (summarize what was learned)
+- After refactoring something that other plugins also have
+- When the session is wrapping up and the user asks "anything else?"
 
-### Before starting major work
+**When NOT to contribute:**
+- Plugin-specific business logic (API response parsing unique to this plugin)
+- Trivial fixes that don't generalize
+- Things already covered in `LEARNINGS.md`
 
-Read `S:\Pedro\Projects\stream-deck-template\LEARNINGS.md` for the latest consolidated knowledge from all plugins.
+### Checking for Updates From Other Plugins
+
+Other plugins may have discovered patterns that help this one. Before a release
+or when troubleshooting, check if `LEARNINGS.md` has new entries by fetching and
+scanning the sections relevant to the current task.
+
+### Template Companion Guides
+
+The template also maintains merged guides that this plugin may benefit from:
+
+| Guide | URL |
+|-------|-----|
+| Testing Protocol | `https://raw.githubusercontent.com/pedrofuentes/stream-deck-template/main/scaffold/.github/TESTING-PROTOCOL.md` |
+| UI/UX Design Guide | `https://raw.githubusercontent.com/pedrofuentes/stream-deck-template/main/scaffold/.github/UI-DESIGN-GUIDE.md` |
+
+Read these before writing tests or making UI changes — they contain hardware-tested
+patterns and failure logs from multiple plugins.
