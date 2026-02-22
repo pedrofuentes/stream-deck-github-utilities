@@ -91,7 +91,8 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		this.actionSettings.set(ev.action.id, settings);
 
 		if (ev.action.isKey()) {
-			if (!settings.repo) {
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
 				return;
@@ -170,7 +171,8 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		this.actionSettings.set(ev.action.id, settings);
 
 		if (ev.action.isKey()) {
-			if (!settings.repo) {
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
 				this.stopTimer(ev.action.id);
@@ -211,6 +213,12 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		try {
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			const token = globalSettings.githubToken;
+
+			if (!token) {
+				await actionContext.setImage(renderUnconfiguredImage());
+				await actionContext.setTitle("");
+				return;
+			}
 
 			const info = await fetchWorkflowInfo(parsed.owner, parsed.repo, token, {
 				branch: settings.branch,

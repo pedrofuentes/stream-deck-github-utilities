@@ -257,6 +257,29 @@ describe("WorkflowStatusAction", () => {
 			expect(lastImage(mockAction)).toContain("Setup");
 		});
 
+		it("shows unconfigured state when token is not set", async () => {
+			mockGetGlobalSettings.mockResolvedValue({});
+			const mockAction = createMockKeyAction("wf-1b");
+			const settings = { repo: "owner/repo" };
+			const ev = createWillAppearEvent(mockAction, settings);
+
+			await action.onWillAppear?.(ev as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Setup");
+		});
+
+		it("shows unconfigured state when both repo and token are missing", async () => {
+			mockGetGlobalSettings.mockResolvedValue({});
+			const mockAction = createMockKeyAction("wf-1c");
+			const ev = createWillAppearEvent(mockAction, {});
+
+			await action.onWillAppear?.(ev as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Setup");
+		});
+
 		it("shows loading then fetches workflow run data", async () => {
 			const mockAction = createMockKeyAction("wf-2");
 			const settings = { repo: "owner/repo" };
@@ -508,6 +531,17 @@ describe("WorkflowStatusAction", () => {
 			const mockAction = createMockKeyAction("wf-13");
 
 			const ev = createDidReceiveSettingsEvent(mockAction, {});
+			await action.onDidReceiveSettings?.(ev as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Setup");
+		});
+
+		it("shows unconfigured when token is cleared", async () => {
+			mockGetGlobalSettings.mockResolvedValue({});
+			const mockAction = createMockKeyAction("wf-13b");
+
+			const ev = createDidReceiveSettingsEvent(mockAction, { repo: "owner/repo" });
 			await action.onDidReceiveSettings?.(ev as never);
 
 			expect(mockAction.setImage).toHaveBeenCalled();

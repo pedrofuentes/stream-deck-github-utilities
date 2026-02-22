@@ -22,12 +22,12 @@ Display real-time GitHub repository statistics directly on a Stream Deck button.
 - **Open Issues** — open issues count with green accent
 - **Forks** — fork count with blue accent
 - **Watchers** — watcher count with purple accent
-- **Pull Requests** — open PR count with teal accent
-- **Language** — primary language with pink accent
-- **Size** — repository size (auto-formatted KB/MB/GB) with orange accent
-- **License** — license type with cyan accent
-- **Default Branch** — default branch name with emerald accent
-- **Visibility** — public/private status with slate accent
+- **Pull Requests** — open PR count with green accent
+- **Language** — primary language with salmon accent
+- **Size** — repository size (auto-formatted KB/MB/GB) with gray accent
+- **License** — license type with amber accent
+- **Default Branch** — default branch name with blue accent
+- **Visibility** — public/private status with gray accent
 
 Each button features:
 - Minimalistic SVG design with GitHub's dark theme
@@ -35,7 +35,7 @@ Each button features:
 - **Short press** cycles through stat types; **long press** (≥500ms) opens the repository on GitHub
 - Marquee scrolling for text that exceeds button width
 - Clear error states with retry hints
-- Setup prompt when unconfigured
+- Setup prompt when token or repository is not configured
 
 ### Workflow Status
 

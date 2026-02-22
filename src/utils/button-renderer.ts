@@ -334,7 +334,7 @@ export function renderErrorImage(message?: string): string {
 	});
 }
 
-/** Renders an unconfigured / setup image. */
+/** Renders an unconfigured / setup image shown when token or settings are missing. */
 export function renderUnconfiguredImage(): string {
 	return renderKeyImage({
 		line2: "Setup",

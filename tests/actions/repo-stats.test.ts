@@ -147,10 +147,10 @@ describe("RepoStatsAction", () => {
 		originalFetch = globalThis.fetch;
 		globalThis.fetch = vi.fn();
 
-		// Default: return empty global settings
-		mockGetGlobalSettings.mockResolvedValue({});
-
 		vi.clearAllMocks();
+
+		// Default: global settings with token (set AFTER clearAllMocks)
+		mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
 	});
 
 	afterEach(() => {
@@ -171,6 +171,29 @@ describe("RepoStatsAction", () => {
 			expect(lastImage(mockAction)).toContain("Setup");
 		});
 
+		it("shows unconfigured state when token is not set", async () => {
+			mockGetGlobalSettings.mockResolvedValue({});
+			const mockAction = createMockKeyAction("action-1b");
+			const settings = { repo: "owner/repo", statType: "stars" };
+			const ev = createWillAppearEvent(mockAction, settings);
+
+			await action.onWillAppear?.(ev as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Setup");
+		});
+
+		it("shows unconfigured state when both repo and token are missing", async () => {
+			mockGetGlobalSettings.mockResolvedValue({});
+			const mockAction = createMockKeyAction("action-1c");
+			const ev = createWillAppearEvent(mockAction, {});
+
+			await action.onWillAppear?.(ev as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Setup");
+		});
+
 		it("shows loading then fetches data when repo is set", async () => {
 			const mockAction = createMockKeyAction("action-2");
 			const settings = { repo: "facebook/react", statType: "stars" };
@@ -179,8 +202,6 @@ describe("RepoStatsAction", () => {
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
 			});
-
-			mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
 
 			// Mock fetch for github API
 			const mockResponse = {
@@ -229,7 +250,6 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 			});
 
-			mockGetGlobalSettings.mockResolvedValue({});
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,
 				status: 200,
@@ -313,7 +333,6 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			mockGetGlobalSettings.mockResolvedValue({});
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,
 				status: 200,
@@ -360,7 +379,6 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			mockGetGlobalSettings.mockResolvedValue({});
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,
 				status: 200,
@@ -405,7 +423,6 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			mockGetGlobalSettings.mockResolvedValue({});
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,
 				status: 200,
@@ -451,7 +468,6 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			mockGetGlobalSettings.mockResolvedValue({});
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,
 				status: 200,
@@ -506,7 +522,6 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			mockGetGlobalSettings.mockResolvedValue({});
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,
 				status: 200,
@@ -556,7 +571,6 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			mockGetGlobalSettings.mockResolvedValue({});
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,
 				status: 200,
@@ -649,7 +663,6 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			mockGetGlobalSettings.mockResolvedValue({});
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,
 				status: 200,
@@ -701,6 +714,17 @@ describe("RepoStatsAction", () => {
 			expect(lastImage(mockAction)).toContain("Setup");
 		});
 
+		it("shows unconfigured when token is cleared", async () => {
+			mockGetGlobalSettings.mockResolvedValue({});
+			const mockAction = createMockKeyAction("action-6b");
+
+			const ev = createDidReceiveSettingsEvent(mockAction, { repo: "owner/repo", statType: "stars" });
+			await action.onDidReceiveSettings?.(ev as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Setup");
+		});
+
 		it("refreshes with new settings when repo changes", async () => {
 			const mockAction = createMockKeyAction("action-7");
 
@@ -709,7 +733,6 @@ describe("RepoStatsAction", () => {
 				configurable: true,
 			});
 
-			mockGetGlobalSettings.mockResolvedValue({});
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,
 				status: 200,
@@ -758,7 +781,6 @@ describe("RepoStatsAction", () => {
 				configurable: true,
 			});
 
-			mockGetGlobalSettings.mockResolvedValue({});
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: false,
 				status: 404,
@@ -787,8 +809,6 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-
-			mockGetGlobalSettings.mockResolvedValue({});
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
