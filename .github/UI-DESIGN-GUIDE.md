@@ -379,3 +379,56 @@ This ensures the button always does something useful when pressed, even before t
 - ❌ Nested `<svg>` elements — Stream Deck renderer doesn't support them
 - ❌ Three-dot ellipsis (`...`) — use two dots (`..`) to save precious horizontal space
 - ❌ Returning raw API values to display — always format (capitalize, convert units, provide fallbacks)
+
+---
+
+## References & External Documentation
+
+These are the primary sources used to build these guidelines. Future agents should consult them when designing new UI elements or troubleshooting rendering issues.
+
+### Stream Deck SDK & Platform
+
+| Resource | URL | What it covers |
+|---|---|---|
+| Stream Deck SDK — Getting Started | https://docs.elgato.com/streamdeck/sdk/introduction/getting-started/ | Plugin architecture, manifest, action lifecycle |
+| Stream Deck SDK — Actions & Events | https://docs.elgato.com/streamdeck/sdk/references/events/ | `setImage`, `setTitle`, key events, settings API |
+| Stream Deck SDK — Manifest Schema | https://docs.elgato.com/streamdeck/sdk/references/manifest/ | `Actions`, `States`, `ShowTitle`, icon paths |
+| Stream Deck CLI | https://docs.elgato.com/streamdeck/cli/intro | `validate`, `restart`, `pack`, `link`, `dev` |
+| sdpi-components (PI framework) | https://sdpi-components.dev/ | `<sdpi-item>`, `<sdpi-select>`, dark theme, `setting` attribute |
+| Stream Deck SDK — Property Inspector | https://docs.elgato.com/streamdeck/sdk/references/property-inspector/ | PI lifecycle, `sendToPlugin`, global settings |
+
+### Design Systems & Color
+
+| Resource | URL | What it covers |
+|---|---|---|
+| GitHub Primer Design System | https://primer.style/ | Color tokens, dark theme foundations |
+| GitHub Primer — Color Primitives | https://primer.style/foundations/color/overview | Exact hex values for dark mode (`#0d1117`, `#e6edf3`, etc.) |
+| GitHub Primer — Icons (Octicons) | https://primer.style/foundations/icons | Icon style reference (stroke weights, sizes) |
+
+### SVG & Rendering
+
+| Resource | URL | What it covers |
+|---|---|---|
+| MDN — SVG Reference | https://developer.mozilla.org/en-US/docs/Web/SVG | SVG elements, attributes, coordinate systems |
+| MDN — SVG `<animate>` | https://developer.mozilla.org/en-US/docs/Web/SVG/Element/animate | Animation syntax for loading states |
+| MDN — SVG `<text>` | https://developer.mozilla.org/en-US/docs/Web/SVG/Element/text | Text rendering, `text-anchor`, font sizing |
+| MDN — `encodeURIComponent` | https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURIComponent | Why this is the correct encoding for data URIs |
+| SVG Viewport & ViewBox | https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/viewBox | Understanding 144×144 viewport → 72×72 physical mapping |
+
+### Typography & OLED
+
+| Resource | URL | What it covers |
+|---|---|---|
+| System Font Stack (CSS-Tricks) | https://css-tricks.com/snippets/css/system-font-stack/ | Cross-platform font stacks that render at small sizes |
+
+### Key Learnings Not Found in Docs
+
+These were discovered through trial-and-error on hardware and are **not documented** in any official source:
+
+1. **SVG encoding**: Only `"data:image/svg+xml," + encodeURIComponent(svg)` works. Base64 and charset variants render blank on hardware. No official Elgato doc mentions this.
+2. **Nested `<svg>` elements**: Silently fail — no error, just blank. Use `<g>` with transforms instead.
+3. **CSS `@keyframes` in SVG**: Not supported by Stream Deck's renderer. Must use SVG-native `<animate>` elements.
+4. **`<foreignObject>`**: Not supported. Cannot embed HTML inside SVG on Stream Deck.
+5. **Background color**: `#0d1117` (GitHub dark) reads better than pure `#000000` on OLED despite both being "dark."
+6. **Two-dot truncation**: `..` instead of `...` saves one character — meaningful at 12-char limits.
+7. **Dynamic font sizing thresholds**: The 30/26/22/18px breakpoints at 4/6/9 characters were tuned by testing real stat values on hardware.
