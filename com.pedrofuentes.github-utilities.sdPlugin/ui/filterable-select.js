@@ -148,6 +148,17 @@
 		"  display: flex;",
 		"  flex-direction: column;",
 		"}",
+		".fs-dropdown.flip-up {",
+		"  flex-direction: column-reverse;",
+		"}",
+		".fs-dropdown.flip-up .fs-search {",
+		"  border-bottom: none;",
+		"  border-top: 1px solid #444;",
+		"}",
+		".fs-dropdown.flip-up .fs-count {",
+		"  border-top: none;",
+		"  border-bottom: 1px solid #333;",
+		"}",
 
 		/* Search input at top of dropdown */
 		".fs-search {",
@@ -662,18 +673,53 @@
 		if (this.isOpen) return;
 		this.isOpen = true;
 
-		// Position dropdown below trigger
 		var rect = this._trigger.getBoundingClientRect();
-		this._dropdown.style.top = rect.bottom + 2 + "px";
+		var viewportH = window.innerHeight;
+		var gap = 2;
+		var spaceBelow = viewportH - rect.bottom - gap;
+		var spaceAbove = rect.top - gap;
+
+		// Reset any previous positioning
+		this._dropdown.style.top = "";
+		this._dropdown.style.bottom = "";
 		this._dropdown.style.left = rect.left + "px";
 		this._dropdown.style.width = rect.width + "px";
+		this._dropdown.classList.remove("flip-up");
 
+		// Measure how tall the dropdown wants to be (render hidden to get natural height)
+		this._dropdown.style.visibility = "hidden";
+		this._dropdown.style.maxHeight = "none";
+		this._list.style.maxHeight = "none";
 		this._dropdown.classList.add("open");
-		this._trigger.classList.add("open");
-		this._trigger.setAttribute("aria-expanded", "true");
-
 		this._searchInput.value = "";
 		this._applyFilter();
+
+		var naturalHeight = this._dropdown.offsetHeight;
+		var minUsable = 120; // minimum usable dropdown height
+
+		// Decide direction: prefer below, flip above if not enough space
+		var openAbove = spaceBelow < Math.min(naturalHeight, minUsable) && spaceAbove > spaceBelow;
+		var availableSpace = openAbove ? spaceAbove : spaceBelow;
+
+		// Constrain list max-height so dropdown fits in available space
+		// Account for search input (~35px), count footer (~24px), borders (~4px)
+		var chrome = 65;
+		var listMax = Math.max(availableSpace - chrome, 60);
+		this._list.style.maxHeight = listMax + "px";
+
+		if (openAbove) {
+			this._dropdown.style.bottom = (viewportH - rect.top + gap) + "px";
+			this._dropdown.classList.add("flip-up");
+		} else {
+			this._dropdown.style.top = (rect.bottom + gap) + "px";
+		}
+
+		// Constrain overall dropdown height
+		this._dropdown.style.maxHeight = availableSpace + "px";
+		this._dropdown.style.visibility = "";
+
+		this._trigger.classList.add("open");
+		this._trigger.setAttribute("aria-expanded", "true");
 
 		// Focus search if visible
 		if (!this._searchInput.classList.contains("hidden")) {
@@ -694,9 +740,13 @@
 		if (!this.isOpen) return;
 		this.isOpen = false;
 		this._dropdown.classList.remove("open");
+		this._dropdown.classList.remove("flip-up");
 		this._trigger.classList.remove("open");
 		this._trigger.setAttribute("aria-expanded", "false");
 		this.highlightedIndex = -1;
+		// Reset dynamic sizing
+		this._list.style.maxHeight = "";
+		this._dropdown.style.maxHeight = "";
 	};
 
 	// ── Keyboard Navigation ─────────────────────────────────────────
