@@ -1,4 +1,5 @@
 import resolve from "@rollup/plugin-node-resolve";
+import commonjs from "@rollup/plugin-commonjs";
 import typescript from "@rollup/plugin-typescript";
 import path from "node:path";
 import url from "node:url";
@@ -56,9 +57,10 @@ const config = {
 			browser: false,
 			exportConditions: ["node"],
 			preferBuiltins: true
-		})
+		}),
+		commonjs()
 	],
-	external: [/^@elgato\//, /^ws$/, /^node:/]
+	external: [/^node:/]
 };
 
 export default config;
