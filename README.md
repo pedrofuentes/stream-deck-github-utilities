@@ -3,8 +3,8 @@
 A [Stream Deck](https://www.elgato.com/stream-deck) plugin that provides utilities to display information from GitHub directly on your Stream Deck device.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities/releases)
-[![Tests](https://img.shields.io/badge/tests-262%20passed-brightgreen.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities/releases)
+[![Tests](https://img.shields.io/badge/tests-345%20passed-brightgreen.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities)
 
 ## Overview
 
@@ -19,14 +19,21 @@ Stream Deck GitHub Utilities brings GitHub data to your fingertips. Monitor repo
 Display real-time GitHub repository statistics directly on a Stream Deck button.
 
 - **Stars** — stargazers count with gold accent
-- **Issues** — open issues count with green accent
+- **Open Issues** — open issues count with green accent
 - **Forks** — fork count with blue accent
 - **Watchers** — watcher count with purple accent
+- **Pull Requests** — open PR count with teal accent
+- **Language** — primary language with pink accent
+- **Size** — repository size (auto-formatted KB/MB/GB) with orange accent
+- **License** — license type with cyan accent
+- **Default Branch** — default branch name with emerald accent
+- **Visibility** — public/private status with slate accent
 
 Each button features:
 - Minimalistic SVG design with GitHub's dark theme
 - Auto-refresh on a configurable interval (1 min to 1 hour)
-- Press-to-refresh for instant updates
+- **Short press** cycles through stat types; **long press** (≥500ms) opens the repository on GitHub
+- Marquee scrolling for text that exceeds button width
 - Clear error states with retry hints
 - Setup prompt when unconfigured
 
@@ -51,6 +58,7 @@ Each button features:
 The Property Inspector features a dynamic, auto-populated UX:
 
 - **Token entry** — paste your PAT once; repositories load automatically
+- **Searchable dropdowns** — type to filter repositories, workflows, branches, and environments
 - **Repository dropdown** — populated from your GitHub account (sorted by most recently pushed)
 - **Cascading filters** — selecting a repo automatically loads its workflows, branches, and environments
 - **Visual feedback** — status indicators show token validation and loading states
@@ -149,10 +157,11 @@ npm run watch
 │   │   ├── github-api.ts                          # GitHub REST API client
 │   │   ├── pi-data-provider.ts                    # PI datasource request handler
 │   │   ├── button-renderer.ts                     # SVG button rendering
+│   │   ├── marquee-controller.ts                  # Marquee scrolling text controller
 │   │   └── index.ts                               # Barrel exports
 │   ├── types.ts                                   # Shared type definitions
 │   └── plugin.ts                                  # Plugin entry point
-├── tests/                                         # Test files (262 tests)
+├── tests/                                         # Test files (345 tests)
 │   ├── actions/                                   # Action tests
 │   └── utils/                                     # Utility tests
 ├── rollup.config.mjs                              # Rollup bundler config
@@ -194,9 +203,8 @@ This produces a `.streamDeckPlugin` file in the `dist/` directory.
 
 ## Roadmap
 
-- [x] **Repo Stats** — Display repository statistics (stars, issues, forks, watchers)
+- [x] **Repo Stats** — Display repository statistics (10 stat types including stars, issues, forks, PRs, language, size, license, and more)
 - [x] **Workflow Status** — Display GitHub Actions workflow run status and deployment tracking
-- [ ] **PR Count** — Show open pull request count for a repository
 - [ ] **Notification Count** — Show unread GitHub notification count
 - [ ] **Release Monitor** — Track and display latest release version
 

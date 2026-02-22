@@ -234,24 +234,29 @@
 
 	<div class="section-label">How to create a token</div>
 	<div class="help-text">
+		<p style="margin-bottom: 10px; font-size: 12px; color: #c9d1d9;">
+			A <strong>fine-grained personal access token</strong> is recommended for the best security.
+		</p>
+
 		<div class="help-step">
 			<span class="help-num">1</span>
-			<span>Go to <a href="https://github.com/settings/tokens" target="_blank">Settings → Developer settings → Tokens (classic)</a></span>
+			<span>Go to <a href="https://github.com/settings/tokens?type=beta" target="_blank">Settings → Developer settings → Fine-grained tokens</a></span>
 		</div>
 		<div class="help-step">
 			<span class="help-num">2</span>
-			<span>Click <strong>Generate new token (classic)</strong></span>
+			<span>Click <strong>Generate new token</strong></span>
 		</div>
 		<div class="help-step">
 			<span class="help-num">3</span>
-			<span>Select these scopes:</span>
+			<span>Select the repositories you want to monitor, then grant these permissions:</span>
 		</div>
 		<div class="scope-list">
-			<code>repo</code> (full — required for private repos)<br>
-			<code>notifications</code> · <code>read:enterprise</code> · <code>read:project</code>
+			<code>Metadata</code> — read (required for Repo Stats)<br>
+			<code>Actions</code> — read (required for Workflow Status)<br>
+			<code>Deployments</code> — read (required for deployment tracking)
 		</div>
-		<div class="help-note" style="margin-top: 4px; font-size: 11px; color: #999;">
-			ℹ Selecting only <code>public_repo</code> will hide private repositories from the list.
+		<div class="help-note" style="margin-top: 8px; font-size: 11px; color: #999;">
+			ℹ Alternatively, create a <a href="https://github.com/settings/tokens" target="_blank" style="color: #58a6ff;">classic token</a> with the <code>repo</code> scope for full access to all repositories (including private).
 		</div>
 		<div class="help-step" style="margin-top: 8px;">
 			<span class="help-num">4</span>

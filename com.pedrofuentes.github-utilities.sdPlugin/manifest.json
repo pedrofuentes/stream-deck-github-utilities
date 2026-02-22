@@ -10,7 +10,7 @@
           "ShowTitle": false
         }
       ],
-      "Tooltip": "Display GitHub repository statistics (stars, issues, forks, watchers)",
+      "Tooltip": "Display GitHub repository statistics (stars, issues, forks, watchers, PRs, language, size, license, branch, visibility)",
       "UUID": "com.pedrofuentes.github-utilities.repo-stats",
       "PropertyInspectorPath": "ui/repo-stats.html"
     },
