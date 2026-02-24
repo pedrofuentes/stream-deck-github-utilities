@@ -68,6 +68,13 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	private marqueeData = new Map<string, MarqueeData>();
 
 	/**
+	 * IDs of actions that recently had setSettings called programmatically
+	 * (from onKeyUp). Used to suppress the redundant loading/refresh that
+	 * onDidReceiveSettings would otherwise trigger.
+	 */
+	private recentSetSettings = new Set<string>();
+
+	/**
 	 * Called when the action becomes visible on the Stream Deck.
 	 * Sets up initial display and starts the polling timer.
 	 */
@@ -104,6 +111,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 		this.lastUrl.delete(ev.action.id);
 		this.keyDownTime.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
+		this.recentSetSettings.delete(ev.action.id);
 	}
 
 	/**
@@ -120,8 +128,12 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	 */
 	override async onKeyUp(ev: KeyUpEvent<RepoStatsSettings>): Promise<void> {
 		const settings = ev.payload.settings;
+		// Prefer cached settings — the event payload may be missing fields if
+		// sdpi-components sent a partial setSettings (overwriting repo to undefined).
+		const cached = this.actionSettings.get(ev.action.id);
+		const repo = cached?.repo ?? settings.repo;
 
-		if (!settings.repo) {
+		if (!repo) {
 			return;
 		}
 
@@ -135,21 +147,29 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			if (url) {
 				await streamDeck.system.openUrl(url);
 			} else {
-				const parsed = parseRepoIdentifier(settings.repo);
+				const parsed = parseRepoIdentifier(repo);
 				if (parsed) {
-					const statType: StatType = settings.statType ?? "stars";
+					const statType: StatType = cached?.statType ?? settings.statType ?? "stars";
 					await streamDeck.system.openUrl(getStatUrl(parsed.owner, parsed.repo, statType));
 				}
 			}
 		} else {
 			// Short press → cycle to next stat type
-			const currentType: StatType = settings.statType ?? "stars";
+			// Use the local actionSettings cache as the source of truth for the
+			// current stat type. The cache always reflects our own setSettings
+			// calls, whereas ev.payload.settings may be stale when multiple
+			// button instances exist or rapid presses occur.
+			const cachedSettings = this.actionSettings.get(ev.action.id);
+			const currentType: StatType = cachedSettings?.statType ?? settings.statType ?? "stars";
 			const currentIndex = STAT_TYPES.indexOf(currentType);
 			const nextIndex = (currentIndex + 1) % STAT_TYPES.length;
 			const nextType = STAT_TYPES[nextIndex];
 
 			// Update settings with new stat type
-			const newSettings: RepoStatsSettings = { ...settings, statType: nextType };
+			const newSettings: RepoStatsSettings = { ...settings, ...cachedSettings, statType: nextType };
+			// Mark this action as recently updated by us, so onDidReceiveSettings
+			// can skip its redundant loading/refresh cycle.
+			this.recentSetSettings.add(ev.action.id);
 			await ev.action.setSettings(newSettings);
 			this.actionSettings.set(ev.action.id, newSettings);
 
@@ -182,7 +202,21 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	 * Called when settings are changed from the Property Inspector.
 	 */
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<RepoStatsSettings>): Promise<void> {
-		const settings = ev.payload.settings;
+		const incoming = ev.payload.settings;
+
+		// When onKeyUp calls setSettings, the SD app echoes didReceiveSettings
+		// back. We already handled the refresh in onKeyUp, so skip the
+		// redundant loading → re-fetch cycle to avoid flicker and races.
+		if (this.recentSetSettings.delete(ev.action.id)) {
+			// Still update the cache with whatever the SD persisted, then bail.
+			this.actionSettings.set(ev.action.id, incoming);
+			return;
+		}
+
+		// Merge incoming settings with cached settings to protect against
+		// partial updates (e.g. sdpi-components sending statType without repo).
+		const cached = this.actionSettings.get(ev.action.id);
+		const settings: RepoStatsSettings = { ...cached, ...incoming };
 		this.actionSettings.set(ev.action.id, settings);
 
 		if (ev.action.isKey()) {

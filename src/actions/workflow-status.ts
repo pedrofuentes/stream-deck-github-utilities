@@ -167,7 +167,12 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	 * Called when settings are changed from the Property Inspector.
 	 */
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<WorkflowStatusSettings>): Promise<void> {
-		const settings = ev.payload.settings;
+		const incoming = ev.payload.settings;
+
+		// Merge incoming settings with cached settings to protect against
+		// partial updates (e.g. sdpi-components sending fields without repo).
+		const cached = this.actionSettings.get(ev.action.id);
+		const settings: WorkflowStatusSettings = { ...cached, ...incoming };
 		this.actionSettings.set(ev.action.id, settings);
 
 		if (ev.action.isKey()) {

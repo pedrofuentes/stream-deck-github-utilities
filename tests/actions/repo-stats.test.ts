@@ -818,4 +818,242 @@ describe("RepoStatsAction", () => {
 			expect(globalThis.fetch).not.toHaveBeenCalled();
 		});
 	});
+
+	// ── Multi-button cycling (issue #1) ─────────
+
+	describe("multi-button cycling (issue #1)", () => {
+		/** Reusable mock GitHub API response */
+		function mockFetchSuccess(): void {
+			vi.mocked(globalThis.fetch).mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers: new Headers({
+					"x-ratelimit-limit": "5000",
+					"x-ratelimit-remaining": "4999",
+					"x-ratelimit-reset": "9999999999",
+					"x-ratelimit-used": "1",
+				}),
+				json: () =>
+					Promise.resolve({
+						stargazers_count: 100,
+						open_issues_count: 42,
+						forks_count: 20,
+						watchers_count: 50,
+						full_name: "owner/repo",
+						description: null,
+						visibility: "public",
+						html_url: "https://github.com/owner/repo",
+					}),
+				text: () => Promise.resolve(""),
+			} as unknown as Response);
+		}
+
+		it("second button cycles independently from the first", async () => {
+			const mockActionA = createMockKeyAction("multi-A");
+			const mockActionB = createMockKeyAction("multi-B");
+			const settingsA = { repo: "owner/repoA", statType: "stars" };
+			const settingsB = { repo: "owner/repoB", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockActionA, mockActionB],
+				configurable: true,
+			});
+			mockFetchSuccess();
+
+			// Both buttons appear
+			await action.onWillAppear?.(createWillAppearEvent(mockActionA, settingsA) as never);
+			await action.onWillAppear?.(createWillAppearEvent(mockActionB, settingsB) as never);
+
+			// Short press on button B
+			const now = 20000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+			await action.onKeyDown?.(createKeyDownEvent(mockActionB, settingsB) as never);
+			vi.spyOn(Date, "now").mockReturnValue(now + 100);
+			await action.onKeyUp?.(createKeyUpEvent(mockActionB, settingsB) as never);
+
+			// Button B should have cycled stars → issues
+			expect(mockActionB.setSettings).toHaveBeenCalledWith(
+				expect.objectContaining({ statType: "issues" }),
+			);
+			// Button A should NOT have been touched by setSettings
+			expect(mockActionA.setSettings).not.toHaveBeenCalled();
+		});
+
+		it("both buttons cycle independently through all stat types", async () => {
+			const mockActionA = createMockKeyAction("multi-cycle-A");
+			const mockActionB = createMockKeyAction("multi-cycle-B");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockActionA, mockActionB],
+				configurable: true,
+			});
+			mockFetchSuccess();
+
+			const settingsA = { repo: "owner/repoA", statType: "stars" };
+			const settingsB = { repo: "owner/repoB", statType: "stars" };
+
+			await action.onWillAppear?.(createWillAppearEvent(mockActionA, settingsA) as never);
+			await action.onWillAppear?.(createWillAppearEvent(mockActionB, settingsB) as never);
+
+			// Cycle button A: stars → issues
+			let now = 30000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+			await action.onKeyDown?.(createKeyDownEvent(mockActionA, settingsA) as never);
+			vi.spyOn(Date, "now").mockReturnValue(now + 50);
+			await action.onKeyUp?.(createKeyUpEvent(mockActionA, settingsA) as never);
+			expect(mockActionA.setSettings).toHaveBeenCalledWith(
+				expect.objectContaining({ statType: "issues" }),
+			);
+
+			// Cycle button B: stars → issues (independent from A)
+			now = 31000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+			await action.onKeyDown?.(createKeyDownEvent(mockActionB, settingsB) as never);
+			vi.spyOn(Date, "now").mockReturnValue(now + 50);
+			await action.onKeyUp?.(createKeyUpEvent(mockActionB, settingsB) as never);
+			expect(mockActionB.setSettings).toHaveBeenCalledWith(
+				expect.objectContaining({ statType: "issues" }),
+			);
+
+			// Cycle button A again: the cache now has "issues", so next should be "forks"
+			// ev.payload.settings still has "stars" (simulating stale event payload)
+			now = 32000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+			await action.onKeyDown?.(createKeyDownEvent(mockActionA, settingsA) as never);
+			vi.spyOn(Date, "now").mockReturnValue(now + 50);
+			await action.onKeyUp?.(createKeyUpEvent(mockActionA, settingsA) as never);
+
+			// Should cycle to "forks" (using cached "issues"), NOT "issues" (stale payload "stars")
+			const lastCall = mockActionA.setSettings.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+			expect(lastCall.statType).toBe("forks");
+		});
+
+		it("cycling uses cached statType when event payload is stale", async () => {
+			const mockAction1 = createMockKeyAction("stale-payload-1");
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction1],
+				configurable: true,
+			});
+			mockFetchSuccess();
+
+			const initialSettings = { repo: "owner/repo", statType: "stars" };
+			await action.onWillAppear?.(createWillAppearEvent(mockAction1, initialSettings) as never);
+
+			// First press: stars → issues
+			let now = 40000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+			await action.onKeyDown?.(createKeyDownEvent(mockAction1, initialSettings) as never);
+			vi.spyOn(Date, "now").mockReturnValue(now + 50);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction1, initialSettings) as never);
+			expect(mockAction1.setSettings).toHaveBeenCalledWith(
+				expect.objectContaining({ statType: "issues" }),
+			);
+
+			// Second press with STALE event payload (still says "stars") —
+			// the fix should use the cached "issues" instead.
+			now = 41000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+			await action.onKeyDown?.(createKeyDownEvent(mockAction1, initialSettings) as never);
+			vi.spyOn(Date, "now").mockReturnValue(now + 50);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction1, initialSettings) as never);
+
+			const lastCall = mockAction1.setSettings.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+			expect(lastCall.statType).toBe("forks");
+		});
+
+		it("onDidReceiveSettings is skipped after programmatic setSettings", async () => {
+			const mockAction1 = createMockKeyAction("drs-skip-1");
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction1],
+				configurable: true,
+			});
+			mockFetchSuccess();
+
+			const settings = { repo: "owner/repo", statType: "stars" };
+			await action.onWillAppear?.(createWillAppearEvent(mockAction1, settings) as never);
+
+			// Short press → cycles stars → issues
+			const now = 50000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+			await action.onKeyDown?.(createKeyDownEvent(mockAction1, settings) as never);
+			vi.spyOn(Date, "now").mockReturnValue(now + 50);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction1, settings) as never);
+
+			// Track setImage calls AFTER the cycle
+			mockAction1.setImage.mockClear();
+			vi.mocked(globalThis.fetch).mockClear();
+
+			// Simulate the SD echoing didReceiveSettings after setSettings
+			const drsEv = createDidReceiveSettingsEvent(mockAction1, { repo: "owner/repo", statType: "issues" });
+			await action.onDidReceiveSettings?.(drsEv as never);
+
+			// Should NOT have shown loading or re-fetched
+			expect(globalThis.fetch).not.toHaveBeenCalled();
+			// onDidReceiveSettings should have returned early (no setImage calls)
+			expect(mockAction1.setImage).not.toHaveBeenCalled();
+		});
+
+		it("onDidReceiveSettings still refreshes for PI-triggered changes", async () => {
+			const mockAction1 = createMockKeyAction("drs-pi-1");
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction1],
+				configurable: true,
+			});
+			mockFetchSuccess();
+
+			const settings = { repo: "owner/repo", statType: "stars" };
+			await action.onWillAppear?.(createWillAppearEvent(mockAction1, settings) as never);
+
+			mockAction1.setImage.mockClear();
+			vi.mocked(globalThis.fetch).mockClear();
+			mockFetchSuccess();
+
+			// Simulate the PI changing settings (no prior setSettings from plugin)
+			const drsEv = createDidReceiveSettingsEvent(mockAction1, {
+				repo: "owner/new-repo",
+				statType: "forks",
+			});
+			await action.onDidReceiveSettings?.(drsEv as never);
+
+			// Should have shown loading and re-fetched
+			expect(globalThis.fetch).toHaveBeenCalled();
+			expect(mockAction1.setImage).toHaveBeenCalled();
+		});
+
+		it("second button renders correctly after cycling", async () => {
+			const mockActionA = createMockKeyAction("render-A");
+			const mockActionB = createMockKeyAction("render-B");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockActionA, mockActionB],
+				configurable: true,
+			});
+			mockFetchSuccess();
+
+			const settingsA = { repo: "owner/repoA", statType: "stars" };
+			const settingsB = { repo: "owner/repoB", statType: "stars" };
+
+			await action.onWillAppear?.(createWillAppearEvent(mockActionA, settingsA) as never);
+			await action.onWillAppear?.(createWillAppearEvent(mockActionB, settingsB) as never);
+
+			// Clear image mocks after initial render
+			mockActionA.setImage.mockClear();
+			mockActionB.setImage.mockClear();
+
+			// Press button B → cycles to issues
+			const now = 60000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+			await action.onKeyDown?.(createKeyDownEvent(mockActionB, settingsB) as never);
+			vi.spyOn(Date, "now").mockReturnValue(now + 50);
+			await action.onKeyUp?.(createKeyUpEvent(mockActionB, settingsB) as never);
+
+			// Button B should have been rendered (setImage called)
+			expect(mockActionB.setImage).toHaveBeenCalled();
+			const bSvg = lastImage(mockActionB);
+			expect(bSvg).toContain("repoB");
+
+			// Button A should NOT have had setImage called by the cycling
+			expect(mockActionA.setImage).not.toHaveBeenCalled();
+		});
+	});
 });

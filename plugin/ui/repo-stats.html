@@ -11,6 +11,20 @@
 			construct(target, args) {
 				const ws = new target(...args);
 				window._sdWebSocket = ws;
+				// Intercept outgoing send to merge _actionSettings into setSettings,
+				// preventing sdpi-components from overwriting FilterableSelect settings.
+				const _origSend = ws.send.bind(ws);
+				ws.send = function(data) {
+					try {
+						const msg = JSON.parse(data);
+						if (msg.event === "setSettings" && window._actionSettings) {
+							msg.payload = Object.assign({}, window._actionSettings, msg.payload);
+							window._actionSettings = msg.payload;
+							return _origSend(JSON.stringify(msg));
+						}
+					} catch(e) {}
+					return _origSend(data);
+				};
 				ws.addEventListener("message", function(evt) {
 					try {
 						const data = JSON.parse(evt.data);
