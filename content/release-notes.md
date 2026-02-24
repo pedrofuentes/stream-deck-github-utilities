@@ -4,6 +4,28 @@
   Character limit per entry: 1,500
 -->
 
+## v1.3.4 — 2026-02-23
+<!-- Characters: ~370 / 1,500 -->
+
+Settings reliability and UX polish.
+
+- Fixed stat dropdown changes not persisting on first selection after choosing a repository
+- Fixed settings echo race condition between Property Inspector and plugin (WebSocket echo suppression)
+- Disabled user title field to prevent overlay on full-SVG buttons
+- Updated default key images with proper SVG setup prompts
+
+---
+
+## v1.3.3 — 2026-02-22
+<!-- Characters: ~230 / 1,500 -->
+
+Multi-button fix and icon refresh.
+
+- Fixed second Repo Stats button not cycling stat types independently (#1)
+- Replaced sidebar action icons with crisp white SVGs for better visibility
+
+---
+
 ## v1.3.2 — 2026-02-21
 <!-- Characters: ~220 / 1,500 -->
 
