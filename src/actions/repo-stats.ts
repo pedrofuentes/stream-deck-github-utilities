@@ -217,6 +217,16 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 		// partial updates (e.g. sdpi-components sending statType without repo).
 		const cached = this.actionSettings.get(ev.action.id);
 		const settings: RepoStatsSettings = { ...cached, ...incoming };
+
+		// Apply in-memory defaults (the PI send interceptor persists these,
+		// so they should already be present; this is a safety fallback).
+		if (settings.repo && !settings.statType) {
+			settings.statType = "stars";
+		}
+		if (settings.repo && !settings.refreshInterval) {
+			settings.refreshInterval = 300;
+		}
+
 		this.actionSettings.set(ev.action.id, settings);
 
 		if (ev.action.isKey()) {

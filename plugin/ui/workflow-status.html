@@ -7,6 +7,9 @@
 	// and to detect datasource responses (which bypass shadow DOM issues).
 	(function() {
 		const NativeWS = window.WebSocket;
+		// Timestamp of the last setSettings we sent — used to detect echoes.
+		let _lastSendTime = 0;
+		const ECHO_WINDOW_MS = 500;
 		window.WebSocket = new Proxy(NativeWS, {
 			construct(target, args) {
 				const ws = new target(...args);
@@ -19,7 +22,14 @@
 						const msg = JSON.parse(data);
 						if (msg.event === "setSettings" && window._actionSettings) {
 							msg.payload = Object.assign({}, window._actionSettings, msg.payload);
+							// Inject defaults when a repo is set but refresh is missing.
+							// Done here (not in the plugin) to avoid an extra setSettings echo
+							// that races with sdpi-components' 250ms debounced save.
+							if (msg.payload.repo && !msg.payload.refreshInterval) {
+								msg.payload.refreshInterval = 60;
+							}
 							window._actionSettings = msg.payload;
+							_lastSendTime = Date.now();
 							return _origSend(JSON.stringify(msg));
 						}
 					} catch(e) {}
@@ -31,11 +41,16 @@
 						if (data.event === "didReceiveGlobalSettings") {
 							window._globalSettings = data.payload?.settings || {};
 						}
-						// Keep _actionSettings in sync when plugin updates settings
+						// Keep _actionSettings in sync when plugin updates settings,
+						// but SKIP echoes from our own recent setSettings — they carry
+						// stale data that would overwrite the user's pending changes.
 						if (data.event === "didReceiveSettings") {
-							window._actionSettings = data.payload?.settings || {};
+							const isEcho = (Date.now() - _lastSendTime) < ECHO_WINDOW_MS;
+							if (!isEcho) {
+								window._actionSettings = data.payload?.settings || {};
+							}
 							window.dispatchEvent(new CustomEvent('sdpi-settings-loaded', {
-								detail: { settings: window._actionSettings }
+								detail: { settings: data.payload?.settings || {} }
 							}));
 						}
 						// Capture datasource responses from the plugin
