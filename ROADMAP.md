@@ -1,8 +1,8 @@
 # GitHub Utilities for Stream Deck — Roadmap
 
-> **Version**: v1.2.0 (current)
+> **Version**: v1.4.0 (current)
 > **Last Updated**: February 2026
-> **Status**: Active — Phase 1 complete, Phase 2 next
+> **Status**: Active — Phase 1, Phase 2 & Visual Polish complete, Phase 3 next
 
 ---
 
@@ -10,7 +10,7 @@
 
 - [Current State](#current-state)
 - [Completed — Phase 1](#completed--phase-1)
-- [Phase 2 — New Actions (High Value)](#phase-2--new-actions-high-value)
+- [Completed — Phase 2](#completed--phase-2)
 - [Phase 3 — Advanced Actions](#phase-3--advanced-actions)
 - [Phase 4 — Stream Deck+ & Polish](#phase-4--stream-deck--polish)
 - [Phase 5 — Future / Stretch Goals](#phase-5--future--stretch-goals)
@@ -22,23 +22,31 @@
 
 ## Current State
 
-### Existing Actions (v1.2.0)
+### Existing Actions (v1.4.0)
 
 | Action | Description | API Endpoints Used |
 |--------|-------------|-------------------|
-| **Repo Stats** | Displays 10 stat types (stars, issues, forks, watchers, PRs, language, size, license, default branch, visibility) with short-press cycling and long-press URL opening | `GET /repos/{owner}/{repo}`, `GET /repos/{owner}/{repo}/pulls` |
+| **Repo Stats** | Displays 10 stat types (stars, issues, forks, watchers, PRs, language, size, license, default branch, visibility) with short-press cycling and long-press URL opening | `GET /repos/{owner}/{repo}`, `GET /search/issues?q=repo:{owner}/{repo}+type:pr+is:open` |
 | **Workflow Status** | Shows latest workflow run status with deployment info; opens URL on press | `GET /repos/{owner}/{repo}/actions/runs`, `GET /repos/{owner}/{repo}/deployments`, `GET /repos/{owner}/{repo}/deployments/{id}/statuses` |
+| **PR Counter** | Displays open/closed/all PR count; press to open PRs page | `GET /search/issues?q=repo:{owner}/{repo}+type:pr+is:{state}` (Search API) |
+| **Issue Counter** | Displays issue count (excluding PRs); press to open issues page | `GET /search/issues?q=repo:{owner}/{repo}+type:issue+is:{state}` (Search API) |
+| **Release Monitor** | Shows latest release tag, relative time, pre-release indicator; press to open release | `GET /repos/{owner}/{repo}/releases/latest`, `GET /repos/{owner}/{repo}/releases?per_page=1` |
+| **Commit Activity** | Shows commit count for 24h/7d/30d time windows; press to open commits | `GET /repos/{owner}/{repo}/stats/commit_activity` |
+| **Branch Comparison** | Shows ahead/behind counts between two branches; press to open compare | `GET /repos/{owner}/{repo}/compare/{base}...{head}` |
 
 ### Existing Infrastructure
 
-- GitHub REST API client (`github-api.ts`, ~945 lines) with error handling, rate limit parsing, datasource APIs
-- SVG-based icon rendering (`button-renderer.ts`) with dynamic status colors, 14 status icons
+- GitHub REST API client (`github-api.ts`, ~1,250 lines) with error handling, rate limit parsing, datasource APIs, Search API integration
+- SVG-based icon rendering (`button-renderer.ts`) with dynamic status colors, 14 status icons, consistent color palette
 - Marquee scrolling controller (`marquee-controller.ts`) for long text on buttons
+- Animated loading spinner (`spinner-animator.ts`) for frame-based loading animations
 - Property Inspector with FilterableSelect, searchable dropdowns for repos, workflows, branches, environments
 - PI data provider (`pi-data-provider.ts`) for WebSocket-based PI ↔ plugin communication
 - Global settings for GitHub token, per-action settings for configuration
 - Short press / long press differentiation (≥500ms threshold)
-- 345 tests across 10 test files
+- Setup state prompts on unconfigured buttons
+- WebSocket echo suppression for PI ↔ plugin settings sync
+- 463 tests across 16 test files
 
 ---
 
@@ -65,106 +73,60 @@ Added `MarqueeController` for text that exceeds button width — smooth horizont
 ### ✅ FilterableSelect PI Component (bonus)
 Added searchable/filterable dropdowns for repositories, workflows, branches, and environments in the Property Inspector.
 
+### ✅ v1.3.0–v1.3.4: Stability & Polish
+Post-Phase 1 releases focused on reliability, packaging, and UX polish:
+
+- **v1.3.0** — Setup state: buttons show a clear prompt when token or repo is not configured
+- **v1.3.1** — Packaging fix: bundled all dependencies into `plugin.js`
+- **v1.3.2** — SDK compatibility (SDKVersion 3), adopted template collaboration protocol
+- **v1.3.3** — Fixed multi-button stat cycling (#1), replaced sidebar action icons with crisp white SVGs
+- **v1.3.4** — Fixed PI settings race conditions (echo suppression), disabled user title overlay, updated default key images
+
 ### Remaining (not yet started)
 - **1.3 Workflow Status: Show Run Duration** — Display run duration on the button
-- **1.4 Error State Improvements** — Rate limit display, distinct error visuals, `showAlert()` for transient errors
+- **1.4 Error State Improvements** — Rate limit display, distinct error visuals, `showAlert()` for transient errors (setup state partially addresses this)
 
 ---
 
-## Phase 2 — New Actions (High Value)
+## Completed — Phase 2
 
-New Stream Deck buttons that provide the most daily utility.
+All Phase 2 actions were implemented with full test coverage (73 new tests across 5 test files).
 
-### 2.1 Pull Request Counter
-**Effort**: Medium | **Priority**: High
-
-Display open PR count for a repo (or filtered by state). Press to open PRs page.
-
-**Display**: Count + PR icon, color-coded (green = 0 open, yellow = few, red = many)
-
-**Configuration**:
-- Repository selection
+### ✅ 2.1 Pull Request Counter
+Display open/closed/all PR count for a repo. Press to open PRs page.
 - State filter: `open` | `closed` | `all`
-- Optional: filter by label, author, or base branch
-- Refresh interval
+- Auto-refresh on configurable interval (default 5 minutes)
+- Marquee scrolling for long repo names
+- Accurate count via GitHub Search API (`type:pr` qualifier)
 
-**API**: `GET /repos/{owner}/{repo}/pulls?state=open&per_page=1` (use response headers for total count, or `per_page=100` and count)
-**Token**: `Pull requests: Read`
-**URL on press**: `https://github.com/{owner}/{repo}/pulls`
-
-### 2.2 Issue Counter
-**Effort**: Medium | **Priority**: High
-
-Display open issue count for a repo. Press to open issues page.
-
-**Display**: Count + issue icon, color-coded by severity/count
-
-**Configuration**:
-- Repository selection
+### ✅ 2.2 Issue Counter
+Display issue count (excluding PRs) for a repo. Press to open issues page.
 - State filter: `open` | `closed` | `all`
-- Optional: filter by label, assignee, milestone
-- Refresh interval
+- Accurate separation of issues from PRs via GitHub Search API (`type:issue` qualifier)
+- Marquee scrolling for long repo names
 
-**API**: `GET /repos/{owner}/{repo}/issues?state=open` (note: this also returns PRs, need to filter or use the repo's `open_issues_count` field)
-**Token**: `Issues: Read`
-**URL on press**: `https://github.com/{owner}/{repo}/issues`
+### ✅ 2.3 Release Monitor
+Show latest release version/tag for a repo. Press to open release page.
+- Include pre-releases toggle with visual "Pre" indicator
+- Shows version tag + relative time (e.g., "2d ago")
+- Dual marquee scrolling (repo name + version tag)
+- "None" display when no releases exist
+- Press opens release URL (or fallback to releases page)
 
-### 2.3 Release Monitor
-**Effort**: Medium | **Priority**: High
-
-Show the latest release version/tag for a repo. Useful for monitoring dependencies or your own projects.
-
-**Display**: Version tag (e.g., "v2.3.1"), release name, published date, pre-release indicator
-
-**Configuration**:
-- Repository selection
-- Include pre-releases toggle
-- Refresh interval
-
-**API**:
-- `GET /repos/{owner}/{repo}/releases/latest` — latest stable release
-- `GET /repos/{owner}/{repo}/releases?per_page=1` — latest release including pre-releases
-
-**Token**: `Contents: Read` (releases are under Contents permission)
-**URL on press**: Release HTML URL (`html_url` from response)
-
-### 2.4 Commit Activity
-**Effort**: Medium | **Priority**: Medium
-
-Show recent commit count (last 24h, 7d, or 30d).
-
-**Display**: Commit count + trend indicator, optionally on a specific branch
-
-**Configuration**:
-- Repository selection
+### ✅ 2.4 Commit Activity
+Show recent commit count for configurable time windows.
 - Time range: 24h / 7d / 30d
-- Optional: branch filter
-- Refresh interval
+- Handles GitHub's 202 "computing" response gracefully (shows "...")
+- Auto-refresh on configurable interval (default 5 minutes)
+- Press to open commits page
 
-**API**:
-- `GET /repos/{owner}/{repo}/stats/commit_activity` — weekly commit count (last year)
-- `GET /repos/{owner}/{repo}/stats/participation` — weekly commit count (owner vs all)
-- `GET /repos/{owner}/{repo}/commits?since={date}&per_page=1` — count via pagination headers
-
-**Token**: `Metadata: Read` (stats endpoints) or `Contents: Read` (commits list)
-**URL on press**: `https://github.com/{owner}/{repo}/commits`
-
-### 2.5 Branch Comparison / Ahead-Behind
-**Effort**: Medium | **Priority**: Medium
-
-Show how many commits a branch is ahead/behind another branch (e.g., `develop` vs `main`).
-
-**Display**: "↑3 ↓1" format showing ahead/behind counts
-
-**Configuration**:
-- Repository selection
-- Base branch (e.g., `main`)
-- Head branch (e.g., `develop`)
-- Refresh interval
-
-**API**: `GET /repos/{owner}/{repo}/compare/{base}...{head}` — returns `ahead_by`, `behind_by`
-**Token**: `Contents: Read`
-**URL on press**: `https://github.com/{owner}/{repo}/compare/{base}...{head}`
+### ✅ 2.5 Branch Comparison / Ahead-Behind
+Show ahead/behind counts between two branches.
+- Display: "↑3 ↓1" format, or "Even" when identical
+- Color-coded status: diverged (yellow), ahead (green), behind (red), identical (teal)
+- Branch label: "head→base" for clarity
+- FilterableSelect dropdowns for branch selection (populated after repo selection)
+- Press to open branch comparison page
 
 ---
 
@@ -352,14 +314,13 @@ Use the SDK's 2-state feature to toggle between:
 
 Or: State 0 = normal view, State 1 = detailed view (duration, branch, etc.)
 
-### 4.6 Visual Polish
-**Effort**: Medium | **Priority**: Medium
+### ✅ 4.6 Visual Polish
+Shipped in **v1.4.0**.
 
-- Animated loading states (spinner SVG)
-- Smooth transitions between states
-- Consistent color palette across all actions
-- Dark/light theme support
-- Better typography in SVG rendering
+- **Animated loading states** — frame-based spinner SVG animation during API fetches (SpinnerAnimator class)
+- **Consistent color palette** — centralized `COLORS` constant used across all actions (including new accent colors for releases, commits, branches)
+- **Dark theme only** — confirmed OLED Stream Deck displays are always dark; no light theme needed
+- **Typography** — existing dynamic font sizing system (30/26/22/18px breakpoints) adequate
 
 ---
 
@@ -445,16 +406,16 @@ Summary of which permissions each action/feature requires with a **fine-grained 
 | Permission | Level | Used By |
 |-----------|-------|---------|
 | Metadata | Read | Repo Stats (stars, forks, watchers, language, size, license, default branch, visibility) |
-| Pull requests | Read | Repo Stats — PR count (added in v1.2.0) |
+| Pull requests | Read | Repo Stats — PR count, PR Counter action |
 | Actions | Read | Workflow Status (runs, workflows, environments) |
 | Deployments | Read | Workflow Status (deployments, deployment statuses) |
+| Issues | Read | Issue Counter action |
+| Contents | Read | Release Monitor, Commit Activity, Branch Comparison |
 
 ### New Permissions Needed by Phase
 
 | Permission | Level | Required For |
 |-----------|-------|-------------|
-| Issues | Read | Issue Counter (2.2), Milestone Progress (3.7) |
-| Contents | Read | Release Monitor (2.3), Commit Activity (2.4), Branch Comparison (2.5) |
 | Administration | Read | Repository Traffic (3.1) |
 | Dependabot alerts | Read | Dependabot Alerts (3.2), Security Dashboard (3.5) |
 | Code scanning alerts | Read | Code Scanning Alerts (3.3), Security Dashboard (3.5) |
@@ -587,20 +548,22 @@ SDK capabilities available for enhancing the plugin.
 | ~~Repo Stats: Open URL~~ | Small | High | ~~P0~~ | 1 | ✅ v1.2.0 |
 | ~~Long Press vs Short Press~~ | Medium | Medium | ~~P1~~ | 1 | ✅ v1.2.0 |
 | ~~Repo Stats: Additional Types~~ | Small | Medium | ~~P1~~ | 1 | ✅ v1.2.0 |
-| PR Counter | Medium | High | **P0** | 2 | Next |
-| Issue Counter | Medium | High | **P0** | 2 | Next |
-| Release Monitor | Medium | High | **P1** | 2 | Planned |
+| ~~Setup State Prompt~~ | Small | Medium | ~~P1~~ | 1 | ✅ v1.3.0 |
+| ~~Stability & Polish~~ | Small | High | ~~P0~~ | — | ✅ v1.3.1–v1.3.4 |
+| ~~PR Counter~~ | Medium | High | ~~P0~~ | 2 | ✅ v1.4.0 |
+| ~~Issue Counter~~ | Medium | High | ~~P0~~ | 2 | ✅ v1.4.0 |
+| ~~Release Monitor~~ | Medium | High | ~~P1~~ | 2 | ✅ v1.4.0 |
 | Workflow: Show Run Duration | Small | Low | **P1** | 1 | Planned |
-| Error State Improvements | Small | Medium | **P1** | 1 | Planned |
-| Commit Activity | Medium | Medium | **P1** | 2 | Planned |
-| Branch Comparison | Medium | Medium | **P2** | 2 | — |
+| Error State Improvements | Small | Medium | **P1** | 1 | Partial (setup state done) |
+| ~~Commit Activity~~ | Medium | Medium | ~~P1~~ | 2 | ✅ v1.4.0 |
+| ~~Branch Comparison~~ | Medium | Medium | ~~P2~~ | 2 | ✅ v1.4.0 |
 | Encoder/Dial for Repo Stats | Medium | Medium | **P2** | 4 | — |
 | Encoder/Dial for Workflow | Medium | Medium | **P2** | 4 | — |
 | Dependabot Alerts | Medium | Medium | **P2** | 3 | — |
 | Code Scanning Alerts | Medium | Medium | **P2** | 3 | — |
 | Repository Traffic | Medium | Medium | **P2** | 3 | — |
 | Security Dashboard | Large | Medium | **P2** | 3 | — |
-| Visual Polish | Medium | Medium | **P2** | 4 | — |
+| ~~Visual Polish~~ | Medium | Medium | ~~P2~~ | 4 | ✅ v1.4.0 |
 | Workflow Dispatch | Large | Medium | **P3** | 5 | — |
 | Milestone Progress | Medium | Low | **P3** | 3 | — |
 | GitHub Pages Status | Medium | Low | **P3** | 3 | — |
@@ -614,9 +577,10 @@ SDK capabilities available for enhancing the plugin.
 ## Suggested Next Steps
 
 1. ~~**v1.2.0**: Phase 1 quick wins (Repo Stats URL + additional stat types + long press)~~ ✅ **Done**
-2. **v1.3.0**: PR Counter + Issue Counter actions (most universally useful new actions)
-3. **v1.4.0**: Release Monitor + Commit Activity + remaining Phase 1 polish (run duration, error improvements)
-4. **v2.0.0**: Stream Deck+ support (dials/encoders), security actions, visual overhaul
+2. ~~**v1.3.x**: Stability & polish (setup state, packaging, PI race conditions, SDK compat)~~ ✅ **Done**
+3. ~~**v1.4.0**: Phase 2 actions (PR Counter, Issue Counter, Release Monitor, Commit Activity, Branch Comparison) + Visual Polish (animated loading, consistent palette)~~ ✅ **Done**
+4. **v1.5.0**: Remaining Phase 1 polish (run duration, error improvements) + Phase 3 security actions
+5. **v2.0.0**: Stream Deck+ support (dials/encoders), advanced actions, visual overhaul
 
 ---
 

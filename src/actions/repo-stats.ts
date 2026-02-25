@@ -29,8 +29,9 @@ import type { GlobalSettings, RepoStatsSettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { fetchRepoStats, fetchOpenPullRequestCount, getStatDisplay, getStatUrl, STAT_TYPES, type StatType } from "../utils/github-api";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
-import { renderStatImage, renderLoadingImage, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
+import { renderStatImage, renderSpinnerFrame, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
+import { SpinnerAnimator, startLoadingSpinner, stopLoadingSpinner } from "../utils/spinner-animator";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
@@ -67,6 +68,9 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	/** Marquee scroll state per action instance */
 	private marqueeData = new Map<string, MarqueeData>();
 
+	/** Animated loading spinner per action instance */
+	private spinners = new Map<string, SpinnerAnimator>();
+
 	/**
 	 * IDs of actions that recently had setSettings called programmatically
 	 * (from onKeyUp). Used to suppress the redundant loading/refresh that
@@ -90,7 +94,9 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 				return;
 			}
 
-			await ev.action.setImage(renderLoadingImage());
+			startLoadingSpinner(this.spinners, ev.action.id, (frame) => {
+				ev.action.setImage(renderSpinnerFrame(frame)).catch(() => {});
+			});
 			await ev.action.setTitle("");
 		}
 
@@ -107,6 +113,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	override onWillDisappear(ev: WillDisappearEvent<RepoStatsSettings>): void {
 		this.stopTimer(ev.action.id);
 		this.stopMarquee(ev.action.id);
+		stopLoadingSpinner(this.spinners, ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.keyDownTime.delete(ev.action.id);
@@ -238,7 +245,9 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 				return;
 			}
 
-			await ev.action.setImage(renderLoadingImage());
+			startLoadingSpinner(this.spinners, ev.action.id, (frame) => {
+				ev.action.setImage(renderSpinnerFrame(frame)).catch(() => {});
+			});
 			await ev.action.setTitle("");
 		}
 
@@ -264,6 +273,8 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 		if (!actionContext || !actionContext.isKey()) {
 			return;
 		}
+
+		stopLoadingSpinner(this.spinners, actionId);
 
 		const parsed = parseRepoIdentifier(settings.repo);
 		if (!parsed) {

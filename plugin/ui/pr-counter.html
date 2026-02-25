@@ -22,11 +22,9 @@
 						const msg = JSON.parse(data);
 						if (msg.event === "setSettings" && window._actionSettings) {
 							msg.payload = Object.assign({}, window._actionSettings, msg.payload);
-							// Inject defaults when a repo is set but stat/refresh are missing.
-							// Done here (not in the plugin) to avoid an extra setSettings echo
-							// that races with sdpi-components' 250ms debounced save.
-							if (msg.payload.repo && !msg.payload.statType) {
-								msg.payload.statType = "stars";
+							// Inject defaults when a repo is set but state/refresh are missing.
+							if (msg.payload.repo && !msg.payload.stateFilter) {
+								msg.payload.stateFilter = "open";
 							}
 							if (msg.payload.repo && !msg.payload.refreshInterval) {
 								msg.payload.refreshInterval = 300;
@@ -45,8 +43,7 @@
 							window._globalSettings = data.payload?.settings || {};
 						}
 						// Keep _actionSettings in sync when plugin updates settings,
-						// but SKIP echoes from our own recent setSettings — they carry
-						// stale data that would overwrite the user's pending changes.
+						// but SKIP echoes from our own recent setSettings.
 						if (data.event === "didReceiveSettings") {
 							const isEcho = (Date.now() - _lastSendTime) < ECHO_WINDOW_MS;
 							if (!isEcho) {
@@ -58,9 +55,11 @@
 						}
 						// Capture datasource responses from the plugin
 						if (data.event === "sendToPropertyInspector" && data.payload?.event === "getRepos") {
-							window._repoItems = data.payload.items || [];						window.dispatchEvent(new CustomEvent('sdpi-datasource', {
-							detail: { event: 'getRepos', items: window._repoItems }
-						}));							if (typeof window._onRepoData === "function") window._onRepoData();
+							window._repoItems = data.payload.items || [];
+							window.dispatchEvent(new CustomEvent('sdpi-datasource', {
+								detail: { event: 'getRepos', items: window._repoItems }
+							}));
+							if (typeof window._onRepoData === "function") window._onRepoData();
 						}
 					} catch(e) {}
 				});
@@ -180,24 +179,19 @@
 	</sdpi-item>
 
 	<span id="repoStatus" class="sdpi-info">
-		Select a repository to display stats for.
+		Select a repository to display PR count for.
 	</span>
 
-	<!-- Stat Display -->
-	<sdpi-item label="Stat">
-		<sdpi-select setting="statType">
-			<option value="stars">⭐ Stars</option>
-			<option value="issues">🔵 Open Issues *</option>
-			<option value="forks">🔀 Forks</option>
-			<option value="watchers">👁️ Watchers</option>
-			<option value="pull_requests">🟢 Pull Requests</option>
-			<option value="language">💻 Language</option>
-			<option value="size">📦 Size</option>
-			<option value="license">📜 License</option>
-			<option value="default_branch">🌿 Default Branch</option>
-			<option value="visibility">🔒 Visibility</option>
+	<!-- State Filter -->
+	<sdpi-item label="State">
+		<sdpi-select setting="stateFilter">
+			<option value="open">🟢 Open PRs</option>
+			<option value="closed">🟣 Closed PRs</option>
+			<option value="all">🔵 All PRs</option>
 		</sdpi-select>
 	</sdpi-item>
+
+	<hr />
 
 	<!-- Refresh Interval -->
 	<sdpi-item label="Refresh">
@@ -214,10 +208,6 @@
 	<span class="sdpi-info">
 		Authenticated requests allow 5,000 API calls/hour.
 		Press the button to force a refresh anytime.
-		<br><br>
-		* <strong>Open Issues</strong> includes pull requests due to a GitHub API
-		limitation. Use the dedicated <em>Issue Counter</em> action for an
-		accurate count that excludes PRs.
 	</span>
 
 	<script>
@@ -276,7 +266,7 @@
 				const count = items.filter(i => i.value !== "").length;
 				tokenStatus.textContent = `✓ Token valid — ${count} repositor${count === 1 ? "y" : "ies"} loaded`;
 				tokenStatus.className = "sdpi-status success";
-				repoStatus.textContent = "Select a repository to display stats for.";
+				repoStatus.textContent = "Select a repository to display PR count for.";
 			}
 		}
 

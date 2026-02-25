@@ -40,11 +40,12 @@ import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provid
 import {
 	renderWorkflowImage,
 	renderDeployingImage,
-	renderLoadingImage,
+	renderSpinnerFrame,
 	renderErrorImage,
 	renderUnconfiguredImage,
 } from "../utils/button-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
+import { SpinnerAnimator, startLoadingSpinner, stopLoadingSpinner } from "../utils/spinner-animator";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 60; // 1 minute (workflows change faster than stats)
@@ -83,6 +84,9 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	/** Marquee scroll state per action instance */
 	private marqueeData = new Map<string, WfMarqueeData>();
 
+	/** Animated loading spinner per action instance */
+	private spinners = new Map<string, SpinnerAnimator>();
+
 	/**
 	 * Called when the action becomes visible on the Stream Deck.
 	 */
@@ -98,7 +102,9 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 				return;
 			}
 
-			await ev.action.setImage(renderLoadingImage());
+			startLoadingSpinner(this.spinners, ev.action.id, (frame) => {
+				ev.action.setImage(renderSpinnerFrame(frame)).catch(() => {});
+			});
 			await ev.action.setTitle("");
 		}
 
@@ -112,6 +118,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	override onWillDisappear(ev: WillDisappearEvent<WorkflowStatusSettings>): void {
 		this.stopTimer(ev.action.id);
 		this.stopMarquee(ev.action.id);
+		stopLoadingSpinner(this.spinners, ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
@@ -184,7 +191,9 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 				return;
 			}
 
-			await ev.action.setImage(renderLoadingImage());
+			startLoadingSpinner(this.spinners, ev.action.id, (frame) => {
+				ev.action.setImage(renderSpinnerFrame(frame)).catch(() => {});
+			});
 			await ev.action.setTitle("");
 		}
 
@@ -207,6 +216,8 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		if (!actionContext || !actionContext.isKey()) {
 			return;
 		}
+
+		stopLoadingSpinner(this.spinners, actionId);
 
 		const parsed = parseRepoIdentifier(settings.repo);
 		if (!parsed) {

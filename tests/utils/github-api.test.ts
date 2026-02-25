@@ -449,30 +449,16 @@ describe("github-api", () => {
 	// ── fetchOpenPullRequestCount ───────────────────────
 
 	describe("fetchOpenPullRequestCount", () => {
-		it("returns count from Link header last page", async () => {
-			const headers = mockHeaders();
-			headers.set("link", '<https://api.github.com/repos/o/r/pulls?page=23&per_page=1>; rel="last"');
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: true,
-				status: 200,
-				headers,
-				json: () => Promise.resolve([{ id: 1 }]),
-			} as unknown as Response);
-
-			const count = await fetchOpenPullRequestCount("owner", "repo", "ghp_test");
-			expect(count).toBe(23);
-		});
-
-		it("returns array length when no Link header", async () => {
+		it("returns total_count from Search API", async () => {
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,
 				status: 200,
 				headers: mockHeaders(),
-				json: () => Promise.resolve([{ id: 1 }]),
+				json: () => Promise.resolve({ total_count: 23, incomplete_results: false, items: [] }),
 			} as unknown as Response);
 
-			const count = await fetchOpenPullRequestCount("owner", "repo");
-			expect(count).toBe(1);
+			const count = await fetchOpenPullRequestCount("owner", "repo", "ghp_test");
+			expect(count).toBe(23);
 		});
 
 		it("returns 0 when no open PRs", async () => {
@@ -480,7 +466,7 @@ describe("github-api", () => {
 				ok: true,
 				status: 200,
 				headers: mockHeaders(),
-				json: () => Promise.resolve([]),
+				json: () => Promise.resolve({ total_count: 0, incomplete_results: false, items: [] }),
 			} as unknown as Response);
 
 			const count = await fetchOpenPullRequestCount("owner", "repo");
@@ -499,18 +485,20 @@ describe("github-api", () => {
 			expect(count).toBe(0);
 		});
 
-		it("calls correct URL with state=open and per_page=1", async () => {
+		it("calls Search API with type:pr is:open", async () => {
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,
 				status: 200,
 				headers: mockHeaders(),
-				json: () => Promise.resolve([]),
+				json: () => Promise.resolve({ total_count: 0, incomplete_results: false, items: [] }),
 			} as unknown as Response);
 
 			await fetchOpenPullRequestCount("owner", "repo", "ghp_test");
 
 			const url = vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
-			expect(url).toContain("/pulls?state=open&per_page=1");
+			expect(url).toContain("/search/issues");
+			expect(decodeURIComponent(url)).toContain("type:pr");
+			expect(decodeURIComponent(url)).toContain("is:open");
 		});
 	});
 });

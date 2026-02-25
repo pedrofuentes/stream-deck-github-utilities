@@ -251,9 +251,12 @@
 			<span>Select the repositories you want to monitor, then grant these permissions:</span>
 		</div>
 		<div class="scope-list">
-			<code>Metadata</code> — read (required for Repo Stats)<br>
+			<code>Metadata</code> — read (required for Repo Stats, Commit Activity)<br>
 			<code>Actions</code> — read (required for Workflow Status)<br>
-			<code>Deployments</code> — read (required for deployment tracking)
+			<code>Deployments</code> — read (required for deployment tracking)<br>
+			<code>Pull requests</code> — read (required for PR Counter)<br>
+			<code>Issues</code> — read (required for Issue Counter)<br>
+			<code>Contents</code> — read (required for Release Monitor, Branch Comparison)
 		</div>
 		<div class="help-note" style="margin-top: 8px; font-size: 11px; color: #999;">
 			ℹ Alternatively, create a <a href="https://github.com/settings/tokens" target="_blank" style="color: #58a6ff;">classic token</a> with the <code>repo</code> scope for full access to all repositories (including private).

@@ -7,27 +7,18 @@
 	// and to detect datasource responses (which bypass shadow DOM issues).
 	(function() {
 		const NativeWS = window.WebSocket;
-		// Timestamp of the last setSettings we sent — used to detect echoes.
 		let _lastSendTime = 0;
 		const ECHO_WINDOW_MS = 500;
 		window.WebSocket = new Proxy(NativeWS, {
 			construct(target, args) {
 				const ws = new target(...args);
 				window._sdWebSocket = ws;
-				// Intercept outgoing send to merge _actionSettings into setSettings,
-				// preventing sdpi-components from overwriting FilterableSelect settings.
 				const _origSend = ws.send.bind(ws);
 				ws.send = function(data) {
 					try {
 						const msg = JSON.parse(data);
 						if (msg.event === "setSettings" && window._actionSettings) {
 							msg.payload = Object.assign({}, window._actionSettings, msg.payload);
-							// Inject defaults when a repo is set but stat/refresh are missing.
-							// Done here (not in the plugin) to avoid an extra setSettings echo
-							// that races with sdpi-components' 250ms debounced save.
-							if (msg.payload.repo && !msg.payload.statType) {
-								msg.payload.statType = "stars";
-							}
 							if (msg.payload.repo && !msg.payload.refreshInterval) {
 								msg.payload.refreshInterval = 300;
 							}
@@ -44,9 +35,6 @@
 						if (data.event === "didReceiveGlobalSettings") {
 							window._globalSettings = data.payload?.settings || {};
 						}
-						// Keep _actionSettings in sync when plugin updates settings,
-						// but SKIP echoes from our own recent setSettings — they carry
-						// stale data that would overwrite the user's pending changes.
 						if (data.event === "didReceiveSettings") {
 							const isEcho = (Date.now() - _lastSendTime) < ECHO_WINDOW_MS;
 							if (!isEcho) {
@@ -56,11 +44,21 @@
 								detail: { settings: data.payload?.settings || {} }
 							}));
 						}
-						// Capture datasource responses from the plugin
-						if (data.event === "sendToPropertyInspector" && data.payload?.event === "getRepos") {
-							window._repoItems = data.payload.items || [];						window.dispatchEvent(new CustomEvent('sdpi-datasource', {
-							detail: { event: 'getRepos', items: window._repoItems }
-						}));							if (typeof window._onRepoData === "function") window._onRepoData();
+						if (data.event === "sendToPropertyInspector" && data.payload?.event) {
+							const ev = data.payload.event;
+							if (ev === "getRepos") {
+								window._repoItems = data.payload.items || [];
+								window.dispatchEvent(new CustomEvent('sdpi-datasource', {
+									detail: { event: 'getRepos', items: window._repoItems }
+								}));
+								if (typeof window._onRepoData === "function") window._onRepoData();
+							} else if (ev === "getBranches") {
+								window._getBranchesItems = data.payload.items || [];
+								window.dispatchEvent(new CustomEvent('sdpi-datasource', {
+									detail: { event: 'getBranches', items: data.payload.items || [] }
+								}));
+								if (typeof window._onBranchData === "function") window._onBranchData();
+							}
 						}
 					} catch(e) {}
 				});
@@ -72,7 +70,6 @@
 	<script src="sdpi-components.js"></script>
 	<script src="filterable-select.js"></script>
 	<script>
-	// Capture the action UUID from sdpi-components' connection handshake
 	(function() {
 		const origConnect = window.connectElgatoStreamDeckSocket;
 		window.connectElgatoStreamDeckSocket = function(port, uuid, registerEvent, info, actionInfo) {
@@ -83,11 +80,9 @@
 				window._actionSettings = ai?.payload?.settings || {};
 			} catch(e) {}
 			if (origConnect) origConnect.call(this, port, uuid, registerEvent, info, actionInfo);
-			// Notify FilterableSelect instances that settings are now available
 			window.dispatchEvent(new CustomEvent('sdpi-settings-loaded', {
 				detail: { settings: window._actionSettings }
 			}));
-			// Explicitly request global settings so _globalSettings is populated
 			setTimeout(() => {
 				const ws = window._sdWebSocket;
 				if (ws && ws.readyState === WebSocket.OPEN) {
@@ -135,6 +130,15 @@
 			border-top: 1px solid #30363d;
 			margin: 10px 16px;
 		}
+		.filter-group {
+			opacity: 0.5;
+			pointer-events: none;
+			transition: opacity 0.3s;
+		}
+		.filter-group.enabled {
+			opacity: 1;
+			pointer-events: auto;
+		}
 		.settings-btn {
 			width: 100%;
 			background: #21262d;
@@ -159,7 +163,7 @@
 	</style>
 </head>
 <body>
-	<!-- Authentication (Global Setting — managed via Plugin Settings popup) -->
+	<!-- Authentication -->
 	<span class="sdpi-heading">Authentication</span>
 
 	<span id="tokenStatus" class="sdpi-status idle">
@@ -172,7 +176,7 @@
 
 	<hr />
 
-	<!-- Repository Configuration (Per-Action Settings) -->
+	<!-- Repository Configuration -->
 	<span class="sdpi-heading">Repository</span>
 
 	<sdpi-item label="Repository">
@@ -180,24 +184,29 @@
 	</sdpi-item>
 
 	<span id="repoStatus" class="sdpi-info">
-		Select a repository to display stats for.
+		Select a repository to compare branches.
 	</span>
 
-	<!-- Stat Display -->
-	<sdpi-item label="Stat">
-		<sdpi-select setting="statType">
-			<option value="stars">⭐ Stars</option>
-			<option value="issues">🔵 Open Issues *</option>
-			<option value="forks">🔀 Forks</option>
-			<option value="watchers">👁️ Watchers</option>
-			<option value="pull_requests">🟢 Pull Requests</option>
-			<option value="language">💻 Language</option>
-			<option value="size">📦 Size</option>
-			<option value="license">📜 License</option>
-			<option value="default_branch">🌿 Default Branch</option>
-			<option value="visibility">🔒 Visibility</option>
-		</sdpi-select>
-	</sdpi-item>
+	<hr />
+
+	<!-- Branch Selection (enabled after repo is selected) -->
+	<div id="branchGroup" class="filter-group">
+		<span class="sdpi-heading">Branches</span>
+
+		<sdpi-item label="Base Branch">
+			<div id="baseBranchSelect"></div>
+		</sdpi-item>
+
+		<sdpi-item label="Head Branch">
+			<div id="headBranchSelect"></div>
+		</sdpi-item>
+
+		<span id="branchStatus" class="sdpi-info">
+			Shows how many commits the head branch is ahead/behind the base branch.
+		</span>
+	</div>
+
+	<hr />
 
 	<!-- Refresh Interval -->
 	<sdpi-item label="Refresh">
@@ -212,20 +221,16 @@
 	</sdpi-item>
 
 	<span class="sdpi-info">
-		Authenticated requests allow 5,000 API calls/hour.
-		Press the button to force a refresh anytime.
-		<br><br>
-		* <strong>Open Issues</strong> includes pull requests due to a GitHub API
-		limitation. Use the dedicated <em>Issue Counter</em> action for an
-		accurate count that excludes PRs.
+		Press the button to open the comparison view on GitHub.
 	</span>
 
 	<script>
-		// ── Repo dropdown status updates ────────────────
 		const tokenStatus = document.getElementById("tokenStatus");
 		const repoStatus = document.getElementById("repoStatus");
+		const branchGroup = document.getElementById("branchGroup");
+		const branchStatus = document.getElementById("branchStatus");
 
-		// Filterable repo dropdown
+		// Repo dropdown
 		const repoFS = new FilterableSelect({
 			container: document.getElementById('repoSelect'),
 			setting: 'repo',
@@ -233,12 +238,39 @@
 			placeholder: 'Choose a repository',
 			searchPlaceholder: 'Search repositories…',
 			threshold: 8,
+			onChange: function(value) {
+				if (value) {
+					branchGroup.classList.add("enabled");
+					branchStatus.textContent = "Loading branches…";
+					setTimeout(function() {
+						baseBranchFS.refresh();
+						headBranchFS.refresh();
+					}, 600);
+				} else {
+					branchGroup.classList.remove("enabled");
+				}
+			},
 		});
 
-		/**
-		 * Updates tokenStatus / repoStatus based on the repo data
-		 * received via WebSocket interception (avoids shadow DOM issues).
-		 */
+		// Branch dropdowns — both use the same datasource but different settings
+		const baseBranchFS = new FilterableSelect({
+			container: document.getElementById('baseBranchSelect'),
+			setting: 'baseBranch',
+			datasource: 'getBranches',
+			placeholder: 'Select base branch (e.g. main)',
+			searchPlaceholder: 'Search branches…',
+			threshold: 8,
+		});
+
+		const headBranchFS = new FilterableSelect({
+			container: document.getElementById('headBranchSelect'),
+			setting: 'headBranch',
+			datasource: 'getBranches',
+			placeholder: 'Select head branch (e.g. develop)',
+			searchPlaceholder: 'Search branches…',
+			threshold: 8,
+		});
+
 		function updateStatusFromRepoData() {
 			const items = window._repoItems;
 			if (!items || items.length === 0) return;
@@ -276,22 +308,45 @@
 				const count = items.filter(i => i.value !== "").length;
 				tokenStatus.textContent = `✓ Token valid — ${count} repositor${count === 1 ? "y" : "ies"} loaded`;
 				tokenStatus.className = "sdpi-status success";
-				repoStatus.textContent = "Select a repository to display stats for.";
+				repoStatus.textContent = "Select a repository to compare branches.";
 			}
 		}
 
-		// React to repo data arriving via the WebSocket interceptor
+		function checkBranchErrors() {
+			if (!branchStatus) return;
+			const items = window._getBranchesItems;
+			if (!items) return;
+			const errors = [];
+			for (const item of items) {
+				if (item.label && item.label.startsWith("⚠") && item.label.includes("permission")) {
+					errors.push(item.label);
+				}
+			}
+			if (errors.length > 0) {
+				const unique = [...new Set(errors)];
+				branchStatus.innerHTML = unique.map(e =>
+					'<span style="color:#f85149">' + e + '</span>'
+				).join("<br>") + '<br><a href="https://github.com/settings/tokens" target="_blank">Update token permissions →</a>';
+			} else {
+				const allLoaded = items.length > 0;
+				if (allLoaded) {
+					branchStatus.textContent = 'Shows how many commits the head branch is ahead/behind the base branch.';
+				}
+			}
+		}
+
 		window._onRepoData = function() {
 			updateStatusFromRepoData();
 		};
+		window._onBranchData = function() {
+			checkBranchErrors();
+		};
 
-		// Open the Plugin Settings popup for token management
 		document.getElementById("settingsBtn").addEventListener("click", () => {
 			const token = (window._globalSettings && window._globalSettings.githubToken) || "";
 			window.open("setup.html#" + encodeURIComponent(token), "GitHub Utilities Settings", "width=480,height=520");
 		});
 
-		// Expose save function for the setup popup to call
 		window._saveToken = function(token) {
 			const ws = window._sdWebSocket;
 			const uuid = window._sdUuid;
@@ -305,7 +360,6 @@
 			}));
 			window._globalSettings = settings;
 
-			// Update status and refresh dropdown
 			if (token) {
 				tokenStatus.textContent = "Token updated — loading repositories…";
 				tokenStatus.className = "sdpi-status loading";
@@ -317,7 +371,13 @@
 			return true;
 		};
 
-		// Initial status check once repo data is available
+		// Enable branches if repo is already set (e.g. re-opening PI)
+		setTimeout(() => {
+			if (repoFS.value) {
+				branchGroup.classList.add("enabled");
+			}
+		}, 1000);
+
 		setTimeout(() => updateStatusFromRepoData(), 2000);
 	</script>
 </body>

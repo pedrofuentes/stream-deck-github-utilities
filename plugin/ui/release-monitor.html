@@ -7,27 +7,18 @@
 	// and to detect datasource responses (which bypass shadow DOM issues).
 	(function() {
 		const NativeWS = window.WebSocket;
-		// Timestamp of the last setSettings we sent — used to detect echoes.
 		let _lastSendTime = 0;
 		const ECHO_WINDOW_MS = 500;
 		window.WebSocket = new Proxy(NativeWS, {
 			construct(target, args) {
 				const ws = new target(...args);
 				window._sdWebSocket = ws;
-				// Intercept outgoing send to merge _actionSettings into setSettings,
-				// preventing sdpi-components from overwriting FilterableSelect settings.
 				const _origSend = ws.send.bind(ws);
 				ws.send = function(data) {
 					try {
 						const msg = JSON.parse(data);
 						if (msg.event === "setSettings" && window._actionSettings) {
 							msg.payload = Object.assign({}, window._actionSettings, msg.payload);
-							// Inject defaults when a repo is set but stat/refresh are missing.
-							// Done here (not in the plugin) to avoid an extra setSettings echo
-							// that races with sdpi-components' 250ms debounced save.
-							if (msg.payload.repo && !msg.payload.statType) {
-								msg.payload.statType = "stars";
-							}
 							if (msg.payload.repo && !msg.payload.refreshInterval) {
 								msg.payload.refreshInterval = 300;
 							}
@@ -44,9 +35,6 @@
 						if (data.event === "didReceiveGlobalSettings") {
 							window._globalSettings = data.payload?.settings || {};
 						}
-						// Keep _actionSettings in sync when plugin updates settings,
-						// but SKIP echoes from our own recent setSettings — they carry
-						// stale data that would overwrite the user's pending changes.
 						if (data.event === "didReceiveSettings") {
 							const isEcho = (Date.now() - _lastSendTime) < ECHO_WINDOW_MS;
 							if (!isEcho) {
@@ -56,11 +44,12 @@
 								detail: { settings: data.payload?.settings || {} }
 							}));
 						}
-						// Capture datasource responses from the plugin
 						if (data.event === "sendToPropertyInspector" && data.payload?.event === "getRepos") {
-							window._repoItems = data.payload.items || [];						window.dispatchEvent(new CustomEvent('sdpi-datasource', {
-							detail: { event: 'getRepos', items: window._repoItems }
-						}));							if (typeof window._onRepoData === "function") window._onRepoData();
+							window._repoItems = data.payload.items || [];
+							window.dispatchEvent(new CustomEvent('sdpi-datasource', {
+								detail: { event: 'getRepos', items: window._repoItems }
+							}));
+							if (typeof window._onRepoData === "function") window._onRepoData();
 						}
 					} catch(e) {}
 				});
@@ -72,7 +61,6 @@
 	<script src="sdpi-components.js"></script>
 	<script src="filterable-select.js"></script>
 	<script>
-	// Capture the action UUID from sdpi-components' connection handshake
 	(function() {
 		const origConnect = window.connectElgatoStreamDeckSocket;
 		window.connectElgatoStreamDeckSocket = function(port, uuid, registerEvent, info, actionInfo) {
@@ -83,11 +71,9 @@
 				window._actionSettings = ai?.payload?.settings || {};
 			} catch(e) {}
 			if (origConnect) origConnect.call(this, port, uuid, registerEvent, info, actionInfo);
-			// Notify FilterableSelect instances that settings are now available
 			window.dispatchEvent(new CustomEvent('sdpi-settings-loaded', {
 				detail: { settings: window._actionSettings }
 			}));
-			// Explicitly request global settings so _globalSettings is populated
 			setTimeout(() => {
 				const ws = window._sdWebSocket;
 				if (ws && ws.readyState === WebSocket.OPEN) {
@@ -159,7 +145,7 @@
 	</style>
 </head>
 <body>
-	<!-- Authentication (Global Setting — managed via Plugin Settings popup) -->
+	<!-- Authentication -->
 	<span class="sdpi-heading">Authentication</span>
 
 	<span id="tokenStatus" class="sdpi-status idle">
@@ -172,7 +158,7 @@
 
 	<hr />
 
-	<!-- Repository Configuration (Per-Action Settings) -->
+	<!-- Repository Configuration -->
 	<span class="sdpi-heading">Repository</span>
 
 	<sdpi-item label="Repository">
@@ -180,24 +166,15 @@
 	</sdpi-item>
 
 	<span id="repoStatus" class="sdpi-info">
-		Select a repository to display stats for.
+		Select a repository to monitor releases for.
 	</span>
 
-	<!-- Stat Display -->
-	<sdpi-item label="Stat">
-		<sdpi-select setting="statType">
-			<option value="stars">⭐ Stars</option>
-			<option value="issues">🔵 Open Issues *</option>
-			<option value="forks">🔀 Forks</option>
-			<option value="watchers">👁️ Watchers</option>
-			<option value="pull_requests">🟢 Pull Requests</option>
-			<option value="language">💻 Language</option>
-			<option value="size">📦 Size</option>
-			<option value="license">📜 License</option>
-			<option value="default_branch">🌿 Default Branch</option>
-			<option value="visibility">🔒 Visibility</option>
-		</sdpi-select>
+	<!-- Pre-release toggle -->
+	<sdpi-item label="Pre-Releases">
+		<sdpi-checkbox setting="includePreReleases" label="Include pre-releases"></sdpi-checkbox>
 	</sdpi-item>
+
+	<hr />
 
 	<!-- Refresh Interval -->
 	<sdpi-item label="Refresh">
@@ -212,20 +189,14 @@
 	</sdpi-item>
 
 	<span class="sdpi-info">
-		Authenticated requests allow 5,000 API calls/hour.
-		Press the button to force a refresh anytime.
-		<br><br>
-		* <strong>Open Issues</strong> includes pull requests due to a GitHub API
-		limitation. Use the dedicated <em>Issue Counter</em> action for an
-		accurate count that excludes PRs.
+		Shows the latest release tag and how long ago it was published.
+		Press the button to open the release page on GitHub.
 	</span>
 
 	<script>
-		// ── Repo dropdown status updates ────────────────
 		const tokenStatus = document.getElementById("tokenStatus");
 		const repoStatus = document.getElementById("repoStatus");
 
-		// Filterable repo dropdown
 		const repoFS = new FilterableSelect({
 			container: document.getElementById('repoSelect'),
 			setting: 'repo',
@@ -235,10 +206,6 @@
 			threshold: 8,
 		});
 
-		/**
-		 * Updates tokenStatus / repoStatus based on the repo data
-		 * received via WebSocket interception (avoids shadow DOM issues).
-		 */
 		function updateStatusFromRepoData() {
 			const items = window._repoItems;
 			if (!items || items.length === 0) return;
@@ -276,22 +243,19 @@
 				const count = items.filter(i => i.value !== "").length;
 				tokenStatus.textContent = `✓ Token valid — ${count} repositor${count === 1 ? "y" : "ies"} loaded`;
 				tokenStatus.className = "sdpi-status success";
-				repoStatus.textContent = "Select a repository to display stats for.";
+				repoStatus.textContent = "Select a repository to monitor releases for.";
 			}
 		}
 
-		// React to repo data arriving via the WebSocket interceptor
 		window._onRepoData = function() {
 			updateStatusFromRepoData();
 		};
 
-		// Open the Plugin Settings popup for token management
 		document.getElementById("settingsBtn").addEventListener("click", () => {
 			const token = (window._globalSettings && window._globalSettings.githubToken) || "";
 			window.open("setup.html#" + encodeURIComponent(token), "GitHub Utilities Settings", "width=480,height=520");
 		});
 
-		// Expose save function for the setup popup to call
 		window._saveToken = function(token) {
 			const ws = window._sdWebSocket;
 			const uuid = window._sdUuid;
@@ -305,7 +269,6 @@
 			}));
 			window._globalSettings = settings;
 
-			// Update status and refresh dropdown
 			if (token) {
 				tokenStatus.textContent = "Token updated — loading repositories…";
 				tokenStatus.className = "sdpi-status loading";
@@ -317,7 +280,6 @@
 			return true;
 		};
 
-		// Initial status check once repo data is available
 		setTimeout(() => updateStatusFromRepoData(), 2000);
 	</script>
 </body>

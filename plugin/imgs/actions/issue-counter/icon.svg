@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20">
+  <!-- Issue Counter icon: circle with exclamation mark -->
+  <circle cx="10" cy="10" r="8" fill="none" stroke="white" stroke-width="1.3"/>
+  <line x1="10" y1="5.5" x2="10" y2="11.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="10" cy="14" r="1" fill="white"/>
+</svg>

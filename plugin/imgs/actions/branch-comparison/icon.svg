@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20">
+  <!-- Branch Comparison icon: two branches with arrows -->
+  <circle cx="5" cy="5" r="2" fill="none" stroke="white" stroke-width="1.3"/>
+  <circle cx="5" cy="15" r="2" fill="none" stroke="white" stroke-width="1.3"/>
+  <circle cx="15" cy="10" r="2" fill="none" stroke="white" stroke-width="1.3"/>
+  <line x1="5" y1="7" x2="5" y2="13" stroke="white" stroke-width="1.3"/>
+  <path d="M7 5C10 5 13 7 13 10" fill="none" stroke="white" stroke-width="1.3"/>
+  <path d="M7 15C10 15 13 13 13 10" fill="none" stroke="white" stroke-width="1.3"/>
+</svg>

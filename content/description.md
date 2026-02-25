@@ -1,8 +1,8 @@
 <!-- 
   Marketplace Description — Stream Deck GitHub Utilities
-  Last Updated: v1.3.4
+  Last Updated: v1.4.0
   Character Limit: 4,000
-  Current Count: ~2,850 characters
+  Current Count: ~3,600 characters
 -->
 
 # GitHub Utilities for Stream Deck
@@ -46,6 +46,45 @@ Monitor GitHub Actions workflows and deployments in real time.
 
 ---
 
+## 🔀 PR Counter & 🐛 Issue Counter
+
+Dedicated counters for pull requests and issues — accurate numbers at a glance.
+
+- **State filter** — open, closed, or all
+- **Accurate counts** — uses GitHub's Search API to separate issues from PRs precisely
+- Press to open the PR or issue list on GitHub
+
+---
+
+## 📦 Release Monitor
+
+Track the latest release for any repository.
+
+- **Version tag** — shows the release tag (e.g., "v2.3.1") with relative time
+- **Pre-release support** — toggle to include pre-releases, with visual indicator
+- Press to open the release page on GitHub
+
+---
+
+## 📊 Commit Activity
+
+Show recent commit counts at a glance.
+
+- **Time range** — last 24 hours, 7 days, or 30 days
+- Press to open the commits page on GitHub
+
+---
+
+## 🌿 Branch Comparison
+
+See how branches diverge with ahead/behind counts.
+
+- **Ahead/behind display** — "↑3 ↓2" format with color-coded status
+- **Diverged** (yellow), **ahead** (green), **behind** (red), **identical** (teal)
+- Press to open the comparison view on GitHub
+
+---
+
 ## 🎯 Smart Property Inspector
 
 Configuration is effortless with the intelligent Property Inspector.
@@ -75,10 +114,10 @@ Your credentials never leave your machine. The GitHub Personal Access Token is s
 ## 🚀 Getting Started
 
 1. **Install** the plugin from the Elgato Marketplace
-2. **Create** a GitHub Personal Access Token at github.com/settings/tokens with Metadata (read), Actions (read), and Deployments (read) permissions
-3. **Drag** a Repo Stats or Workflow Status action onto your Stream Deck
+2. **Create** a GitHub Personal Access Token at github.com/settings/tokens with Metadata, Actions, Deployments, Pull requests, Issues, and Contents (all read) permissions
+3. **Drag** any action onto your Stream Deck
 4. **Paste** your token in the Settings panel — repositories load automatically
-5. **Select** a repository and configure your preferred stat or workflow filter
+5. **Select** a repository and configure your preferences
 6. **Done!** Your button updates automatically on a configurable interval
 
 ---

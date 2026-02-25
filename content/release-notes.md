@@ -4,6 +4,29 @@
   Character limit per entry: 1,500
 -->
 
+## v1.4.0 — 2026-02-24
+<!-- Characters: ~950 / 1,500 -->
+
+Major feature release — 5 new actions and visual polish.
+
+**New Actions:**
+- **PR Counter** — display open, closed, or all pull request counts for any repository
+- **Issue Counter** — display issue counts (accurately excluding PRs) with state filtering
+- **Release Monitor** — track the latest release version with relative time and pre-release support
+- **Commit Activity** — show commit counts for the last 24 hours, 7 days, or 30 days
+- **Branch Comparison** — show ahead/behind counts between two branches with color-coded status
+
+**Visual Polish:**
+- Animated loading spinner during data fetches (replaces static "Loading" text)
+- Consistent color palette across all actions using centralized theme colors
+
+**Improvements:**
+- Migrated PR and issue counting to GitHub Search API for more reliable counts
+- All new actions support press-to-open-on-GitHub, configurable refresh intervals, and searchable repository dropdowns
+- Updated token scope guidance to include permissions for all actions
+
+---
+
 ## v1.3.4 — 2026-02-23
 <!-- Characters: ~370 / 1,500 -->
 

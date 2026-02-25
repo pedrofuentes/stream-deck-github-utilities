@@ -286,6 +286,7 @@ export function getStatUrl(owner: string, repo: string, statType: StatType): str
 
 /**
  * Fetches the count of open pull requests for a repository.
+ * Uses the GitHub Search API with `type:pr` for reliable counting.
  *
  * @param owner - Repository owner
  * @param repo - Repository name
@@ -297,7 +298,8 @@ export async function fetchOpenPullRequestCount(
 	repo: string,
 	token?: string,
 ): Promise<number> {
-	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls?state=open&per_page=1`;
+	const query = `repo:${owner}/${repo} type:pr is:open`;
+	const url = `${GITHUB_API_BASE}/search/issues?q=${encodeURIComponent(query)}&per_page=1`;
 	const headers = buildHeaders(token);
 
 	const response = await fetch(url, { headers });
@@ -306,20 +308,322 @@ export async function fetchOpenPullRequestCount(
 		return 0; // Graceful fallback — PR count is supplementary data
 	}
 
-	// Use the array length of a full page, or parse Link header for total count
-	const pulls = (await response.json()) as unknown[];
+	const data = (await response.json()) as { total_count: number };
+	return data.total_count;
+}
 
-	// If we got exactly 1 result and there's a "last" page in the Link header,
-	// parse the total from it. Otherwise just use the array length.
-	const linkHeader = response.headers.get("link");
-	if (linkHeader) {
-		const lastMatch = linkHeader.match(/<[^>]+[?&]page=(\d+)[^>]*>;\s*rel="last"/);
-		if (lastMatch) {
-			return parseInt(lastMatch[1], 10);
-		}
+/**
+ * Fetches pull request count for a repository with a given state filter.
+ * Uses the GitHub Search API with `type:pr` for reliable counting.
+ *
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param token - GitHub personal access token
+ * @param state - PR state filter: "open", "closed", or "all"
+ * @returns Number of pull requests matching the filter
+ * @throws {GitHubApiError} on API errors
+ */
+export async function fetchPullRequestCount(
+	owner: string,
+	repo: string,
+	token?: string,
+	state: "open" | "closed" | "all" = "open",
+): Promise<number> {
+	const stateQualifier = state === "all" ? "" : ` is:${state}`;
+	const query = `repo:${owner}/${repo} type:pr${stateQualifier}`;
+	const url = `${GITHUB_API_BASE}/search/issues?q=${encodeURIComponent(query)}&per_page=1`;
+	const headers = buildHeaders(token);
+
+	const response = await fetch(url, { headers });
+	const rateLimitInfo = parseRateLimitHeaders(response.headers);
+
+	if (!response.ok) {
+		handleApiError(response.status, rateLimitInfo, owner, repo);
 	}
 
-	return pulls.length;
+	const data = (await response.json()) as { total_count: number };
+	return data.total_count;
+}
+
+/**
+ * Fetches issue count for a repository with a given state filter.
+ * For "open" state, uses repo stats minus open PRs.
+ * For "closed" or "all", uses the GitHub Search API with `type:issue` qualifier
+ * which returns an exact count excluding PRs.
+ *
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param token - GitHub personal access token
+ * @param state - Issue state filter: "open", "closed", or "all"
+ * @returns Number of issues (excluding PRs) matching the filter
+ * @throws {GitHubApiError} on API errors
+ */
+export async function fetchIssueCount(
+	owner: string,
+	repo: string,
+	token?: string,
+	state: "open" | "closed" | "all" = "open",
+): Promise<number> {
+	// For "open" state, use the repo's open_issues_count and subtract open PRs
+	// This is more accurate and saves an API call
+	if (state === "open") {
+		const [stats, prCount] = await Promise.all([
+			fetchRepoStats(owner, repo, token),
+			fetchPullRequestCount(owner, repo, token, "open"),
+		]);
+		// GitHub's open_issues_count includes PRs, so subtract open PR count
+		return Math.max(stats.open_issues_count - prCount, 0);
+	}
+
+	// For "closed" or "all", use the GitHub Search API with type:issue qualifier.
+	// This returns total_count which accurately excludes PRs in a single call,
+	// avoiding unreliable pagination-based counting via Link headers.
+	const stateQualifier = state === "all" ? "" : ` is:${state}`;
+	const query = `repo:${owner}/${repo} type:issue${stateQualifier}`;
+	const url = `${GITHUB_API_BASE}/search/issues?q=${encodeURIComponent(query)}&per_page=1`;
+	const headers = buildHeaders(token);
+
+	const response = await fetch(url, { headers });
+	const rateLimitInfo = parseRateLimitHeaders(response.headers);
+
+	if (!response.ok) {
+		handleApiError(response.status, rateLimitInfo, owner, repo);
+	}
+
+	const data = (await response.json()) as { total_count: number };
+	return data.total_count;
+}
+
+/** Release information from the GitHub API */
+export interface ReleaseInfo {
+	tag_name: string;
+	name: string;
+	html_url: string;
+	published_at: string;
+	prerelease: boolean;
+	draft: boolean;
+}
+
+/**
+ * Fetches the latest release for a repository.
+ *
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param token - GitHub personal access token
+ * @param includePreReleases - Whether to include pre-releases (default: false)
+ * @returns Latest release info, or null if no releases
+ * @throws {GitHubApiError} on API errors (except 404)
+ */
+export async function fetchLatestRelease(
+	owner: string,
+	repo: string,
+	token?: string,
+	includePreReleases = false,
+): Promise<ReleaseInfo | null> {
+	const headers = buildHeaders(token);
+
+	if (!includePreReleases) {
+		// GET /repos/{owner}/{repo}/releases/latest — skips pre-releases and drafts
+		const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases/latest`;
+		const response = await fetch(url, { headers });
+		const rateLimitInfo = parseRateLimitHeaders(response.headers);
+
+		if (response.status === 404) {
+			return null; // No releases
+		}
+
+		if (!response.ok) {
+			handleApiError(response.status, rateLimitInfo, owner, repo);
+		}
+
+		const data = (await response.json()) as Record<string, unknown>;
+		return {
+			tag_name: (data.tag_name as string) ?? "",
+			name: (data.name as string) ?? "",
+			html_url: (data.html_url as string) ?? "",
+			published_at: (data.published_at as string) ?? "",
+			prerelease: (data.prerelease as boolean) ?? false,
+			draft: (data.draft as boolean) ?? false,
+		};
+	}
+
+	// Include pre-releases: get the first release (most recent)
+	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases?per_page=1`;
+	const response = await fetch(url, { headers });
+	const rateLimitInfo = parseRateLimitHeaders(response.headers);
+
+	if (!response.ok) {
+		handleApiError(response.status, rateLimitInfo, owner, repo);
+	}
+
+	const releases = (await response.json()) as Array<Record<string, unknown>>;
+	if (!releases || releases.length === 0) {
+		return null;
+	}
+
+	const data = releases[0];
+	return {
+		tag_name: (data.tag_name as string) ?? "",
+		name: (data.name as string) ?? "",
+		html_url: (data.html_url as string) ?? "",
+		published_at: (data.published_at as string) ?? "",
+		prerelease: (data.prerelease as boolean) ?? false,
+		draft: (data.draft as boolean) ?? false,
+	};
+}
+
+/**
+ * Formats a relative time string from an ISO date (e.g. "2d ago", "3h ago").
+ *
+ * @param isoDate - ISO 8601 date string
+ * @returns Human-readable relative time
+ */
+export function formatRelativeTime(isoDate: string): string {
+	if (!isoDate) return "";
+	const date = new Date(isoDate);
+	const now = new Date();
+	const diffMs = now.getTime() - date.getTime();
+	const diffMin = Math.floor(diffMs / 60000);
+	const diffHr = Math.floor(diffMs / 3600000);
+	const diffDay = Math.floor(diffMs / 86400000);
+	const diffWeek = Math.floor(diffDay / 7);
+	const diffMonth = Math.floor(diffDay / 30);
+	const diffYear = Math.floor(diffDay / 365);
+
+	if (diffMin < 1) return "just now";
+	if (diffMin < 60) return `${diffMin}m ago`;
+	if (diffHr < 24) return `${diffHr}h ago`;
+	if (diffDay < 7) return `${diffDay}d ago`;
+	if (diffWeek < 5) return `${diffWeek}w ago`;
+	if (diffMonth < 12) return `${diffMonth}mo ago`;
+	return `${diffYear}y ago`;
+}
+
+/** Commit activity data from the GitHub stats API */
+export interface CommitActivityWeek {
+	/** Unix timestamp of the start of this week */
+	total: number;
+	/** Start of week as Unix timestamp */
+	week: number;
+	/** Daily commit counts (Sun=0 ... Sat=6) */
+	days: number[];
+}
+
+/**
+ * Fetches commit activity (weekly commit counts) for a repository.
+ * Uses the stats/commit_activity endpoint which returns the last 52 weeks.
+ *
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param token - GitHub personal access token
+ * @param timeRange - "24h", "7d", or "30d"
+ * @returns Commit count for the specified time range
+ * @throws {GitHubApiError} on API errors
+ */
+export async function fetchCommitActivity(
+	owner: string,
+	repo: string,
+	token?: string,
+	timeRange: "24h" | "7d" | "30d" = "7d",
+): Promise<number> {
+	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/stats/commit_activity`;
+	const headers = buildHeaders(token);
+
+	const response = await fetch(url, { headers });
+	const rateLimitInfo = parseRateLimitHeaders(response.headers);
+
+	// Stats endpoints return 202 while computing — treat as "data not ready"
+	if (response.status === 202) {
+		return -1; // Signal to show "Computing…"
+	}
+
+	if (response.status === 204) {
+		return 0; // Empty repo — no commits
+	}
+
+	if (!response.ok) {
+		handleApiError(response.status, rateLimitInfo, owner, repo);
+	}
+
+	const weeks = (await response.json()) as CommitActivityWeek[];
+	if (!Array.isArray(weeks) || weeks.length === 0) {
+		return 0;
+	}
+
+	const now = new Date();
+	const nowMs = now.getTime();
+
+	if (timeRange === "24h") {
+		// Get today's day index within the most recent week
+		const latestWeek = weeks[weeks.length - 1];
+		const weekStartMs = latestWeek.week * 1000;
+		const dayOfWeek = Math.floor((nowMs - weekStartMs) / 86400000);
+		if (dayOfWeek >= 0 && dayOfWeek < 7) {
+			return latestWeek.days[dayOfWeek] ?? 0;
+		}
+		return 0;
+	}
+
+	if (timeRange === "7d") {
+		// Sum the most recent week
+		const latestWeek = weeks[weeks.length - 1];
+		return latestWeek.total;
+	}
+
+	// 30d — sum the last ~4 weeks
+	const weeksToSum = Math.min(4, weeks.length);
+	let total = 0;
+	for (let i = weeks.length - weeksToSum; i < weeks.length; i++) {
+		total += weeks[i].total;
+	}
+	return total;
+}
+
+/** Branch comparison data */
+export interface BranchComparison {
+	ahead_by: number;
+	behind_by: number;
+	total_commits: number;
+	html_url: string;
+	status: "ahead" | "behind" | "diverged" | "identical";
+}
+
+/**
+ * Fetches branch comparison (ahead/behind counts) between two branches.
+ *
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param base - Base branch (e.g. "main")
+ * @param head - Head branch to compare (e.g. "develop")
+ * @param token - GitHub personal access token
+ * @returns Branch comparison info
+ * @throws {GitHubApiError} on API errors
+ */
+export async function fetchBranchComparison(
+	owner: string,
+	repo: string,
+	base: string,
+	head: string,
+	token?: string,
+): Promise<BranchComparison> {
+	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`;
+	const headers = buildHeaders(token);
+
+	const response = await fetch(url, { headers });
+	const rateLimitInfo = parseRateLimitHeaders(response.headers);
+
+	if (!response.ok) {
+		handleApiError(response.status, rateLimitInfo, owner, repo);
+	}
+
+	const data = (await response.json()) as Record<string, unknown>;
+	return {
+		ahead_by: (data.ahead_by as number) ?? 0,
+		behind_by: (data.behind_by as number) ?? 0,
+		total_commits: (data.total_commits as number) ?? 0,
+		html_url: (data.html_url as string) ?? `https://github.com/${owner}/${repo}/compare/${base}...${head}`,
+		status: (data.status as BranchComparison["status"]) ?? "identical",
+	};
 }
 
 // ─── Workflow Status API ─────────────────────────────────────

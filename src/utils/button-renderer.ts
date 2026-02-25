@@ -36,6 +36,9 @@ export const COLORS = {
 		license: "#d29922",
 		default_branch: "#58a6ff",
 		visibility: "#8b949e",
+		releases: "#a371f7",
+		commits: "#f78166",
+		branches: "#58a6ff",
 	} as Record<string, string>,
 	error: "#f85149",
 	workflow: {
@@ -57,6 +60,21 @@ export const COLORS = {
 } as const;
 
 const FONT = "Arial,Helvetica,sans-serif";
+
+// ── Spinner constants ──────────────────────────────────────────────────────
+
+/** Number of distinct frames in the spinner animation cycle. */
+export const SPINNER_FRAME_COUNT = 8;
+
+/** Recommended interval (ms) between spinner frames. */
+export const SPINNER_INTERVAL_MS = 150;
+
+const SPINNER_RADIUS = 18;
+const SPINNER_CX = 72;
+const SPINNER_CY = 62;
+const SPINNER_CIRCUMFERENCE = 2 * Math.PI * SPINNER_RADIUS;
+const SPINNER_ARC_LEN = SPINNER_CIRCUMFERENCE / 3;
+const SPINNER_GAP_LEN = SPINNER_CIRCUMFERENCE - SPINNER_ARC_LEN;
 
 // ── Status Icons (SVG path data, drawn in a 36×36 viewBox) ────────────────
 
@@ -314,12 +332,44 @@ export function renderDeployingImage(envName: string, _state: string, repoName?:
 	});
 }
 
-/** Renders a loading image. */
+/** Renders a loading image with a static spinner at frame 0. */
 export function renderLoadingImage(): string {
-	return renderKeyImage({
-		line2: "Loading",
-		statusColor: COLORS.textMuted,
-	});
+	return renderSpinnerFrame(0);
+}
+
+/**
+ * Renders an animated spinner frame for loading states.
+ *
+ * Layout:
+ *   ┌════════════════════════┐  ← dim accent bar (6 px)
+ *   │                        │
+ *   │       ╭───╮            │  ← track circle (dim)
+ *   │      /  ⌒  \           │  ← spinner arc (bright, rotating)
+ *   │      \     /           │
+ *   │       ╰───╯            │
+ *   │                        │
+ *   │      Loading           │  ← label text
+ *   │                        │
+ *   └────────────────────────┘
+ *
+ * Use with {@link SpinnerAnimator} for animation across 8 frames.
+ *
+ * @param frame Frame index (0–7), each advances the arc by 45°
+ * @param accentColor Optional color for the spinner arc (default: blue #58a6ff)
+ */
+export function renderSpinnerFrame(frame = 0, accentColor?: string): string {
+	const angle = -90 + (frame % SPINNER_FRAME_COUNT) * (360 / SPINNER_FRAME_COUNT);
+	const color = accentColor ?? "#58a6ff";
+
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" rx="16" fill="${COLORS.background}"/>
+  <rect y="0" width="144" height="6" rx="3" fill="${COLORS.border}"/>
+  <circle cx="${SPINNER_CX}" cy="${SPINNER_CY}" r="${SPINNER_RADIUS}" fill="none" stroke="${COLORS.border}" stroke-width="3"/>
+  <circle cx="${SPINNER_CX}" cy="${SPINNER_CY}" r="${SPINNER_RADIUS}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-dasharray="${SPINNER_ARC_LEN.toFixed(1)} ${SPINNER_GAP_LEN.toFixed(1)}" transform="rotate(${angle}, ${SPINNER_CX}, ${SPINNER_CY})"/>
+  <text x="72" y="108" text-anchor="middle" fill="${COLORS.textMuted}" font-size="16" font-family="${FONT}">Loading</text>
+</svg>`;
+
+	return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 /**
@@ -340,6 +390,103 @@ export function renderUnconfiguredImage(): string {
 		line2: "Setup",
 		line3: "Open Settings",
 		statusColor: COLORS.textMuted,
+	});
+}
+
+/**
+ * Renders a PR counter image.
+ * Layout: repo name / PR count / state label
+ */
+export function renderPRCountImage(count: string, stateLabel: string, repoName?: string): string {
+	let fontSize = 30;
+	if (count.length > 6) fontSize = 22;
+	else if (count.length > 4) fontSize = 26;
+
+	return renderKeyImage({
+		line1: repoName,
+		line2: count,
+		line3: stateLabel,
+		statusColor: COLORS.accent.pull_requests,
+		line2FontSize: fontSize,
+	});
+}
+
+/**
+ * Renders an issue counter image.
+ * Layout: repo name / issue count / state label
+ */
+export function renderIssueCountImage(count: string, stateLabel: string, repoName?: string): string {
+	let fontSize = 30;
+	if (count.length > 6) fontSize = 22;
+	else if (count.length > 4) fontSize = 26;
+
+	return renderKeyImage({
+		line1: repoName,
+		line2: count,
+		line3: stateLabel,
+		statusColor: COLORS.accent.issues,
+		line2FontSize: fontSize,
+	});
+}
+
+/**
+ * Renders a release monitor image.
+ * Layout: repo name / version tag / relative time or "Pre-release"
+ */
+export function renderReleaseImage(tag: string, detail: string, repoName?: string): string {
+	let fontSize = 30;
+	if (tag.length > 9) fontSize = 18;
+	else if (tag.length > 6) fontSize = 22;
+	else if (tag.length > 4) fontSize = 26;
+
+	return renderKeyImage({
+		line1: repoName,
+		line2: tag,
+		line3: detail,
+		statusColor: COLORS.accent.releases,
+		line2FontSize: fontSize,
+	});
+}
+
+/**
+ * Renders a commit activity image.
+ * Layout: repo name / commit count / time range label
+ */
+export function renderCommitActivityImage(count: string, rangeLabel: string, repoName?: string): string {
+	let fontSize = 30;
+	if (count.length > 6) fontSize = 22;
+	else if (count.length > 4) fontSize = 26;
+
+	return renderKeyImage({
+		line1: repoName,
+		line2: count,
+		line3: rangeLabel,
+		statusColor: COLORS.accent.commits,
+		line2FontSize: fontSize,
+	});
+}
+
+/**
+ * Renders a branch comparison image.
+ * Layout: repo name / ahead/behind display / branch names
+ */
+export function renderBranchComparisonImage(
+	comparison: string,
+	branchLabel: string,
+	repoName?: string,
+	statusColor?: string,
+): string {
+	let fontSize = 30;
+	if (comparison.length > 9) fontSize = 18;
+	else if (comparison.length > 6) fontSize = 22;
+	else if (comparison.length > 4) fontSize = 26;
+
+	return renderKeyImage({
+		line1: repoName,
+		line2: comparison,
+		line3: branchLabel,
+		statusColor: statusColor ?? COLORS.accent.default_branch,
+		line2FontSize: fontSize,
 	});
 }
 

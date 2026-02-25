@@ -21,8 +21,11 @@ import {
 	renderWorkflowImage,
 	renderDeployingImage,
 	renderLoadingImage,
+	renderSpinnerFrame,
 	renderErrorImage,
 	renderUnconfiguredImage,
+	SPINNER_FRAME_COUNT,
+	SPINNER_INTERVAL_MS,
 } from "../../src/utils/button-renderer";
 
 /** Decode SVG from a data URI */
@@ -52,6 +55,12 @@ describe("button-renderer", () => {
 			expect(COLORS.accent.issues).toBe("#3fb950");
 			expect(COLORS.accent.forks).toBe("#58a6ff");
 			expect(COLORS.accent.watchers).toBe("#d2a8ff");
+		});
+
+		it("has accent colors for Phase 2 action types", () => {
+			expect(COLORS.accent.releases).toBe("#a371f7");
+			expect(COLORS.accent.commits).toBe("#f78166");
+			expect(COLORS.accent.branches).toBe("#58a6ff");
 		});
 
 		it("has workflow status colors", () => {
@@ -288,13 +297,80 @@ describe("button-renderer", () => {
 	// ── renderLoadingImage ──────────────────────
 
 	describe("renderLoadingImage", () => {
-		it("shows Loading text", () => {
+		it("returns a spinner SVG with Loading text", () => {
 			const svg = decodeSvg(renderLoadingImage());
 			expect(svg).toContain("Loading");
+			expect(svg).toContain("circle"); // spinner track + arc
 		});
 
 		it("returns a valid data URI", () => {
 			expect(renderLoadingImage()).toMatch(/^data:image\/svg\+xml,/);
+		});
+
+		it("is equivalent to renderSpinnerFrame(0)", () => {
+			expect(renderLoadingImage()).toBe(renderSpinnerFrame(0));
+		});
+	});
+
+	// ── renderSpinnerFrame ─────────────────────
+
+	describe("renderSpinnerFrame", () => {
+		it("returns a valid data URI", () => {
+			expect(renderSpinnerFrame(0)).toMatch(/^data:image\/svg\+xml,/);
+		});
+
+		it("contains spinner SVG elements (track circle, arc circle, Loading text)", () => {
+			const svg = decodeSvg(renderSpinnerFrame(0));
+			expect(svg).toContain("circle");
+			expect(svg).toContain("stroke-dasharray");
+			expect(svg).toContain("Loading");
+		});
+
+		it("produces different SVGs for different frames", () => {
+			const frame0 = renderSpinnerFrame(0);
+			const frame1 = renderSpinnerFrame(1);
+			const frame4 = renderSpinnerFrame(4);
+			expect(frame0).not.toBe(frame1);
+			expect(frame1).not.toBe(frame4);
+		});
+
+		it("uses the accent color when provided", () => {
+			const svg = decodeSvg(renderSpinnerFrame(0, "#ff0000"));
+			expect(svg).toContain("#ff0000");
+		});
+
+		it("uses default blue color when no accent provided", () => {
+			const svg = decodeSvg(renderSpinnerFrame(0));
+			expect(svg).toContain("#58a6ff");
+		});
+
+		it("wraps frame index modulo SPINNER_FRAME_COUNT", () => {
+			const frame0 = renderSpinnerFrame(0);
+			const frame8 = renderSpinnerFrame(SPINNER_FRAME_COUNT);
+			expect(frame0).toBe(frame8);
+		});
+
+		it("contains rotation transform for animation", () => {
+			const svg = decodeSvg(renderSpinnerFrame(3));
+			expect(svg).toContain("rotate(");
+		});
+
+		it("has correct 144x144 dimensions", () => {
+			const svg = decodeSvg(renderSpinnerFrame(0));
+			expect(svg).toContain('width="144"');
+			expect(svg).toContain('height="144"');
+		});
+	});
+
+	// ── Spinner constants ──────────────────────
+
+	describe("Spinner constants", () => {
+		it("SPINNER_FRAME_COUNT is 8", () => {
+			expect(SPINNER_FRAME_COUNT).toBe(8);
+		});
+
+		it("SPINNER_INTERVAL_MS is 150", () => {
+			expect(SPINNER_INTERVAL_MS).toBe(150);
 		});
 	});
 
