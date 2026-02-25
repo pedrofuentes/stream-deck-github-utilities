@@ -29,9 +29,9 @@ import type { GlobalSettings, RepoStatsSettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { fetchRepoStats, fetchOpenPullRequestCount, getStatDisplay, getStatUrl, STAT_TYPES, type StatType } from "../utils/github-api";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
-import { renderStatImage, renderSpinnerFrame, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
+import { renderStatImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
-import { SpinnerAnimator, startLoadingSpinner, stopLoadingSpinner } from "../utils/spinner-animator";
+import { PollingCoordinator } from "../utils/polling-coordinator";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
@@ -53,8 +53,8 @@ interface MarqueeData {
 
 @action({ UUID: "com.pedrofuentes.github-utilities.repo-stats" })
 export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
-	/** Active polling timers keyed by action instance ID */
-	private timers = new Map<string, ReturnType<typeof setInterval>>();
+	/** Centralized polling coordinator with error backoff */
+	private polling = new PollingCoordinator();
 
 	/** Last known settings per action instance (for timer management) */
 	private actionSettings = new Map<string, RepoStatsSettings>();
@@ -67,9 +67,6 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 
 	/** Marquee scroll state per action instance */
 	private marqueeData = new Map<string, MarqueeData>();
-
-	/** Animated loading spinner per action instance */
-	private spinners = new Map<string, SpinnerAnimator>();
 
 	/**
 	 * IDs of actions that recently had setSettings called programmatically
@@ -94,26 +91,24 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 				return;
 			}
 
-			startLoadingSpinner(this.spinners, ev.action.id, (frame) => {
-				ev.action.setImage(renderSpinnerFrame(frame)).catch(() => {});
-			});
+			await ev.action.setImage(renderAnimatedSpinner());
 			await ev.action.setTitle("");
 		}
 
+		// Start polling (creates state for generation counter)
+		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		this.polling.start(ev.action.id, () => this.refreshStats(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
+
 		// Initial fetch
 		await this.refreshStats(ev.action.id);
-
-		// Start polling
-		this.startTimer(ev.action.id, settings);
 	}
 
 	/**
 	 * Called when the action is no longer visible. Cleans up the timer.
 	 */
 	override onWillDisappear(ev: WillDisappearEvent<RepoStatsSettings>): void {
-		this.stopTimer(ev.action.id);
+		this.polling.stop(ev.action.id);
 		this.stopMarquee(ev.action.id);
-		stopLoadingSpinner(this.spinners, ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.keyDownTime.delete(ev.action.id);
@@ -181,6 +176,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			this.actionSettings.set(ev.action.id, newSettings);
 
 			// Refresh display immediately with new stat
+			this.polling.resetBackoff(ev.action.id);
 			await this.refreshStats(ev.action.id);
 		}
 	}
@@ -241,22 +237,20 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
-				this.stopTimer(ev.action.id);
+				this.polling.stop(ev.action.id);
 				return;
 			}
 
-			startLoadingSpinner(this.spinners, ev.action.id, (frame) => {
-				ev.action.setImage(renderSpinnerFrame(frame)).catch(() => {});
-			});
+			await ev.action.setImage(renderAnimatedSpinner());
 			await ev.action.setTitle("");
 		}
 
+		// Restart timer with potentially new interval (creates fresh state for generation counter)
+		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		this.polling.restart(ev.action.id, () => this.refreshStats(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
+
 		// Re-fetch with new settings
 		await this.refreshStats(ev.action.id);
-
-		// Restart timer with potentially new interval
-		this.stopTimer(ev.action.id);
-		this.startTimer(ev.action.id, settings);
 	}
 
 	/**
@@ -268,13 +262,14 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			return;
 		}
 
+		// Generation counter — prevents stale async results from overwriting fresh data
+		const gen = this.polling.incrementGeneration(actionId);
+
 		// Find the action context by ID
 		const actionContext = [...this.actions].find((a) => a.id === actionId);
 		if (!actionContext || !actionContext.isKey()) {
 			return;
 		}
-
-		stopLoadingSpinner(this.spinners, actionId);
 
 		const parsed = parseRepoIdentifier(settings.repo);
 		if (!parsed) {
@@ -307,6 +302,9 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 
 			const displayValue = getStatDisplay(stats, statType, formatCount);
 
+			// Discard stale result if a newer refresh has started
+			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
+
 			// Update marquee controllers and cache render data
 			const md = this.getOrCreateMarquee(actionId);
 			md.line1.setText(parsed.repo);
@@ -324,6 +322,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			// Store URL for key press
 			this.lastUrl.set(actionId, getStatUrl(parsed.owner, parsed.repo, statType));
 
+			this.polling.reportSuccess(actionId);
 			streamDeck.logger.debug(`Repo stats updated: ${settings.repo} ${statType}=${displayValue}`);
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : "Unknown error";
@@ -344,43 +343,9 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 				errorLabel = "No Access";
 			}
 
+			this.polling.reportError(actionId);
 			await actionContext.setImage(renderErrorImage(errorLabel));
 			await actionContext.setTitle("");
-		}
-	}
-
-	/**
-	 * Starts the auto-refresh polling timer for an action instance.
-	 */
-	private startTimer(actionId: string, settings: RepoStatsSettings): void {
-		if (!settings.repo) {
-			return;
-		}
-
-		const intervalSec = Math.max(
-			settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL,
-			MIN_REFRESH_INTERVAL,
-		);
-
-		const timer = setInterval(() => {
-			this.refreshStats(actionId).catch((err) => {
-				streamDeck.logger.error(`Timer refresh failed for ${actionId}: ${err}`);
-			});
-		}, intervalSec * 1000);
-
-		this.timers.set(actionId, timer);
-		streamDeck.logger.debug(`Started timer for ${actionId} with ${intervalSec}s interval`);
-	}
-
-	/**
-	 * Stops the polling timer for an action instance.
-	 */
-	private stopTimer(actionId: string): void {
-		const timer = this.timers.get(actionId);
-		if (timer) {
-			clearInterval(timer);
-			this.timers.delete(actionId);
-			streamDeck.logger.debug(`Stopped timer for ${actionId}`);
 		}
 	}
 

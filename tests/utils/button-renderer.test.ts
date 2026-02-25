@@ -21,6 +21,7 @@ import {
 	renderWorkflowImage,
 	renderDeployingImage,
 	renderLoadingImage,
+	renderAnimatedSpinner,
 	renderSpinnerFrame,
 	renderErrorImage,
 	renderUnconfiguredImage,
@@ -307,8 +308,8 @@ describe("button-renderer", () => {
 			expect(renderLoadingImage()).toMatch(/^data:image\/svg\+xml,/);
 		});
 
-		it("is equivalent to renderSpinnerFrame(0)", () => {
-			expect(renderLoadingImage()).toBe(renderSpinnerFrame(0));
+		it("is equivalent to renderAnimatedSpinner()", () => {
+			expect(renderLoadingImage()).toBe(renderAnimatedSpinner());
 		});
 	});
 

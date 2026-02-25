@@ -40,12 +40,12 @@ import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provid
 import {
 	renderWorkflowImage,
 	renderDeployingImage,
-	renderSpinnerFrame,
+	renderAnimatedSpinner,
 	renderErrorImage,
 	renderUnconfiguredImage,
 } from "../utils/button-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
-import { SpinnerAnimator, startLoadingSpinner, stopLoadingSpinner } from "../utils/spinner-animator";
+import { PollingCoordinator } from "../utils/polling-coordinator";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 60; // 1 minute (workflows change faster than stats)
@@ -72,8 +72,8 @@ interface WfMarqueeData {
 
 @action({ UUID: "com.pedrofuentes.github-utilities.workflow-status" })
 export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings> {
-	/** Active polling timers keyed by action instance ID */
-	private timers = new Map<string, ReturnType<typeof setInterval>>();
+	/** Centralized polling coordinator with error backoff */
+	private polling = new PollingCoordinator();
 
 	/** Last known settings per action instance */
 	private actionSettings = new Map<string, WorkflowStatusSettings>();
@@ -83,9 +83,6 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 
 	/** Marquee scroll state per action instance */
 	private marqueeData = new Map<string, WfMarqueeData>();
-
-	/** Animated loading spinner per action instance */
-	private spinners = new Map<string, SpinnerAnimator>();
 
 	/**
 	 * Called when the action becomes visible on the Stream Deck.
@@ -102,23 +99,22 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 				return;
 			}
 
-			startLoadingSpinner(this.spinners, ev.action.id, (frame) => {
-				ev.action.setImage(renderSpinnerFrame(frame)).catch(() => {});
-			});
+			await ev.action.setImage(renderAnimatedSpinner());
 			await ev.action.setTitle("");
 		}
 
+		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		this.polling.start(ev.action.id, () => this.refreshStatus(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
+
 		await this.refreshStatus(ev.action.id);
-		this.startTimer(ev.action.id, settings);
 	}
 
 	/**
 	 * Called when the action is no longer visible. Cleans up the timer.
 	 */
 	override onWillDisappear(ev: WillDisappearEvent<WorkflowStatusSettings>): void {
-		this.stopTimer(ev.action.id);
+		this.polling.stop(ev.action.id);
 		this.stopMarquee(ev.action.id);
-		stopLoadingSpinner(this.spinners, ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
@@ -187,20 +183,18 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
-				this.stopTimer(ev.action.id);
+				this.polling.stop(ev.action.id);
 				return;
 			}
 
-			startLoadingSpinner(this.spinners, ev.action.id, (frame) => {
-				ev.action.setImage(renderSpinnerFrame(frame)).catch(() => {});
-			});
+			await ev.action.setImage(renderAnimatedSpinner());
 			await ev.action.setTitle("");
 		}
 
-		await this.refreshStatus(ev.action.id);
+		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		this.polling.restart(ev.action.id, () => this.refreshStatus(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
-		this.stopTimer(ev.action.id);
-		this.startTimer(ev.action.id, settings);
+		await this.refreshStatus(ev.action.id);
 	}
 
 	/**
@@ -212,12 +206,13 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			return;
 		}
 
+		// Generation counter — prevents stale async results from overwriting fresh data
+		const gen = this.polling.incrementGeneration(actionId);
+
 		const actionContext = [...this.actions].find((a) => a.id === actionId);
 		if (!actionContext || !actionContext.isKey()) {
 			return;
 		}
-
-		stopLoadingSpinner(this.spinners, actionId);
 
 		const parsed = parseRepoIdentifier(settings.repo);
 		if (!parsed) {
@@ -241,6 +236,9 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 				workflowFile: settings.workflowFile,
 				environment: settings.environment,
 			});
+
+			// Discard stale result if a newer refresh has started
+			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
 
 			// Determine which state to display
 			const activeDeployStates: DeploymentState[] = ["in_progress", "queued", "pending"];
@@ -291,6 +289,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			// Start/stop marquee timer based on animation needs
 			this.updateMarqueeTimer(actionId);
 
+			this.polling.reportSuccess(actionId);
 			streamDeck.logger.debug(
 				`Workflow status updated: ${settings.repo} run=${info.latestRun?.status ?? "none"} deploy=${info.deployment?.state ?? "none"}`,
 			);
@@ -312,43 +311,9 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 				errorLabel = "No Access";
 			}
 
+			this.polling.reportError(actionId);
 			await actionContext.setImage(renderErrorImage(errorLabel));
 			await actionContext.setTitle("");
-		}
-	}
-
-	/**
-	 * Starts the auto-refresh polling timer for an action instance.
-	 */
-	private startTimer(actionId: string, settings: WorkflowStatusSettings): void {
-		if (!settings.repo) {
-			return;
-		}
-
-		const intervalSec = Math.max(
-			settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL,
-			MIN_REFRESH_INTERVAL,
-		);
-
-		const timer = setInterval(() => {
-			this.refreshStatus(actionId).catch((err) => {
-				streamDeck.logger.error(`Timer refresh failed for ${actionId}: ${err}`);
-			});
-		}, intervalSec * 1000);
-
-		this.timers.set(actionId, timer);
-		streamDeck.logger.debug(`Started workflow timer for ${actionId} with ${intervalSec}s interval`);
-	}
-
-	/**
-	 * Stops the polling timer for an action instance.
-	 */
-	private stopTimer(actionId: string): void {
-		const timer = this.timers.get(actionId);
-		if (timer) {
-			clearInterval(timer);
-			this.timers.delete(actionId);
-			streamDeck.logger.debug(`Stopped workflow timer for ${actionId}`);
 		}
 	}
 

@@ -28,9 +28,9 @@ import type { GlobalSettings, BranchComparisonSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
 import { fetchBranchComparison } from "../utils/github-api";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
-import { renderBranchComparisonImage, renderSpinnerFrame, renderErrorImage, renderUnconfiguredImage, COLORS } from "../utils/button-renderer";
+import { renderBranchComparisonImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage, COLORS } from "../utils/button-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
-import { SpinnerAnimator, startLoadingSpinner, stopLoadingSpinner } from "../utils/spinner-animator";
+import { PollingCoordinator } from "../utils/polling-coordinator";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300;
@@ -40,11 +40,10 @@ const LINE1_MAX_VISIBLE = 14;
 
 @action({ UUID: "com.pedrofuentes.github-utilities.branch-comparison" })
 export class BranchComparisonAction extends SingletonAction<BranchComparisonSettings> {
-	private timers = new Map<string, ReturnType<typeof setInterval>>();
+	private polling = new PollingCoordinator();
 	private actionSettings = new Map<string, BranchComparisonSettings>();
 	private lastUrl = new Map<string, string>();
 	private marqueeData = new Map<string, BranchMarqueeData>();
-	private spinners = new Map<string, SpinnerAnimator>();
 
 	override async onWillAppear(ev: WillAppearEvent<BranchComparisonSettings>): Promise<void> {
 		const settings = ev.payload.settings;
@@ -58,20 +57,19 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 				return;
 			}
 
-			startLoadingSpinner(this.spinners, ev.action.id, (frame) => {
-				ev.action.setImage(renderSpinnerFrame(frame)).catch(() => {});
-			});
+			await ev.action.setImage(renderAnimatedSpinner());
 			await ev.action.setTitle("");
 		}
 
+		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		this.polling.start(ev.action.id, () => this.refreshComparison(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
+
 		await this.refreshComparison(ev.action.id);
-		this.startTimer(ev.action.id, settings);
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<BranchComparisonSettings>): void {
-		this.stopTimer(ev.action.id);
+		this.polling.stop(ev.action.id);
 		this.stopMarquee(ev.action.id);
-		stopLoadingSpinner(this.spinners, ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
@@ -124,29 +122,28 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 			if (!settings.repo || !settings.baseBranch || !settings.headBranch || !globalSettings.githubToken) {
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
-				this.stopTimer(ev.action.id);
+				this.polling.stop(ev.action.id);
 				return;
 			}
 
-			startLoadingSpinner(this.spinners, ev.action.id, (frame) => {
-				ev.action.setImage(renderSpinnerFrame(frame)).catch(() => {});
-			});
+			await ev.action.setImage(renderAnimatedSpinner());
 			await ev.action.setTitle("");
 		}
 
+		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		this.polling.restart(ev.action.id, () => this.refreshComparison(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
+
 		await this.refreshComparison(ev.action.id);
-		this.stopTimer(ev.action.id);
-		this.startTimer(ev.action.id, settings);
 	}
 
 	private async refreshComparison(actionId: string): Promise<void> {
 		const settings = this.actionSettings.get(actionId);
 		if (!settings?.repo || !settings.baseBranch || !settings.headBranch) return;
 
+		const gen = this.polling.incrementGeneration(actionId);
+
 		const actionContext = [...this.actions].find((a) => a.id === actionId);
 		if (!actionContext || !actionContext.isKey()) return;
-
-		stopLoadingSpinner(this.spinners, actionId);
 
 		const parsed = parseRepoIdentifier(settings.repo);
 		if (!parsed) {
@@ -167,6 +164,8 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 			const comparison = await fetchBranchComparison(
 				parsed.owner, parsed.repo, settings.baseBranch, settings.headBranch, token,
 			);
+
+			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
 
 			// Format: "↑3 ↓1" for ahead/behind
 			const displayParts: string[] = [];
@@ -193,6 +192,7 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 			await this.renderWithMarquee(actionId);
 			this.updateMarqueeTimer(actionId);
 
+			this.polling.reportSuccess(actionId);
 			this.lastUrl.set(actionId, comparison.html_url);
 			streamDeck.logger.debug(`Branch comparison updated: ${settings.repo} ${settings.headBranch}→${settings.baseBranch} ${displayText}`);
 		} catch (error: unknown) {
@@ -206,33 +206,9 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 			else if (message.includes("token") || message.includes("401")) errorLabel = "Auth Error";
 			else if (message.includes("Access denied")) errorLabel = "No Access";
 
+			this.polling.reportError(actionId);
 			await actionContext.setImage(renderErrorImage(errorLabel));
 			await actionContext.setTitle("");
-		}
-	}
-
-	private startTimer(actionId: string, settings: BranchComparisonSettings): void {
-		if (!settings.repo || !settings.baseBranch || !settings.headBranch) return;
-
-		const intervalSec = Math.max(
-			settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL,
-			MIN_REFRESH_INTERVAL,
-		);
-
-		const timer = setInterval(() => {
-			this.refreshComparison(actionId).catch((err) => {
-				streamDeck.logger.error(`Timer refresh failed for ${actionId}: ${err}`);
-			});
-		}, intervalSec * 1000);
-
-		this.timers.set(actionId, timer);
-	}
-
-	private stopTimer(actionId: string): void {
-		const timer = this.timers.get(actionId);
-		if (timer) {
-			clearInterval(timer);
-			this.timers.delete(actionId);
 		}
 	}
 

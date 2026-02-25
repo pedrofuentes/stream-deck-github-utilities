@@ -63,6 +63,7 @@ export {
 	renderWorkflowImage,
 	renderDeployingImage,
 	renderLoadingImage,
+	renderAnimatedSpinner,
 	renderSpinnerFrame,
 	renderErrorImage,
 	renderUnconfiguredImage,
@@ -86,3 +87,6 @@ export {
 	MARQUEE_PAUSE_TICKS,
 	MARQUEE_SEPARATOR,
 } from "./marquee-controller";
+export {
+	PollingCoordinator,
+} from "./polling-coordinator";

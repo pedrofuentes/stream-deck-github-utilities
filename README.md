@@ -3,8 +3,8 @@
 A [Stream Deck](https://www.elgato.com/stream-deck) plugin that provides utilities to display information from GitHub directly on your Stream Deck device.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities/releases)
-[![Tests](https://img.shields.io/badge/tests-463%20passed-brightgreen.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities)
+[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities/releases)
+[![Tests](https://img.shields.io/badge/tests-493%20passed-brightgreen.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities)
 
 ## Overview
 
@@ -214,11 +214,12 @@ npm run watch
 │   │   ├── pi-data-provider.ts                    # PI datasource request handler
 │   │   ├── button-renderer.ts                     # SVG button rendering
 │   │   ├── marquee-controller.ts                  # Marquee scrolling text controller
+│   │   ├── polling-coordinator.ts                 # Centralized polling with error backoff
 │   │   ├── spinner-animator.ts                    # Animated loading spinner controller
 │   │   └── index.ts                               # Barrel exports
 │   ├── types.ts                                   # Shared type definitions
 │   └── plugin.ts                                  # Plugin entry point
-├── tests/                                         # Test files (463 tests)
+├── tests/                                         # Test files (493 tests)
 │   ├── actions/                                   # Action tests
 │   └── utils/                                     # Utility tests
 ├── rollup.config.mjs                              # Rollup bundler config

@@ -309,7 +309,8 @@
   </div>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="rn-140">v1.4.0</button>
+    <button class="tab-btn active" data-tab="rn-150">v1.5.0</button>
+    <button class="tab-btn" data-tab="rn-140">v1.4.0</button>
     <button class="tab-btn" data-tab="rn-134">v1.3.4</button>
     <button class="tab-btn" data-tab="rn-133">v1.3.3</button>
     <button class="tab-btn" data-tab="rn-132">v1.3.2</button>
@@ -322,8 +323,31 @@
 
   <div class="tab-content-wrapper">
 
+    <!-- v1.5.0 -->
+    <div class="tab-panel active" id="rn-150">
+      <div class="content-box rn-box">
+        <h2>v1.5.0 — 2026-02-25</h2>
+        <p>Reliability and performance improvements under the hood.</p>
+        <h3>Architecture</h3>
+        <ul>
+          <li><strong>Centralized polling</strong> — all 7 actions now share a unified PollingCoordinator for cleaner, more consistent behavior</li>
+          <li><strong>Exponential error backoff</strong> — on consecutive API failures, polling intervals automatically increase (up to 32×) to reduce unnecessary requests; pressing the button resets the backoff for an immediate retry</li>
+          <li><strong>Generation counter</strong> — prevents stale async API responses from overwriting fresher data when settings change rapidly</li>
+        </ul>
+        <h3>API Improvements</h3>
+        <ul>
+          <li><strong>HTTP 429 handling</strong> — dedicated rate-limit-exceeded error with Retry-After header parsing</li>
+          <li>Improved 403 rate limit error messages with reset time information</li>
+        </ul>
+        <h3>Visual</h3>
+        <ul>
+          <li><strong>Native SVG spinner</strong> — loading animation now uses a single SVG with native animation, eliminating frame-based timer overhead</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- v1.4.0 -->
-    <div class="tab-panel active" id="rn-140">
+    <div class="tab-panel" id="rn-140">
       <div class="content-box rn-box">
         <h2>v1.4.0 — 2026-02-24</h2>
         <p>Major feature release — 5 new actions and visual polish.</p>

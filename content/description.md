@@ -1,6 +1,6 @@
 <!-- 
   Marketplace Description — Stream Deck GitHub Utilities
-  Last Updated: v1.4.0
+  Last Updated: v1.5.0
   Character Limit: 4,000
   Current Count: ~3,600 characters
 -->

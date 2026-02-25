@@ -4,6 +4,25 @@
   Character limit per entry: 1,500
 -->
 
+## v1.5.0 — 2026-02-25
+<!-- Characters: ~850 / 1,500 -->
+
+Reliability and performance improvements under the hood.
+
+**Architecture:**
+- **Centralized polling** — all 7 actions now share a unified PollingCoordinator, replacing per-action timer management for cleaner, more consistent behavior
+- **Exponential error backoff** — on consecutive API failures, polling intervals automatically increase (up to 32× the base interval) to reduce unnecessary requests; pressing the button resets the backoff for an immediate retry
+- **Generation counter** — prevents stale async API responses from overwriting fresher data when settings change rapidly
+
+**API Improvements:**
+- **HTTP 429 handling** — dedicated rate-limit-exceeded error with Retry-After header parsing (supports both integer seconds and HTTP-date formats)
+- Improved 403 rate limit error messages with reset time information
+
+**Visual:**
+- **Native SVG spinner** — loading animation now uses a single SVG with `<animateTransform>`, eliminating frame-based timer overhead
+
+---
+
 ## v1.4.0 — 2026-02-24
 <!-- Characters: ~950 / 1,500 -->
 

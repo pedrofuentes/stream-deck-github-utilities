@@ -29,9 +29,9 @@ import type { GlobalSettings, ReleaseMonitorSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
 import { fetchLatestRelease, formatRelativeTime } from "../utils/github-api";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
-import { renderReleaseImage, renderSpinnerFrame, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
+import { renderReleaseImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
-import { SpinnerAnimator, startLoadingSpinner, stopLoadingSpinner } from "../utils/spinner-animator";
+import { PollingCoordinator } from "../utils/polling-coordinator";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300;
@@ -52,11 +52,10 @@ interface ReleaseMarqueeData {
 
 @action({ UUID: "com.pedrofuentes.github-utilities.release-monitor" })
 export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings> {
-	private timers = new Map<string, ReturnType<typeof setInterval>>();
+	private polling = new PollingCoordinator();
 	private actionSettings = new Map<string, ReleaseMonitorSettings>();
 	private lastUrl = new Map<string, string>();
 	private marqueeData = new Map<string, ReleaseMarqueeData>();
-	private spinners = new Map<string, SpinnerAnimator>();
 
 	override async onWillAppear(ev: WillAppearEvent<ReleaseMonitorSettings>): Promise<void> {
 		const settings = ev.payload.settings;
@@ -70,20 +69,19 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 				return;
 			}
 
-			startLoadingSpinner(this.spinners, ev.action.id, (frame) => {
-				ev.action.setImage(renderSpinnerFrame(frame)).catch(() => {});
-			});
+			await ev.action.setImage(renderAnimatedSpinner());
 			await ev.action.setTitle("");
 		}
 
+		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		this.polling.start(ev.action.id, () => this.refreshRelease(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
+
 		await this.refreshRelease(ev.action.id);
-		this.startTimer(ev.action.id, settings);
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<ReleaseMonitorSettings>): void {
-		this.stopTimer(ev.action.id);
+		this.polling.stop(ev.action.id);
 		this.stopMarquee(ev.action.id);
-		stopLoadingSpinner(this.spinners, ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
@@ -134,29 +132,28 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
-				this.stopTimer(ev.action.id);
+				this.polling.stop(ev.action.id);
 				return;
 			}
 
-			startLoadingSpinner(this.spinners, ev.action.id, (frame) => {
-				ev.action.setImage(renderSpinnerFrame(frame)).catch(() => {});
-			});
+			await ev.action.setImage(renderAnimatedSpinner());
 			await ev.action.setTitle("");
 		}
 
+		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		this.polling.restart(ev.action.id, () => this.refreshRelease(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
+
 		await this.refreshRelease(ev.action.id);
-		this.stopTimer(ev.action.id);
-		this.startTimer(ev.action.id, settings);
 	}
 
 	private async refreshRelease(actionId: string): Promise<void> {
 		const settings = this.actionSettings.get(actionId);
 		if (!settings?.repo) return;
 
+		const gen = this.polling.incrementGeneration(actionId);
+
 		const actionContext = [...this.actions].find((a) => a.id === actionId);
 		if (!actionContext || !actionContext.isKey()) return;
-
-		stopLoadingSpinner(this.spinners, actionId);
 
 		const parsed = parseRepoIdentifier(settings.repo);
 		if (!parsed) {
@@ -176,6 +173,8 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 
 			const includePreReleases = settings.includePreReleases === true;
 			const release = await fetchLatestRelease(parsed.owner, parsed.repo, token, includePreReleases);
+
+			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
 
 			if (!release) {
 				await actionContext.setImage(renderReleaseImage("None", "No Releases", parsed.repo));
@@ -200,6 +199,7 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 			await this.renderWithMarquee(actionId);
 			this.updateMarqueeTimer(actionId);
 
+			this.polling.reportSuccess(actionId);
 			this.lastUrl.set(actionId, release.html_url || `https://github.com/${parsed.owner}/${parsed.repo}/releases`);
 			streamDeck.logger.debug(`Release updated: ${settings.repo} tag=${tag}`);
 		} catch (error: unknown) {
@@ -213,33 +213,9 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 			else if (message.includes("token") || message.includes("401")) errorLabel = "Auth Error";
 			else if (message.includes("Access denied")) errorLabel = "No Access";
 
+			this.polling.reportError(actionId);
 			await actionContext.setImage(renderErrorImage(errorLabel));
 			await actionContext.setTitle("");
-		}
-	}
-
-	private startTimer(actionId: string, settings: ReleaseMonitorSettings): void {
-		if (!settings.repo) return;
-
-		const intervalSec = Math.max(
-			settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL,
-			MIN_REFRESH_INTERVAL,
-		);
-
-		const timer = setInterval(() => {
-			this.refreshRelease(actionId).catch((err) => {
-				streamDeck.logger.error(`Timer refresh failed for ${actionId}: ${err}`);
-			});
-		}, intervalSec * 1000);
-
-		this.timers.set(actionId, timer);
-	}
-
-	private stopTimer(actionId: string): void {
-		const timer = this.timers.get(actionId);
-		if (timer) {
-			clearInterval(timer);
-			this.timers.delete(actionId);
 		}
 	}
 

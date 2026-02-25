@@ -29,9 +29,9 @@ import type { GlobalSettings, CommitActivitySettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { fetchCommitActivity } from "../utils/github-api";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
-import { renderCommitActivityImage, renderSpinnerFrame, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
+import { renderCommitActivityImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
-import { SpinnerAnimator, startLoadingSpinner, stopLoadingSpinner } from "../utils/spinner-animator";
+import { PollingCoordinator } from "../utils/polling-coordinator";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300;
@@ -56,10 +56,10 @@ interface CommitMarqueeData {
 
 @action({ UUID: "com.pedrofuentes.github-utilities.commit-activity" })
 export class CommitActivityAction extends SingletonAction<CommitActivitySettings> {
-	private timers = new Map<string, ReturnType<typeof setInterval>>();
+	private polling = new PollingCoordinator();
 	private actionSettings = new Map<string, CommitActivitySettings>();
 	private marqueeData = new Map<string, CommitMarqueeData>();
-	private spinners = new Map<string, SpinnerAnimator>();
+
 
 	override async onWillAppear(ev: WillAppearEvent<CommitActivitySettings>): Promise<void> {
 		const settings = ev.payload.settings;
@@ -73,20 +73,19 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 				return;
 			}
 
-			startLoadingSpinner(this.spinners, ev.action.id, (frame) => {
-				ev.action.setImage(renderSpinnerFrame(frame)).catch(() => {});
-			});
+			await ev.action.setImage(renderAnimatedSpinner());
 			await ev.action.setTitle("");
 		}
 
+		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		this.polling.start(ev.action.id, () => this.refreshActivity(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
+
 		await this.refreshActivity(ev.action.id);
-		this.startTimer(ev.action.id, settings);
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<CommitActivitySettings>): void {
-		this.stopTimer(ev.action.id);
+		this.polling.stop(ev.action.id);
 		this.stopMarquee(ev.action.id);
-		stopLoadingSpinner(this.spinners, ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
 	}
@@ -134,29 +133,28 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
-				this.stopTimer(ev.action.id);
+				this.polling.stop(ev.action.id);
 				return;
 			}
 
-			startLoadingSpinner(this.spinners, ev.action.id, (frame) => {
-				ev.action.setImage(renderSpinnerFrame(frame)).catch(() => {});
-			});
+			await ev.action.setImage(renderAnimatedSpinner());
 			await ev.action.setTitle("");
 		}
 
+		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		this.polling.restart(ev.action.id, () => this.refreshActivity(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
+
 		await this.refreshActivity(ev.action.id);
-		this.stopTimer(ev.action.id);
-		this.startTimer(ev.action.id, settings);
 	}
 
 	private async refreshActivity(actionId: string): Promise<void> {
 		const settings = this.actionSettings.get(actionId);
 		if (!settings?.repo) return;
 
+		const gen = this.polling.incrementGeneration(actionId);
+
 		const actionContext = [...this.actions].find((a) => a.id === actionId);
 		if (!actionContext || !actionContext.isKey()) return;
-
-		stopLoadingSpinner(this.spinners, actionId);
 
 		const parsed = parseRepoIdentifier(settings.repo);
 		if (!parsed) {
@@ -187,6 +185,8 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 
 			const rangeLabel = RANGE_LABELS[timeRange] ?? "Commits";
 
+			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
+
 			const md = this.getOrCreateMarquee(actionId);
 			md.line1.setText(parsed.repo);
 			md.repoName = parsed.repo;
@@ -196,6 +196,7 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 			await this.renderWithMarquee(actionId);
 			this.updateMarqueeTimer(actionId);
 
+			this.polling.reportSuccess(actionId);
 			streamDeck.logger.debug(`Commit activity updated: ${settings.repo} ${timeRange}=${displayCount}`);
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : "Unknown error";
@@ -208,33 +209,9 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 			else if (message.includes("token") || message.includes("401")) errorLabel = "Auth Error";
 			else if (message.includes("Access denied")) errorLabel = "No Access";
 
+			this.polling.reportError(actionId);
 			await actionContext.setImage(renderErrorImage(errorLabel));
 			await actionContext.setTitle("");
-		}
-	}
-
-	private startTimer(actionId: string, settings: CommitActivitySettings): void {
-		if (!settings.repo) return;
-
-		const intervalSec = Math.max(
-			settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL,
-			MIN_REFRESH_INTERVAL,
-		);
-
-		const timer = setInterval(() => {
-			this.refreshActivity(actionId).catch((err) => {
-				streamDeck.logger.error(`Timer refresh failed for ${actionId}: ${err}`);
-			});
-		}, intervalSec * 1000);
-
-		this.timers.set(actionId, timer);
-	}
-
-	private stopTimer(actionId: string): void {
-		const timer = this.timers.get(actionId);
-		if (timer) {
-			clearInterval(timer);
-			this.timers.delete(actionId);
 		}
 	}
 

@@ -63,10 +63,10 @@ const FONT = "Arial,Helvetica,sans-serif";
 
 // ── Spinner constants ──────────────────────────────────────────────────────
 
-/** Number of distinct frames in the spinner animation cycle. */
+/** @deprecated Frame-based spinner replaced by native SVG animation. Kept for backwards compat. */
 export const SPINNER_FRAME_COUNT = 8;
 
-/** Recommended interval (ms) between spinner frames. */
+/** @deprecated Frame-based spinner replaced by native SVG animation. Kept for backwards compat. */
 export const SPINNER_INTERVAL_MS = 150;
 
 const SPINNER_RADIUS = 18;
@@ -332,19 +332,23 @@ export function renderDeployingImage(envName: string, _state: string, repoName?:
 	});
 }
 
-/** Renders a loading image with a static spinner at frame 0. */
+/** Renders a loading image with a native SVG animated spinner. No timer needed. */
 export function renderLoadingImage(): string {
-	return renderSpinnerFrame(0);
+	return renderAnimatedSpinner();
 }
 
 /**
- * Renders an animated spinner frame for loading states.
+ * Renders a loading spinner using native SVG `<animateTransform>`.
+ *
+ * Stream Deck hardware supports SVG SMIL animations (<animate>, <animateTransform>),
+ * so the spinner rotates natively without needing frame-by-frame setImage() calls.
+ * This eliminates the SpinnerAnimator timer entirely — one setImage() call is enough.
  *
  * Layout:
  *   ┌════════════════════════┐  ← dim accent bar (6 px)
  *   │                        │
  *   │       ╭───╮            │  ← track circle (dim)
- *   │      /  ⌒  \           │  ← spinner arc (bright, rotating)
+ *   │      /  ⌒  \           │  ← spinner arc (rotating via animateTransform)
  *   │      \     /           │
  *   │       ╰───╯            │
  *   │                        │
@@ -352,7 +356,29 @@ export function renderLoadingImage(): string {
  *   │                        │
  *   └────────────────────────┘
  *
- * Use with {@link SpinnerAnimator} for animation across 8 frames.
+ * @param accentColor Optional color for the spinner arc (default: blue #58a6ff)
+ */
+export function renderAnimatedSpinner(accentColor?: string): string {
+	const color = accentColor ?? "#58a6ff";
+
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" rx="16" fill="${COLORS.background}"/>
+  <rect y="0" width="144" height="6" rx="3" fill="${COLORS.border}"/>
+  <circle cx="${SPINNER_CX}" cy="${SPINNER_CY}" r="${SPINNER_RADIUS}" fill="none" stroke="${COLORS.border}" stroke-width="3"/>
+  <circle cx="${SPINNER_CX}" cy="${SPINNER_CY}" r="${SPINNER_RADIUS}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-dasharray="${SPINNER_ARC_LEN.toFixed(1)} ${SPINNER_GAP_LEN.toFixed(1)}">
+    <animateTransform attributeName="transform" type="rotate" from="0 ${SPINNER_CX} ${SPINNER_CY}" to="360 ${SPINNER_CX} ${SPINNER_CY}" dur="1s" repeatCount="indefinite"/>
+  </circle>
+  <text x="72" y="108" text-anchor="middle" fill="${COLORS.textMuted}" font-size="16" font-family="${FONT}">Loading</text>
+</svg>`;
+
+	return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+/**
+ * Renders a static spinner frame for loading states.
+ *
+ * @deprecated Use {@link renderAnimatedSpinner} instead — it uses native SVG animation
+ * and doesn't require a timer. This function is kept for backwards compatibility with tests.
  *
  * @param frame Frame index (0–7), each advances the arc by 45°
  * @param accentColor Optional color for the spinner arc (default: blue #58a6ff)

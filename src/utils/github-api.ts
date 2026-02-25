@@ -49,6 +49,8 @@ export class GitHubApiError extends Error {
 		message: string,
 		public readonly status: number,
 		public readonly rateLimitInfo?: RateLimitInfo,
+		/** Seconds to wait before retrying (from Retry-After header or rate limit reset). */
+		public readonly retryAfterSeconds?: number,
 	) {
 		super(message);
 		this.name = "GitHubApiError";
@@ -338,7 +340,7 @@ export async function fetchPullRequestCount(
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
-		handleApiError(response.status, rateLimitInfo, owner, repo);
+		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
 	const data = (await response.json()) as { total_count: number };
@@ -387,7 +389,7 @@ export async function fetchIssueCount(
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
-		handleApiError(response.status, rateLimitInfo, owner, repo);
+		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
 	const data = (await response.json()) as { total_count: number };
@@ -433,7 +435,7 @@ export async function fetchLatestRelease(
 		}
 
 		if (!response.ok) {
-			handleApiError(response.status, rateLimitInfo, owner, repo);
+			handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 		}
 
 		const data = (await response.json()) as Record<string, unknown>;
@@ -453,7 +455,7 @@ export async function fetchLatestRelease(
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
-		handleApiError(response.status, rateLimitInfo, owner, repo);
+		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
 	const releases = (await response.json()) as Array<Record<string, unknown>>;
@@ -542,7 +544,7 @@ export async function fetchCommitActivity(
 	}
 
 	if (!response.ok) {
-		handleApiError(response.status, rateLimitInfo, owner, repo);
+		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
 	const weeks = (await response.json()) as CommitActivityWeek[];
@@ -613,7 +615,7 @@ export async function fetchBranchComparison(
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
-		handleApiError(response.status, rateLimitInfo, owner, repo);
+		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
 	const data = (await response.json()) as Record<string, unknown>;
@@ -732,7 +734,7 @@ export async function fetchLatestWorkflowRun(
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
-		handleApiError(response.status, rateLimitInfo, owner, repo);
+		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
 	const data = (await response.json()) as Record<string, unknown>;
@@ -785,7 +787,7 @@ export async function fetchLatestDeploymentStatus(
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
-		handleApiError(response.status, rateLimitInfo, owner, repo);
+		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
 	const deployments = (await response.json()) as Record<string, unknown>[];
@@ -803,7 +805,7 @@ export async function fetchLatestDeploymentStatus(
 	const statusRateLimitInfo = parseRateLimitHeaders(statusResponse.headers);
 
 	if (!statusResponse.ok) {
-		handleApiError(statusResponse.status, statusRateLimitInfo, owner, repo);
+		handleApiError(statusResponse.status, statusRateLimitInfo, owner, repo, parseRetryAfter(statusResponse.headers));
 	}
 
 	const statuses = (await statusResponse.json()) as Record<string, unknown>[];
@@ -887,20 +889,57 @@ export function getWorkflowStatusLabel(status: string): string {
 }
 
 /**
+ * Parses the Retry-After header value into seconds.
+ * Supports both delay-seconds (integer) and HTTP-date formats.
+ *
+ * @param headers - Response headers
+ * @returns Seconds to wait, or undefined if header is missing/invalid
+ */
+function parseRetryAfter(headers: Headers): number | undefined {
+	const raw = headers.get("retry-after");
+	if (!raw) return undefined;
+
+	// Try as integer seconds first
+	const seconds = parseInt(raw, 10);
+	if (!isNaN(seconds) && seconds >= 0) return seconds;
+
+	// Try as HTTP-date
+	const date = new Date(raw);
+	if (!isNaN(date.getTime())) {
+		const delta = Math.ceil((date.getTime() - Date.now()) / 1000);
+		return Math.max(delta, 0);
+	}
+
+	return undefined;
+}
+
+/**
  * Centralized error handler for GitHub API responses.
  * @throws {GitHubApiError} always
  */
-function handleApiError(status: number, rateLimitInfo: RateLimitInfo, owner: string, repo: string): never {
+function handleApiError(status: number, rateLimitInfo: RateLimitInfo, owner: string, repo: string, retryAfterSeconds?: number): never {
 	if (status === 401) {
 		throw new GitHubApiError("Invalid or expired GitHub token", status, rateLimitInfo);
 	}
 
+	if (status === 429) {
+		const waitSec = retryAfterSeconds ?? Math.max(Math.ceil((rateLimitInfo.reset.getTime() - Date.now()) / 1000), 60);
+		throw new GitHubApiError(
+			`GitHub API rate limit exceeded (429). Retry after ${waitSec}s`,
+			status,
+			rateLimitInfo,
+			waitSec,
+		);
+	}
+
 	if (status === 403 && rateLimitInfo.remaining === 0) {
 		const resetTime = rateLimitInfo.reset.toLocaleTimeString();
+		const waitSec = Math.max(Math.ceil((rateLimitInfo.reset.getTime() - Date.now()) / 1000), 0);
 		throw new GitHubApiError(
 			`GitHub API rate limit exceeded. Resets at ${resetTime}`,
 			status,
 			rateLimitInfo,
+			waitSec > 0 ? waitSec : undefined,
 		);
 	}
 
