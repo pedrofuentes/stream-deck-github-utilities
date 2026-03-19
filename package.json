@@ -1,6 +1,6 @@
 {
   "name": "stream-deck-github-utilities",
-  "version": "1.5.0",
+  "version": "2.0.0",
   "description": "Stream Deck plugin providing utilities to display information from GitHub",
   "private": true,
   "type": "module",
