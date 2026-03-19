@@ -4,6 +4,31 @@
   Character limit per entry: 1,500
 -->
 
+## v2.0.0 — 2026-03-19
+<!-- Characters: ~1,350 / 1,500 -->
+
+The biggest release yet — Stream Deck+ support and 5 brand-new actions.
+
+**Stream Deck+ Support:**
+- **Full encoder support** for all 12 actions — rotate dials, tap the touch strip, long-touch for quick actions
+- **Touch strip visualizations** — Tufte-inspired sparklines, arc gauges, contribution heatmaps, metro-map branch diagrams, and fleet dashboards rendered directly on the strip
+- **Multi-quarter layouts** — heatmaps and branch networks can span 2 or 4 adjacent encoder slots for panoramic views
+- **Workflow dispatch** — long-touch the Workflow Status dial to trigger a workflow run
+
+**New Actions:**
+- **PR Review Queue** — count of PRs awaiting your review with urgency gradient (blue → amber → red)
+- **Fleet Monitor** — compact repo health dashboard: workflow status + PR count + commit sparkline in one key
+- **Security Health** — Dependabot alert summary with A–F letter grade and arc gauge visualization
+- **Branch Network** — metro-map style git branch diagram on the touch strip (SD+ only)
+- **Contribution Heatmap** — 52-week GitHub contribution grid on the touch strip (SD+ only)
+
+**Improvements:**
+- Double-click any keypad button for instant refresh
+- Workflow run duration now displayed on the workflow status button
+- GraphQL API for profile-level contribution calendar data
+
+---
+
 ## v1.5.0 — 2026-02-25
 <!-- Characters: ~850 / 1,500 -->
 

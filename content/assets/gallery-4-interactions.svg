@@ -10,131 +10,215 @@
   <rect width="1920" height="960" fill="url(#bg)"/>
 
   <!-- Title -->
-  <text x="960" y="80" text-anchor="middle" fill="#ffffff" font-size="48" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Cycle Stats with a Single Press</text>
-  <text x="960" y="120" text-anchor="middle" fill="#8b949e" font-size="26" font-family="Arial,Helvetica,sans-serif">Short press to flip through metrics — long press to open in browser</text>
+  <text x="960" y="72" text-anchor="middle" fill="#ffffff" font-size="46" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Interact with Every Press, Tap, and Turn</text>
+  <text x="960" y="112" text-anchor="middle" fill="#8b949e" font-size="24" font-family="Arial,Helvetica,sans-serif">Keypad buttons, encoder dials, and touch strips — every input does something useful</text>
 
-  <!-- Center: Cycling animation sequence -->
-  <g transform="translate(460, 200)">
-    <!-- Key frame 1: Stars -->
-    <rect x="0" y="0" width="180" height="180" rx="20" fill="#161b22" stroke="#e3b341" stroke-width="2"/>
-    <rect x="0" y="0" width="180" height="7" rx="3.5" fill="#e3b341"/>
-    <text x="90" y="56" text-anchor="middle" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">react</text>
-    <text x="90" y="106" text-anchor="middle" fill="#e6edf3" font-size="40" font-weight="bold" font-family="Arial,Helvetica,sans-serif">228k</text>
-    <text x="90" y="148" text-anchor="middle" fill="#8b949e" font-size="18" font-family="Arial,Helvetica,sans-serif">Stars</text>
+  <!-- Vertical divider -->
+  <line x1="960" y1="140" x2="960" y2="855" stroke="#30363d" stroke-width="1"/>
 
-    <!-- Arrow: tap -->
-    <text x="218" y="100" fill="#8b949e" font-size="32" font-family="Arial,Helvetica,sans-serif">→</text>
-    <text x="208" y="130" fill="#58a6ff" font-size="14" font-weight="bold" font-family="Arial,Helvetica,sans-serif">tap</text>
+  <!-- ===================== LEFT HALF: Keypad ===================== -->
+  <text x="490" y="172" text-anchor="middle" fill="#ffffff" font-size="28" font-weight="bold" font-family="Arial,Helvetica,sans-serif">⌨️ Keypad</text>
 
-    <!-- Key frame 2: Issues -->
-    <rect x="270" y="0" width="180" height="180" rx="20" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
-    <rect x="270" y="0" width="180" height="7" rx="3.5" fill="#3fb950"/>
-    <text x="360" y="56" text-anchor="middle" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">react</text>
-    <text x="360" y="106" text-anchor="middle" fill="#e6edf3" font-size="40" font-weight="bold" font-family="Arial,Helvetica,sans-serif">892</text>
-    <text x="360" y="148" text-anchor="middle" fill="#8b949e" font-size="18" font-family="Arial,Helvetica,sans-serif">Issues</text>
+  <!-- Panel 1: Short press cycles stats -->
+  <g transform="translate(60, 195)">
+    <rect x="0" y="0" width="860" height="180" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+    <text x="30" y="34" fill="#ffffff" font-size="21" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Short Press — Cycle Stats</text>
+    <text x="30" y="58" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Each tap flips to the next metric</text>
 
-    <!-- Arrow: tap -->
-    <text x="488" y="100" fill="#8b949e" font-size="32" font-family="Arial,Helvetica,sans-serif">→</text>
-    <text x="478" y="130" fill="#58a6ff" font-size="14" font-weight="bold" font-family="Arial,Helvetica,sans-serif">tap</text>
+    <!-- Key 1: Stars -->
+    <rect x="40" y="74" width="110" height="96" rx="12" fill="#0d1117" stroke="#e3b341" stroke-width="1.5"/>
+    <rect x="40" y="74" width="110" height="5" rx="2.5" fill="#e3b341"/>
+    <text x="95" y="108" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">react</text>
+    <text x="95" y="136" text-anchor="middle" fill="#e6edf3" font-size="26" font-weight="bold" font-family="Arial,Helvetica,sans-serif">228k</text>
+    <text x="95" y="158" text-anchor="middle" fill="#e3b341" font-size="12" font-family="Arial,Helvetica,sans-serif">Stars</text>
 
-    <!-- Key frame 3: Forks -->
-    <rect x="540" y="0" width="180" height="180" rx="20" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
-    <rect x="540" y="0" width="180" height="7" rx="3.5" fill="#58a6ff"/>
-    <text x="630" y="56" text-anchor="middle" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">react</text>
-    <text x="630" y="106" text-anchor="middle" fill="#e6edf3" font-size="40" font-weight="bold" font-family="Arial,Helvetica,sans-serif">47.1k</text>
-    <text x="630" y="148" text-anchor="middle" fill="#8b949e" font-size="18" font-family="Arial,Helvetica,sans-serif">Forks</text>
+    <!-- Arrow + tap -->
+    <text x="170" y="132" fill="#8b949e" font-size="26" font-family="Arial,Helvetica,sans-serif">→</text>
+    <text x="165" y="152" fill="#58a6ff" font-size="11" font-weight="bold" font-family="Arial,Helvetica,sans-serif">tap</text>
 
-    <!-- Arrow: tap -->
-    <text x="758" y="100" fill="#8b949e" font-size="32" font-family="Arial,Helvetica,sans-serif">→</text>
-    <text x="748" y="130" fill="#58a6ff" font-size="14" font-weight="bold" font-family="Arial,Helvetica,sans-serif">tap</text>
+    <!-- Key 2: Issues -->
+    <rect x="220" y="74" width="110" height="96" rx="12" fill="#0d1117" stroke="#3fb950" stroke-width="1.5"/>
+    <rect x="220" y="74" width="110" height="5" rx="2.5" fill="#3fb950"/>
+    <text x="275" y="108" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">react</text>
+    <text x="275" y="136" text-anchor="middle" fill="#e6edf3" font-size="26" font-weight="bold" font-family="Arial,Helvetica,sans-serif">892</text>
+    <text x="275" y="158" text-anchor="middle" fill="#3fb950" font-size="12" font-family="Arial,Helvetica,sans-serif">Issues</text>
 
-    <!-- Key frame 4: Watchers -->
-    <rect x="810" y="0" width="180" height="180" rx="20" fill="#161b22" stroke="#d2a8ff" stroke-width="2"/>
-    <rect x="810" y="0" width="180" height="7" rx="3.5" fill="#d2a8ff"/>
-    <text x="900" y="56" text-anchor="middle" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">react</text>
-    <text x="900" y="106" text-anchor="middle" fill="#e6edf3" font-size="40" font-weight="bold" font-family="Arial,Helvetica,sans-serif">6.6k</text>
-    <text x="900" y="148" text-anchor="middle" fill="#8b949e" font-size="18" font-family="Arial,Helvetica,sans-serif">Watchers</text>
+    <!-- Arrow + tap -->
+    <text x="350" y="132" fill="#8b949e" font-size="26" font-family="Arial,Helvetica,sans-serif">→</text>
+    <text x="345" y="152" fill="#58a6ff" font-size="11" font-weight="bold" font-family="Arial,Helvetica,sans-serif">tap</text>
+
+    <!-- Key 3: Forks -->
+    <rect x="400" y="74" width="110" height="96" rx="12" fill="#0d1117" stroke="#58a6ff" stroke-width="1.5"/>
+    <rect x="400" y="74" width="110" height="5" rx="2.5" fill="#58a6ff"/>
+    <text x="455" y="108" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">react</text>
+    <text x="455" y="136" text-anchor="middle" fill="#e6edf3" font-size="26" font-weight="bold" font-family="Arial,Helvetica,sans-serif">47.1k</text>
+    <text x="455" y="158" text-anchor="middle" fill="#58a6ff" font-size="12" font-family="Arial,Helvetica,sans-serif">Forks</text>
+
+    <!-- Cycle continues -->
+    <text x="540" y="132" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">→ ···</text>
+    <text x="540" y="156" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">cycles all 10 stat types</text>
   </g>
 
-  <!-- Dots indicating cycle continues -->
-  <g transform="translate(910, 450)">
-    <circle cx="80" cy="0" r="4" fill="#8b949e"/>
-    <circle cx="100" cy="0" r="4" fill="#8b949e"/>
-    <circle cx="120" cy="0" r="4" fill="#8b949e"/>
-    <text x="100" y="30" text-anchor="middle" fill="#8b949e" font-size="16" font-family="Arial,Helvetica,sans-serif">cycles through all 10 stat types</text>
+  <!-- Panel 2: Long press opens GitHub -->
+  <g transform="translate(60, 395)">
+    <rect x="0" y="0" width="860" height="180" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+    <text x="30" y="34" fill="#ffffff" font-size="21" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Long Press — Open in Browser</text>
+    <text x="30" y="58" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Hold ≥500ms to jump straight to GitHub</text>
+
+    <!-- Key -->
+    <rect x="40" y="74" width="110" height="96" rx="12" fill="#0d1117" stroke="#58a6ff" stroke-width="1.5"/>
+    <rect x="40" y="74" width="110" height="5" rx="2.5" fill="#e3b341"/>
+    <text x="95" y="108" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">react</text>
+    <text x="95" y="136" text-anchor="middle" fill="#e6edf3" font-size="24" font-weight="bold" font-family="Arial,Helvetica,sans-serif">228k</text>
+    <text x="95" y="158" text-anchor="middle" fill="#e3b341" font-size="12" font-family="Arial,Helvetica,sans-serif">Stars</text>
+
+    <!-- ≥500ms label -->
+    <text x="170" y="108" fill="#f0883e" font-size="14" font-weight="bold" font-family="Arial,Helvetica,sans-serif">≥500ms</text>
+
+    <!-- Dashed arrow -->
+    <line x1="170" y1="128" x2="290" y2="128" stroke="#58a6ff" stroke-width="2" stroke-dasharray="6,3"/>
+    <polygon points="286,122 298,128 286,134" fill="#58a6ff"/>
+
+    <!-- Browser mockup -->
+    <rect x="310" y="82" width="500" height="76" rx="8" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+    <rect x="310" y="82" width="500" height="22" rx="8" fill="#1c2128"/>
+    <circle cx="326" cy="93" r="4" fill="#f85149"/>
+    <circle cx="340" cy="93" r="4" fill="#d29922"/>
+    <circle cx="354" cy="93" r="4" fill="#3fb950"/>
+    <rect x="370" y="87" width="380" height="12" rx="4" fill="#0d1117"/>
+    <text x="380" y="97" fill="#8b949e" font-size="9" font-family="Arial,Helvetica,sans-serif">github.com/facebook/react</text>
+    <text x="430" y="134" fill="#e6edf3" font-size="15" font-family="Arial,Helvetica,sans-serif">Opens in your default browser</text>
   </g>
 
-  <!-- Long Press Section -->
-  <g transform="translate(160, 520)">
-    <rect x="0" y="0" width="720" height="200" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <!-- Panel 3: Double-click refresh -->
+  <g transform="translate(60, 595)">
+    <rect x="0" y="0" width="860" height="180" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+    <text x="30" y="34" fill="#ffffff" font-size="21" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Double-Click — Instant Refresh</text>
+    <text x="30" y="58" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Two quick taps force an immediate data refresh</text>
 
-    <text x="40" y="45" fill="#ffffff" font-size="26" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Long Press (≥ 500ms)</text>
-    <text x="40" y="78" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">Opens the repository or workflow run in your browser</text>
+    <!-- Key -->
+    <rect x="40" y="74" width="110" height="96" rx="12" fill="#0d1117" stroke="#3fb950" stroke-width="1.5"/>
+    <rect x="40" y="74" width="110" height="5" rx="2.5" fill="#3fb950"/>
+    <text x="95" y="108" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">react</text>
+    <text x="95" y="136" text-anchor="middle" fill="#e6edf3" font-size="24" font-weight="bold" font-family="Arial,Helvetica,sans-serif">892</text>
+    <text x="95" y="158" text-anchor="middle" fill="#3fb950" font-size="12" font-family="Arial,Helvetica,sans-serif">Issues</text>
 
-    <!-- Key with press indicator -->
-    <rect x="40" y="100" width="100" height="100" rx="12" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
-    <rect x="40" y="100" width="100" height="5" rx="2.5" fill="#e3b341"/>
-    <text x="90" y="146" text-anchor="middle" fill="#e6edf3" font-size="22" font-weight="bold" font-family="Arial,Helvetica,sans-serif">228k</text>
-    <text x="90" y="172" text-anchor="middle" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Stars</text>
+    <!-- ×2 label -->
+    <text x="175" y="124" fill="#f0883e" font-size="26" font-weight="bold" font-family="Arial,Helvetica,sans-serif">×2</text>
 
-    <!-- Press and hold indicator -->
-    <text x="160" y="152" fill="#8b949e" font-size="16" font-family="Arial,Helvetica,sans-serif">hold</text>
-    <line x1="195" y1="148" x2="260" y2="148" stroke="#58a6ff" stroke-width="2" stroke-dasharray="6,3"/>
-    <polygon points="256,142 268,148 256,154" fill="#58a6ff" stroke="none"/>
+    <!-- Refresh circular arrow -->
+    <g transform="translate(268, 122)">
+      <path d="M18,0 A18,18 0 1,1 0,-18" fill="none" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round"/>
+      <polygon points="-6,-22 4,-14 -8,-12" fill="#3fb950"/>
+    </g>
 
-    <!-- Browser icon mockup -->
-    <rect x="280" y="108" width="380" height="80" rx="8" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
-    <rect x="280" y="108" width="380" height="24" rx="8" fill="#1c2128"/>
-    <circle cx="298" cy="120" r="5" fill="#f85149"/>
-    <circle cx="314" cy="120" r="5" fill="#d29922"/>
-    <circle cx="330" cy="120" r="5" fill="#3fb950"/>
-    <rect x="350" y="114" width="250" height="12" rx="4" fill="#0d1117"/>
-    <text x="360" y="124" fill="#8b949e" font-size="9" font-family="Arial,Helvetica,sans-serif">github.com/facebook/react</text>
-    <text x="380" y="162" fill="#e6edf3" font-size="16" font-family="Arial,Helvetica,sans-serif">Opens in default browser</text>
+    <text x="320" y="118" fill="#e6edf3" font-size="17" font-family="Arial,Helvetica,sans-serif">Data refreshes instantly</text>
+    <text x="320" y="144" fill="#8b949e" font-size="14" font-family="Arial,Helvetica,sans-serif">Skips the polling timer — fresh data right now</text>
   </g>
 
-  <!-- Marquee Section -->
-  <g transform="translate(1000, 520)">
-    <rect x="0" y="0" width="780" height="200" rx="16" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <!-- ===================== RIGHT HALF: Stream Deck+ ===================== -->
+  <text x="1440" y="172" text-anchor="middle" fill="#ffffff" font-size="28" font-weight="bold" font-family="Arial,Helvetica,sans-serif">🎛️ Stream Deck+</text>
 
-    <text x="40" y="45" fill="#ffffff" font-size="26" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Marquee Scrolling</text>
-    <text x="40" y="78" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">Long text scrolls smoothly instead of truncating</text>
+  <!-- Panel 1: Dial rotate -->
+  <g transform="translate(1000, 195)">
+    <rect x="0" y="0" width="860" height="180" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+    <text x="30" y="34" fill="#ffffff" font-size="21" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Dial Rotate — Cycle &amp; Browse</text>
+    <text x="30" y="58" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Turn the encoder to cycle stats, scroll text, or browse items</text>
 
-    <!-- Key with scrolling text -->
-    <rect x="40" y="100" width="140" height="100" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
-    <rect x="40" y="100" width="140" height="5" rx="2.5" fill="#f78166"/>
-    <text x="110" y="142" text-anchor="middle" fill="#8b949e" font-size="14" font-family="Arial,Helvetica,sans-serif">next.js</text>
-    <text x="110" y="168" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="bold" font-family="Arial,Helvetica,sans-serif">TypeScr..</text>
-    <text x="110" y="188" text-anchor="middle" fill="#8b949e" font-size="12" font-family="Arial,Helvetica,sans-serif">Language</text>
+    <!-- Dial illustration -->
+    <g transform="translate(120, 126)">
+      <!-- Outer bezel -->
+      <circle cx="0" cy="0" r="44" fill="#0d1117" stroke="#30363d" stroke-width="2.5"/>
+      <!-- Knob surface -->
+      <circle cx="0" cy="0" r="34" fill="#161b22" stroke="#484f58" stroke-width="1.5"/>
+      <!-- Grip notches -->
+      <line x1="0" y1="-32" x2="0" y2="-24" stroke="#484f58" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="22" y1="-22" x2="17" y2="-17" stroke="#484f58" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="30" y1="0" x2="24" y2="0" stroke="#484f58" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="-22" y1="-22" x2="-17" y2="-17" stroke="#484f58" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="-30" y1="0" x2="-24" y2="0" stroke="#484f58" stroke-width="1.5" stroke-linecap="round"/>
+      <!-- Position indicator -->
+      <circle cx="0" cy="-18" r="3" fill="#58a6ff"/>
 
-    <text x="200" y="156" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">→</text>
+      <!-- CW rotation arrow (right side) -->
+      <path d="M40,-18 A44,44 0 0,1 40,18" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round"/>
+      <polygon points="36,14 44,24 46,12" fill="#58a6ff"/>
+      <!-- CCW rotation arrow (left side) -->
+      <path d="M-40,18 A44,44 0 0,1 -40,-18" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round"/>
+      <polygon points="-36,-14 -44,-24 -46,-12" fill="#58a6ff"/>
+    </g>
 
-    <rect x="230" y="100" width="140" height="100" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
-    <rect x="230" y="100" width="140" height="5" rx="2.5" fill="#f78166"/>
-    <text x="300" y="142" text-anchor="middle" fill="#8b949e" font-size="14" font-family="Arial,Helvetica,sans-serif">next.js</text>
-    <text x="300" y="168" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="bold" font-family="Arial,Helvetica,sans-serif">peScript</text>
-    <text x="300" y="188" text-anchor="middle" fill="#8b949e" font-size="12" font-family="Arial,Helvetica,sans-serif">Language</text>
-
-    <text x="390" y="156" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">→</text>
-
-    <rect x="420" y="100" width="140" height="100" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
-    <rect x="420" y="100" width="140" height="5" rx="2.5" fill="#f78166"/>
-    <text x="490" y="142" text-anchor="middle" fill="#8b949e" font-size="14" font-family="Arial,Helvetica,sans-serif">next.js</text>
-    <text x="490" y="168" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="bold" font-family="Arial,Helvetica,sans-serif">ript    </text>
-    <text x="490" y="188" text-anchor="middle" fill="#8b949e" font-size="12" font-family="Arial,Helvetica,sans-serif">Language</text>
-
-    <!-- Subtitle -->
-    <text x="600" y="156" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Smooth</text>
-    <text x="600" y="176" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">scrolling</text>
+    <!-- Labels -->
+    <text x="210" y="102" fill="#e6edf3" font-size="16" font-family="Arial,Helvetica,sans-serif">Stars → Issues → Forks → Watchers → ···</text>
+    <text x="210" y="128" fill="#8b949e" font-size="14" font-family="Arial,Helvetica,sans-serif">Clockwise = next · Counter-clockwise = previous</text>
+    <text x="210" y="154" fill="#8b949e" font-size="14" font-family="Arial,Helvetica,sans-serif">Also scrolls marquee text and browses workflows</text>
   </g>
 
-  <!-- Feature callouts at bottom -->
+  <!-- Panel 2: Touch tap to refresh -->
+  <g transform="translate(1000, 395)">
+    <rect x="0" y="0" width="860" height="180" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+    <text x="30" y="34" fill="#ffffff" font-size="21" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Touch Tap — Refresh</text>
+    <text x="30" y="58" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Tap the touch strip to force a data refresh</text>
+
+    <!-- Touch strip mockup -->
+    <rect x="40" y="78" width="200" height="50" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.5"/>
+    <text x="140" y="98" text-anchor="middle" fill="#8b949e" font-size="11" font-family="Arial,Helvetica,sans-serif">react · Stars</text>
+    <text x="140" y="118" text-anchor="middle" fill="#e6edf3" font-size="15" font-weight="bold" font-family="Arial,Helvetica,sans-serif">228k</text>
+
+    <!-- Tap indicator rings -->
+    <circle cx="140" cy="103" r="20" fill="none" stroke="#3fb950" stroke-width="1.5" opacity="0.5" stroke-dasharray="4,3"/>
+    <circle cx="140" cy="103" r="30" fill="none" stroke="#3fb950" stroke-width="1" opacity="0.25" stroke-dasharray="4,3"/>
+
+    <!-- Arrow -->
+    <line x1="260" y1="103" x2="370" y2="103" stroke="#3fb950" stroke-width="2" stroke-dasharray="5,3"/>
+    <polygon points="366,97 378,103 366,109" fill="#3fb950"/>
+
+    <!-- Refresh result strip -->
+    <rect x="390" y="78" width="200" height="50" rx="6" fill="#0d1117" stroke="#3fb950" stroke-width="1.5"/>
+    <text x="490" y="98" text-anchor="middle" fill="#8b949e" font-size="11" font-family="Arial,Helvetica,sans-serif">react · Stars</text>
+    <text x="490" y="118" text-anchor="middle" fill="#3fb950" font-size="15" font-weight="bold" font-family="Arial,Helvetica,sans-serif">228k refreshed</text>
+
+    <text x="390" y="156" fill="#8b949e" font-size="14" font-family="Arial,Helvetica,sans-serif">Fetches latest data from GitHub immediately</text>
+  </g>
+
+  <!-- Panel 3: Long touch to dispatch workflow -->
+  <g transform="translate(1000, 595)">
+    <rect x="0" y="0" width="860" height="180" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+    <text x="30" y="34" fill="#ffffff" font-size="21" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Long Touch — Dispatch Workflow</text>
+    <text x="30" y="58" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Hold the touch strip to trigger a workflow_dispatch event</text>
+
+    <!-- Touch strip with progress bar -->
+    <rect x="40" y="78" width="200" height="50" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.5"/>
+    <text x="140" y="98" text-anchor="middle" fill="#8b949e" font-size="11" font-family="Arial,Helvetica,sans-serif">my-app · CI/CD</text>
+    <text x="140" y="118" text-anchor="middle" fill="#3fb950" font-size="15" font-weight="bold" font-family="Arial,Helvetica,sans-serif">✓ Success</text>
+    <!-- Long-press progress bar -->
+    <rect x="40" y="130" width="140" height="3" rx="1.5" fill="#f0883e" opacity="0.9"/>
+    <rect x="180" y="130" width="60" height="3" rx="1.5" fill="#30363d" opacity="0.5"/>
+
+    <!-- Hold label -->
+    <text x="140" y="150" text-anchor="middle" fill="#f0883e" font-size="13" font-weight="bold" font-family="Arial,Helvetica,sans-serif">hold ≥500ms</text>
+
+    <!-- Arrow -->
+    <line x1="260" y1="103" x2="370" y2="103" stroke="#f0883e" stroke-width="2" stroke-dasharray="5,3"/>
+    <polygon points="366,97 378,103 366,109" fill="#f0883e"/>
+
+    <!-- Dispatch result strip -->
+    <rect x="390" y="78" width="240" height="50" rx="6" fill="#0d1117" stroke="#f0883e" stroke-width="1.5"/>
+    <text x="510" y="98" text-anchor="middle" fill="#8b949e" font-size="11" font-family="Arial,Helvetica,sans-serif">my-app · CI/CD</text>
+    <text x="510" y="118" text-anchor="middle" fill="#dbab09" font-size="15" font-weight="bold" font-family="Arial,Helvetica,sans-serif">● Queued — dispatched!</text>
+
+    <text x="390" y="156" fill="#8b949e" font-size="14" font-family="Arial,Helvetica,sans-serif">Triggers workflow_dispatch on the configured workflow</text>
+  </g>
+
+  <!-- Bottom bar -->
   <rect x="0" y="870" width="1920" height="90" fill="#161b22"/>
   <rect x="0" y="870" width="1920" height="1" fill="#30363d"/>
 
   <g transform="translate(0, 925)">
-    <text x="384" y="0" text-anchor="middle" fill="#e3b341" font-size="20" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Short Press = Cycle Stats</text>
-    <text x="960" y="0" text-anchor="middle" fill="#58a6ff" font-size="20" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Long Press = Open Browser</text>
-    <text x="1536" y="0" text-anchor="middle" fill="#f78166" font-size="20" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Marquee = Smooth Scrolling</text>
+    <text x="192" y="0" text-anchor="middle" fill="#e3b341" font-size="18" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Tap = Cycle Stats</text>
+    <text x="576" y="0" text-anchor="middle" fill="#58a6ff" font-size="18" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Hold = Open Browser</text>
+    <text x="960" y="0" text-anchor="middle" fill="#3fb950" font-size="18" font-weight="bold" font-family="Arial,Helvetica,sans-serif">×2 = Refresh</text>
+    <text x="1344" y="0" text-anchor="middle" fill="#d2a8ff" font-size="18" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Rotate = Browse</text>
+    <text x="1728" y="0" text-anchor="middle" fill="#f0883e" font-size="18" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Touch = Dispatch</text>
   </g>
 </svg>

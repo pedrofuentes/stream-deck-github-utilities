@@ -3,12 +3,12 @@
 A [Stream Deck](https://www.elgato.com/stream-deck) plugin that provides utilities to display information from GitHub directly on your Stream Deck device.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities/releases)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities/releases)
 [![Tests](https://img.shields.io/badge/tests-493%20passed-brightgreen.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities)
 
 ## Overview
 
-Stream Deck GitHub Utilities brings GitHub data to your fingertips. Monitor repositories, track pull requests, view issues, and more — all from your Stream Deck.
+Stream Deck GitHub Utilities brings GitHub data to your fingertips. Monitor repositories, track pull requests, view issues, and more — all from your Stream Deck. Full **Stream Deck+** support with rich touch strip visualizations, dial controls, and encoder interactions across all 12 actions.
 
 > **Note:** This project is under active development. See the [Roadmap](#roadmap) section for planned features.
 
@@ -101,6 +101,68 @@ Show how many commits one branch is ahead/behind another.
 - Auto-refresh on a configurable interval (default 5 minutes)
 - Press to open the branch comparison page on GitHub
 
+### Branch Network *(Stream Deck+ only)*
+
+Display a metro-map style git branch diagram on the Stream Deck+ touch strip.
+
+- Scroll horizontally with the dial, hold-and-rotate for vertical pan
+- Span 2 or 4 adjacent encoder quarters for panoramic views
+- Touch to open the GitHub network graph
+
+### Contribution Heatmap *(Stream Deck+ only)*
+
+Display a GitHub contribution heatmap on the Stream Deck+ touch strip.
+
+- **Profile mode** — contributions across all repos via GraphQL API
+- **Repo mode** — commit activity for a single repository
+- Scroll through weeks with the dial
+- Auto-refresh on a configurable interval
+
+### PR Review Queue
+
+Display the count of pull requests awaiting your review.
+
+- **Urgency gradient** — blue (1 PR) → amber (3) → red (5+)
+- Works across all repos or filtered to a single repository
+- Press to open your review-requested PRs on GitHub
+- Marquee scrolling for long repository names
+
+### Fleet Monitor
+
+Compact repo health dashboard — monitor multiple repos at a glance.
+
+- **Multi-metric display** — workflow status + open PR count + commit sparkline
+- Place 4 across on Stream Deck+ for fleet monitoring
+- Auto-refresh on a configurable interval (default 5 minutes)
+- Press to open the repository on GitHub
+
+### Security Health
+
+Display Dependabot security alert summary with letter grade.
+
+- **A–F grade** based on critical/high/medium/low alert counts
+- **Arc gauge** on Stream Deck+ touch strip with severity breakdown
+- Color-coded: green (A/B), amber (C), red (D/F)
+- Press to open the repository's security page
+
+### Stream Deck+ Encoder Support
+
+All 12 actions support the Stream Deck+ encoder with rich touch strip visualizations:
+
+| Interaction | Action |
+|-------------|--------|
+| **Rotate** | Cycle stats, scroll weeks, browse runs, change range |
+| **Push (press dial)** | Open relevant GitHub page |
+| **Touch tap** | Refresh data immediately |
+| **Long touch** | Context-dependent: dispatch workflow, open repo |
+
+Touch strip visualizations include:
+- **Sparklines** — trend data for repo stats and fleet monitoring
+- **Arc gauges** — security health scoring
+- **Contribution heatmaps** — 52-week grids
+- **Metro-map diagrams** — branch network visualization
+- **Atmospheric status** — workflow status ambient glow
+
 ### Smart Property Inspector
 
 The Property Inspector features a dynamic, auto-populated UX:
@@ -123,6 +185,7 @@ Uses a GitHub Personal Access Token (PAT) stored as a global plugin setting (sha
    - **Pull requests** — read (required for PR Counter)
    - **Issues** — read (required for Issue Counter)
    - **Contents** — read (required for Release Monitor, Branch Comparison)
+   - **Dependabot alerts** — read (required for Security Health)
 2. Enter it once in the Property Inspector — it's shared across all buttons
 3. Authenticated requests get 5,000 API calls per hour
 
@@ -208,6 +271,11 @@ npm run watch
 │   │   ├── release-monitor.ts                     # Release Monitor action
 │   │   ├── commit-activity.ts                     # Commit Activity action
 │   │   └── branch-comparison.ts                   # Branch Comparison action
+│   │   ├── branch-network.ts                      # Branch Network action (SD+ only)
+│   │   ├── contribution-heatmap.ts                 # Contribution Heatmap action (SD+ only)
+│   │   ├── pr-review-queue.ts                      # PR Review Queue action
+│   │   ├── fleet-monitor.ts                        # Fleet Monitor action
+│   │   └── security-health.ts                      # Security Health action
 │   ├── utils/                                     # Shared utilities
 │   │   ├── github.ts                              # Token/repo validation helpers
 │   │   ├── github-api.ts                          # GitHub REST API client
@@ -216,6 +284,8 @@ npm run watch
 │   │   ├── marquee-controller.ts                  # Marquee scrolling text controller
 │   │   ├── polling-coordinator.ts                 # Centralized polling with error backoff
 │   │   ├── spinner-animator.ts                    # Animated loading spinner controller
+│   │   ├── github-graphql.ts                      # GraphQL API client
+│   │   ├── touch-strip-renderer.ts                # Touch strip SVG rendering
 │   │   └── index.ts                               # Barrel exports
 │   ├── types.ts                                   # Shared type definitions
 │   └── plugin.ts                                  # Plugin entry point
@@ -268,13 +338,13 @@ This produces a `.streamDeckPlugin` file in the `release/` directory.
 - [x] **Release Monitor** — Track and display latest release version with pre-release support
 - [x] **Commit Activity** — Show recent commit count (24h / 7d / 30d)
 - [x] **Branch Comparison** — Show ahead/behind counts between two branches
-- [ ] **Stream Deck+ Encoder Support** — Dial/touch strip controls for Repo Stats and Workflow Status with rich visualizations (sparklines, heatmaps, status atmospheres)
-- [ ] **PR Review Queue** — Show review-requested PR count with urgency gradient, browse individual PRs via dial
-- [ ] **Git Branch Network** — Metro-map style branch diagram on touch strip (1, 2, or 4 quarter layouts)
-- [ ] **Workflow Dispatch** — Trigger workflow runs via long-touch on Stream Deck+
-- [ ] **Security Health** — Arc gauge combining Dependabot + Code Scanning alerts
-- [ ] **Contribution Heatmap** — 52-week GitHub contribution grid spanning the full touch strip
-- [ ] **Fleet Monitor** — Monitor multiple repos at a glance across 4 touch strip quarters
+- [x] **Stream Deck+ Encoder Support** — Dial/touch strip controls for Repo Stats and Workflow Status with rich visualizations (sparklines, heatmaps, status atmospheres)
+- [x] **PR Review Queue** — Show review-requested PR count with urgency gradient, browse individual PRs via dial
+- [x] **Git Branch Network** — Metro-map style branch diagram on touch strip (1, 2, or 4 quarter layouts)
+- [x] **Workflow Dispatch** — Trigger workflow runs via long-touch on Stream Deck+
+- [x] **Security Health** — Arc gauge combining Dependabot + Code Scanning alerts
+- [x] **Contribution Heatmap** — 52-week GitHub contribution grid spanning the full touch strip
+- [x] **Fleet Monitor** — Monitor multiple repos at a glance across 4 touch strip quarters
 
 ## Contributing
 

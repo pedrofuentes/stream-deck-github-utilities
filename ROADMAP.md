@@ -1,8 +1,8 @@
 # GitHub Utilities for Stream Deck — Roadmap
 
-> **Version**: v1.5.0 (current)
+> **Version**: v2.0.0 (current)
 > **Last Updated**: March 2026
-> **Status**: Active — Phase 1, Phase 2 & Visual Polish complete; Stream Deck+ encoder support next
+> **Status**: Active — Phases 1–5 complete; 12 actions shipped with full Stream Deck+ support
 
 ---
 
@@ -29,7 +29,7 @@
 
 ## Current State
 
-### Existing Actions (v1.5.0)
+### Existing Actions (v2.0.0)
 
 | Action | Description | API Endpoints Used |
 |--------|-------------|-------------------|
@@ -40,6 +40,11 @@
 | **Release Monitor** | Shows latest release tag, relative time, pre-release indicator; press to open release | `GET /repos/{owner}/{repo}/releases/latest`, `GET /repos/{owner}/{repo}/releases?per_page=1` |
 | **Commit Activity** | Shows commit count for 24h/7d/30d time windows; press to open commits | `GET /repos/{owner}/{repo}/stats/commit_activity` |
 | **Branch Comparison** | Shows ahead/behind counts between two branches; press to open compare | `GET /repos/{owner}/{repo}/compare/{base}...{head}` |
+| **Branch Network** | Metro-map style branch diagram on SD+ touch strip (encoder-only) | `GET /repos/{owner}/{repo}/branches` |
+| **Contribution Heatmap** | 52-week contribution grid on SD+ touch strip; profile (GraphQL) or repo (REST) mode (encoder-only) | GraphQL `contributionsCollection`, `GET /repos/{owner}/{repo}/stats/commit_activity` |
+| **PR Review Queue** | Displays count of PRs awaiting your review with urgency gradient | `GET /search/issues?q=review-requested:@me+type:pr+is:open` |
+| **Fleet Monitor** | Compact multi-metric repo dashboard (workflow + PRs + sparkline) | `GET /repos/{owner}/{repo}/actions/runs`, `GET /search/issues`, `GET /repos/{owner}/{repo}/stats/commit_activity` |
+| **Security Health** | Dependabot alert summary with A–F grade and arc gauge | `GET /repos/{owner}/{repo}/dependabot/alerts` |
 
 ### Existing Infrastructure
 
@@ -53,7 +58,12 @@
 - Short press / long press differentiation (≥500ms threshold)
 - Setup state prompts on unconfigured buttons
 - WebSocket echo suppression for PI ↔ plugin settings sync
-- 463 tests across 16 test files
+- Touch strip renderer (`touch-strip-renderer.ts`) with sparklines, arc gauges, heatmaps, metro-maps
+- GraphQL API client (`github-graphql.ts`) for contribution calendar
+- Custom encoder layout (`layouts/github-full-canvas.json`) — 200×100 full-canvas pixmap
+- Multi-quarter contiguous rendering with shared scroll coordination
+- Double-click detection for instant refresh
+- 12 actions across all 16 test files
 
 ---
 
@@ -137,7 +147,7 @@ Show ahead/behind counts between two branches.
 
 ---
 
-## Phase 3 — Stream Deck+ Encoder Foundation (v1.6.0)
+## Completed — Phase 3 — Stream Deck+ Encoder Foundation ✅
 
 **Priority**: HIGH — biggest differentiator for the plugin. Stream Deck+ encoder and touch strip support transforms every existing action into a richer, more data-dense experience.
 
@@ -182,7 +192,7 @@ Finish the two remaining Phase 1 items alongside encoder work:
 
 ---
 
-## Phase 4 — Encoder Expansion + New Actions (v1.7.0)
+## Completed — Phase 4 — Encoder Expansion + New Actions ✅
 
 Extend encoder support to all remaining actions and introduce new encoder-first actions.
 
@@ -242,7 +252,7 @@ Add workflow dispatch capability to the existing Workflow Status encoder:
 
 ---
 
-## Phase 5 — Security & Data Visualizations (v1.8.0)
+## Completed — Phase 5 — Security & Data Visualizations ✅
 
 Rich data visualization actions leveraging the touch strip's graphical capabilities.
 

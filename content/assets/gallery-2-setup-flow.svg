@@ -40,8 +40,12 @@
     <text x="90" y="285" fill="#e6edf3" font-size="14" font-family="Arial,Helvetica,sans-serif">• Metadata — read</text>
     <text x="90" y="305" fill="#e6edf3" font-size="14" font-family="Arial,Helvetica,sans-serif">• Actions — read</text>
     <text x="90" y="325" fill="#e6edf3" font-size="14" font-family="Arial,Helvetica,sans-serif">• Deployments — read</text>
+    <text x="290" y="285" fill="#e6edf3" font-size="14" font-family="Arial,Helvetica,sans-serif">• Pull requests — read</text>
+    <text x="290" y="305" fill="#e6edf3" font-size="14" font-family="Arial,Helvetica,sans-serif">• Issues — read</text>
+    <text x="290" y="325" fill="#e6edf3" font-size="14" font-family="Arial,Helvetica,sans-serif">• Contents — read</text>
+    <text x="90" y="345" fill="#e6edf3" font-size="14" font-family="Arial,Helvetica,sans-serif">• Dependabot alerts — read</text>
 
-    <text x="70" y="365" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Fine-grained personal access token recommended</text>
+    <text x="70" y="385" fill="#8b949e" font-size="13" font-family="Arial,Helvetica,sans-serif">Fine-grained personal access token recommended</text>
   </g>
 
   <!-- Step 2: Configure -->

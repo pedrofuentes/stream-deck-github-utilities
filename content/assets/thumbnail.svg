@@ -12,6 +12,12 @@
       <stop offset="80%" stop-color="#f78166"/>
       <stop offset="100%" stop-color="#a371f7"/>
     </linearGradient>
+    <!-- Sparkline gradient for touch strip -->
+    <linearGradient id="sparkline-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#58a6ff" stop-opacity="0.1"/>
+      <stop offset="50%" stop-color="#58a6ff" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#3fb950" stop-opacity="0.3"/>
+    </linearGradient>
   </defs>
 
   <!-- Background -->
@@ -20,81 +26,117 @@
   <!-- Top accent line -->
   <rect x="0" y="0" width="1920" height="4" fill="url(#accent-bar)"/>
 
-  <!-- Left side: Text content -->
+  <!-- ============================================ -->
+  <!-- Left side: Title, subtitle, tagline          -->
+  <!-- ============================================ -->
   <g transform="translate(120, 180)">
     <text x="0" y="0" fill="#ffffff" font-size="72" font-weight="bold" font-family="Arial,Helvetica,sans-serif">GitHub Utilities</text>
     <text x="0" y="56" fill="#8b949e" font-size="32" font-family="Arial,Helvetica,sans-serif">for Stream Deck</text>
-    <text x="0" y="130" fill="#e6edf3" font-size="28" font-family="Arial,Helvetica,sans-serif">Your GitHub dashboard, one glance away.</text>
-    <text x="0" y="172" fill="#8b949e" font-size="24" font-family="Arial,Helvetica,sans-serif">Monitor repos, track workflows, watch deployments.</text>
+    <text x="0" y="140" fill="#e6edf3" font-size="28" font-family="Arial,Helvetica,sans-serif">Your GitHub dashboard, one glance away.</text>
+    <text x="0" y="182" fill="#8b949e" font-size="24" font-family="Arial,Helvetica,sans-serif">Now with Stream Deck+ support.</text>
   </g>
 
-  <!-- Right side: Key mockups (3 keys) -->
-  <g transform="translate(1050, 120)">
+  <!-- ============================================ -->
+  <!-- Right side: Key mockups — Row 1 (3 keys)    -->
+  <!-- ============================================ -->
+  <g transform="translate(1050, 100)">
+
     <!-- Key 1: Stars -->
-    <rect x="0" y="0" width="200" height="200" rx="22" fill="#161b22" stroke="#30363d" stroke-width="2"/>
-    <rect x="0" y="0" width="200" height="8" rx="4" fill="#e3b341"/>
-    <text x="100" y="68" text-anchor="middle" fill="#8b949e" font-size="24" font-family="Arial,Helvetica,sans-serif">my-repo</text>
-    <text x="100" y="120" text-anchor="middle" fill="#e6edf3" font-size="44" font-weight="bold" font-family="Arial,Helvetica,sans-serif">1.2k</text>
-    <text x="100" y="165" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">Stars</text>
+    <g>
+      <rect x="0" y="0" width="200" height="200" rx="22" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+      <rect x="0" y="0" width="200" height="6" rx="3" fill="#e3b341"/>
+      <text x="100" y="62" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">react</text>
+      <text x="100" y="118" text-anchor="middle" fill="#e6edf3" font-size="44" font-weight="bold" font-family="Arial,Helvetica,sans-serif">228k</text>
+      <text x="100" y="164" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">Stars</text>
+    </g>
 
-    <!-- Key 2: Issues -->
-    <rect x="230" y="0" width="200" height="200" rx="22" fill="#161b22" stroke="#30363d" stroke-width="2"/>
-    <rect x="230" y="0" width="200" height="8" rx="4" fill="#3fb950"/>
-    <text x="330" y="68" text-anchor="middle" fill="#8b949e" font-size="24" font-family="Arial,Helvetica,sans-serif">my-repo</text>
-    <text x="330" y="120" text-anchor="middle" fill="#e6edf3" font-size="44" font-weight="bold" font-family="Arial,Helvetica,sans-serif">23</text>
-    <text x="330" y="165" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">Issues</text>
+    <!-- Key 2: PR Review Queue -->
+    <g transform="translate(230, 0)">
+      <rect x="0" y="0" width="200" height="200" rx="22" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+      <rect x="0" y="0" width="200" height="6" rx="3" fill="#58a6ff"/>
+      <text x="100" y="62" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">my-org</text>
+      <text x="100" y="118" text-anchor="middle" fill="#e6edf3" font-size="44" font-weight="bold" font-family="Arial,Helvetica,sans-serif">3</text>
+      <text x="100" y="164" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">Review Queue</text>
+    </g>
 
-    <!-- Key 3: Forks -->
-    <rect x="460" y="0" width="200" height="200" rx="22" fill="#161b22" stroke="#30363d" stroke-width="2"/>
-    <rect x="460" y="0" width="200" height="8" rx="4" fill="#58a6ff"/>
-    <text x="560" y="68" text-anchor="middle" fill="#8b949e" font-size="24" font-family="Arial,Helvetica,sans-serif">my-repo</text>
-    <text x="560" y="120" text-anchor="middle" fill="#e6edf3" font-size="44" font-weight="bold" font-family="Arial,Helvetica,sans-serif">89</text>
-    <text x="560" y="165" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">Forks</text>
+    <!-- Key 3: Release Monitor -->
+    <g transform="translate(460, 0)">
+      <rect x="0" y="0" width="200" height="200" rx="22" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+      <rect x="0" y="0" width="200" height="6" rx="3" fill="#3fb950"/>
+      <text x="100" y="62" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">next.js</text>
+      <text x="100" y="118" text-anchor="middle" fill="#e6edf3" font-size="44" font-weight="bold" font-family="Arial,Helvetica,sans-serif">v14.1</text>
+      <text x="100" y="164" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">Release</text>
+    </g>
+
   </g>
 
-  <!-- Bottom row: Key mockups (3 more keys) -->
-  <g transform="translate(1050, 350)">
+  <!-- ============================================ -->
+  <!-- Right side: Key mockups — Row 2 (3 keys)    -->
+  <!-- ============================================ -->
+  <g transform="translate(1050, 330)">
+
     <!-- Key 4: Workflow Success -->
-    <rect x="0" y="0" width="200" height="200" rx="22" fill="#161b22" stroke="#30363d" stroke-width="2"/>
-    <rect x="0" y="0" width="200" height="8" rx="4" fill="#3fb950"/>
-    <text x="100" y="52" text-anchor="middle" fill="#8b949e" font-size="24" font-family="Arial,Helvetica,sans-serif">deploy</text>
-    <!-- Success checkmark icon -->
-    <g transform="translate(64, 70) scale(1.9)">
-      <polyline points="8,19 15,26 28,12" fill="none" stroke="#3fb950" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <g>
+      <rect x="0" y="0" width="200" height="200" rx="22" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+      <rect x="0" y="0" width="200" height="6" rx="3" fill="#3fb950"/>
+      <text x="100" y="50" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">deploy</text>
+      <!-- Checkmark icon -->
+      <g transform="translate(64, 66) scale(2.0)">
+        <polyline points="8,19 15,26 28,12" fill="none" stroke="#3fb950" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <text x="100" y="178" text-anchor="middle" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">Success</text>
     </g>
-    <text x="100" y="180" text-anchor="middle" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">Success</text>
 
-    <!-- Key 5: Workflow In Progress -->
-    <rect x="230" y="0" width="200" height="200" rx="22" fill="#161b22" stroke="#30363d" stroke-width="2"/>
-    <rect x="230" y="0" width="200" height="8" rx="4" fill="#d29922"/>
-    <text x="330" y="52" text-anchor="middle" fill="#8b949e" font-size="24" font-family="Arial,Helvetica,sans-serif">ci-build</text>
-    <!-- In Progress spinner icon -->
-    <g transform="translate(294, 70) scale(1.9)">
-      <path d="M18,6 A12,12 0 1,1 6,18" fill="none" stroke="#d29922" stroke-width="3" stroke-linecap="round"/>
-      <polygon points="6,12 6,20 11,16" fill="#d29922"/>
+    <!-- Key 5: Security Health -->
+    <g transform="translate(230, 0)">
+      <rect x="0" y="0" width="200" height="200" rx="22" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+      <rect x="0" y="0" width="200" height="6" rx="3" fill="#3fb950"/>
+      <text x="100" y="62" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">api</text>
+      <text x="100" y="118" text-anchor="middle" fill="#e6edf3" font-size="44" font-weight="bold" font-family="Arial,Helvetica,sans-serif">A</text>
+      <text x="100" y="164" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">Security</text>
     </g>
-    <text x="330" y="180" text-anchor="middle" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">Running</text>
 
-    <!-- Key 6: Deploying -->
-    <rect x="460" y="0" width="200" height="200" rx="22" fill="#161b22" stroke="#30363d" stroke-width="2"/>
-    <rect x="460" y="0" width="200" height="8" rx="4" fill="#a371f7"/>
-    <text x="560" y="52" text-anchor="middle" fill="#8b949e" font-size="24" font-family="Arial,Helvetica,sans-serif">pipeline</text>
-    <!-- Deploying rocket icon -->
-    <g transform="translate(524, 70) scale(1.9)">
-      <polygon points="18,6 28,28 18,22 8,28" fill="#a371f7"/>
+    <!-- Key 6: Fleet Monitor -->
+    <g transform="translate(460, 0)">
+      <rect x="0" y="0" width="200" height="200" rx="22" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+      <rect x="0" y="0" width="200" height="6" rx="3" fill="#58a6ff"/>
+      <text x="100" y="62" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">fleet</text>
+      <text x="100" y="118" text-anchor="middle" fill="#e6edf3" font-size="38" font-weight="bold" font-family="Arial,Helvetica,sans-serif">✓ 5 PRs</text>
+      <text x="100" y="164" text-anchor="middle" fill="#8b949e" font-size="22" font-family="Arial,Helvetica,sans-serif">Fleet</text>
     </g>
-    <text x="560" y="180" text-anchor="middle" fill="#8b949e" font-size="20" font-family="Arial,Helvetica,sans-serif">Deploying</text>
+
   </g>
 
-  <!-- Bottom feature strip -->
+  <!-- ============================================ -->
+  <!-- Stream Deck+ Touch Strip mockup              -->
+  <!-- ============================================ -->
+  <g transform="translate(1050, 570)">
+    <!-- Touch strip background -->
+    <rect x="0" y="0" width="660" height="50" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+
+    <!-- Sparkline fill area -->
+    <path d="M20,40 L80,30 L140,34 L200,22 L260,26 L320,18 L380,24 L440,14 L500,20 L560,10 L620,16 L640,12 L640,44 L20,44 Z"
+          fill="url(#sparkline-grad)" opacity="0.6"/>
+
+    <!-- Sparkline stroke -->
+    <path d="M20,40 L80,30 L140,34 L200,22 L260,26 L320,18 L380,24 L440,14 L500,20 L560,10 L620,16 L640,12"
+          fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+
+    <!-- Label -->
+    <text x="330" y="72" text-anchor="middle" fill="#8b949e" font-size="16" font-family="Arial,Helvetica,sans-serif">Touch Strip — Stream Deck+</text>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- Bottom feature strip                         -->
+  <!-- ============================================ -->
   <rect x="0" y="860" width="1920" height="100" fill="#161b22"/>
   <rect x="0" y="860" width="1920" height="1" fill="#30363d"/>
 
   <g transform="translate(0, 920)">
-    <text x="240" y="0" text-anchor="middle" fill="#e3b341" font-size="22" font-weight="bold" font-family="Arial,Helvetica,sans-serif">10 Stat Types</text>
-    <text x="640" y="0" text-anchor="middle" fill="#3fb950" font-size="22" font-weight="bold" font-family="Arial,Helvetica,sans-serif">14 Status Icons</text>
-    <text x="1040" y="0" text-anchor="middle" fill="#58a6ff" font-size="22" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Smart Dropdowns</text>
-    <text x="1440" y="0" text-anchor="middle" fill="#d2a8ff" font-size="22" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Auto-Refresh</text>
-    <text x="1760" y="0" text-anchor="middle" fill="#f78166" font-size="22" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Press to Cycle</text>
+    <text x="192" y="0" text-anchor="middle" fill="#e3b341" font-size="22" font-weight="bold" font-family="Arial,Helvetica,sans-serif">12 Actions</text>
+    <text x="576" y="0" text-anchor="middle" fill="#3fb950" font-size="22" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Stream Deck+</text>
+    <text x="960" y="0" text-anchor="middle" fill="#58a6ff" font-size="22" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Touch Strip Visuals</text>
+    <text x="1344" y="0" text-anchor="middle" fill="#d2a8ff" font-size="22" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Smart Dropdowns</text>
+    <text x="1728" y="0" text-anchor="middle" fill="#f78166" font-size="22" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Auto-Refresh</text>
   </g>
 </svg>

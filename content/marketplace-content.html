@@ -178,40 +178,40 @@
 
     <h1>GitHub Utilities for Stream Deck</h1>
 
-    <p><strong>Your GitHub dashboard, one glance away.</strong> Monitor repositories, track CI/CD pipelines, and watch deployments — all from your Stream Deck.</p>
+    <p><strong>Your GitHub dashboard, one glance away.</strong> Monitor repositories, track CI/CD pipelines, review PRs, and visualize branch networks — all from your Stream Deck and Stream Deck+.</p>
 
-    <p>GitHub Utilities puts the metrics that matter right at your fingertips. No more switching to browser tabs to check build status or star counts. Every button updates automatically, so your Stream Deck always shows the latest data.</p>
+    <p>12 actions. Full Stream Deck+ encoder support. Touch strip visualizations. No browser tab required.</p>
 
     <hr>
 
     <h2>🔢 Repo Stats</h2>
-    <p>Turn any Stream Deck key into a live repository dashboard. Pick a stat, pick a repo — done.</p>
+    <p>Turn any key into a live repository dashboard. Pick a stat, pick a repo — done.</p>
     <ul>
-      <li><strong>Stars</strong> — stargazer count with gold accent</li>
-      <li><strong>Open Issues</strong> — issue count with green accent</li>
-      <li><strong>Forks</strong> — fork count with blue accent</li>
-      <li><strong>Watchers</strong> — watcher count with purple accent</li>
-      <li><strong>Pull Requests</strong> — open PR count with green accent</li>
-      <li><strong>Language</strong> — primary language with salmon accent</li>
-      <li><strong>Size</strong> — repository size (auto-formatted KB/MB/GB)</li>
-      <li><strong>License</strong> — license type display</li>
-      <li><strong>Default Branch</strong> — branch name display</li>
-      <li><strong>Visibility</strong> — public/private status</li>
+      <li><strong>10 stat types</strong> — Stars, Issues, Forks, Watchers, PRs, Language, Size, License, Branch, Visibility</li>
+      <li><strong>Short press</strong> cycles stats on the fly; <strong>long press</strong> opens GitHub in your browser</li>
+      <li><strong>SD+</strong> — rotate the dial to cycle stats, tap the strip to refresh, see sparkline trends on the touch strip</li>
     </ul>
-    <p><strong>Short press</strong> cycles through stat types on the fly. <strong>Long press</strong> opens the repository in your browser. Text too long? It scrolls automatically with a smooth marquee animation.</p>
 
     <hr>
 
     <h2>⚙️ Workflow Status</h2>
     <p>Monitor GitHub Actions workflows and deployments in real time.</p>
     <ul>
-      <li><strong>Latest run status</strong> — see success, failure, running, queued, cancelled, and more at a glance</li>
-      <li><strong>Color-coded icons</strong> — green for success, red for failure, yellow for in-progress, blue for queued, purple for deploying</li>
-      <li><strong>Deployment tracking</strong> — active deployments show a dedicated view with environment name</li>
-      <li><strong>Smart filtering</strong> — optionally filter by workflow file, branch, or deployment environment</li>
-      <li><strong>Press to refresh</strong> — instant status update on key press</li>
+      <li><strong>14 status states</strong> — success, failure, running, queued, deploying, and more — each with its own color and icon</li>
+      <li><strong>Deployment tracking</strong> — active deployments show environment name with animated indicator</li>
+      <li><strong>Run duration</strong> displayed alongside status</li>
+      <li><strong>SD+</strong> — browse recent runs with the dial, long-touch to dispatch a workflow</li>
     </ul>
-    <p>14 distinct status states, each with its own icon and color, so you always know exactly what's happening.</p>
+
+    <hr>
+
+    <h2>👀 PR Review Queue</h2>
+    <p>See how many pull requests are waiting for your review.</p>
+    <ul>
+      <li><strong>Urgency gradient</strong> — blue (1 PR) → amber (3) → red (5+)</li>
+      <li>Works across all repos or filtered to one</li>
+      <li><strong>SD+</strong> — hero count on the touch strip with repo context</li>
+    </ul>
 
     <hr>
 
@@ -219,8 +219,7 @@
     <p>Dedicated counters for pull requests and issues — accurate numbers at a glance.</p>
     <ul>
       <li><strong>State filter</strong> — open, closed, or all</li>
-      <li><strong>Accurate counts</strong> — uses GitHub's Search API to separate issues from PRs precisely</li>
-      <li>Press to open the PR or issue list on GitHub</li>
+      <li>Uses GitHub's Search API to separate issues from PRs precisely</li>
     </ul>
 
     <hr>
@@ -228,67 +227,78 @@
     <h2>📦 Release Monitor</h2>
     <p>Track the latest release for any repository.</p>
     <ul>
-      <li><strong>Version tag</strong> — shows the release tag (e.g., "v2.3.1") with relative time</li>
-      <li><strong>Pre-release support</strong> — toggle to include pre-releases, with visual indicator</li>
-      <li>Press to open the release page on GitHub</li>
+      <li><strong>Version tag</strong> with relative time (e.g., "v2.3.1 — 3d ago")</li>
+      <li><strong>Pre-release support</strong> with visual indicator</li>
     </ul>
 
     <hr>
 
     <h2>📊 Commit Activity</h2>
-    <p>Show recent commit counts at a glance.</p>
-    <ul>
-      <li><strong>Time range</strong> — last 24 hours, 7 days, or 30 days</li>
-      <li>Press to open the commits page on GitHub</li>
-    </ul>
+    <p>Show recent commit counts — last 24 hours, 7 days, or 30 days.</p>
 
     <hr>
 
     <h2>🌿 Branch Comparison</h2>
-    <p>See how branches diverge with ahead/behind counts.</p>
+    <p>See how branches diverge with ahead/behind counts and color-coded status.</p>
+
+    <hr>
+
+    <h2>🌐 Branch Network <em>(SD+ only)</em></h2>
+    <p>A metro-map style git branch diagram rendered live on the touch strip.</p>
     <ul>
-      <li><strong>Ahead/behind display</strong> — "↑3 ↓2" format with color-coded status</li>
-      <li><strong>Diverged</strong> (yellow), <strong>ahead</strong> (green), <strong>behind</strong> (red), <strong>identical</strong> (teal)</li>
-      <li>Press to open the comparison view on GitHub</li>
+      <li>Scroll horizontally and vertically with the dial</li>
+      <li>Span 2 or 4 adjacent encoder slots for a panoramic view</li>
     </ul>
+
+    <hr>
+
+    <h2>🟩 Contribution Heatmap <em>(SD+ only)</em></h2>
+    <p>Your 52-week GitHub contribution grid on the touch strip — just like your profile page.</p>
+    <ul>
+      <li><strong>Profile mode</strong> — contributions across all repos (via GraphQL)</li>
+      <li><strong>Repo mode</strong> — commit activity for a single repository</li>
+      <li>Scroll through weeks with the dial</li>
+    </ul>
+
+    <hr>
+
+    <h2>🛡️ Security Health</h2>
+    <p>Dependabot alert summary with an A–F letter grade.</p>
+    <ul>
+      <li><strong>Arc gauge</strong> on the SD+ touch strip with severity breakdown</li>
+      <li>Grade based on critical/high/medium/low alert counts</li>
+    </ul>
+
+    <hr>
+
+    <h2>📡 Fleet Monitor</h2>
+    <p>Compact repo health dashboard — place 4 across for a fleet view.</p>
+    <ul>
+      <li>Workflow status + open PR count + commit sparkline in one key</li>
+      <li><strong>SD+</strong> — compact dashboard with trend visualization on the touch strip</li>
+    </ul>
+
+    <hr>
+
+    <h2>🎛️ Stream Deck+ Everywhere</h2>
+    <p>Every action supports the encoder. Rotate dials to cycle data, tap the strip to refresh, push to open GitHub. Touch strip visualizations include sparklines, arc gauges, heatmaps, and atmospheric status effects.</p>
 
     <hr>
 
     <h2>🎯 Smart Property Inspector</h2>
-    <p>Configuration is effortless with the intelligent Property Inspector.</p>
     <ul>
-      <li><strong>One-time token setup</strong> — enter your GitHub PAT once, it's shared across all buttons</li>
-      <li><strong>Searchable dropdowns</strong> — type to filter through repositories, workflows, branches, and environments</li>
-      <li><strong>Auto-populated lists</strong> — repos load from your account, sorted by most recently pushed</li>
-      <li><strong>Cascading filters</strong> — selecting a repo automatically loads its workflows, branches, and environments</li>
-      <li><strong>Private repo support</strong> — private repositories shown with a lock icon indicator</li>
+      <li><strong>One-time token setup</strong> — enter your PAT once, shared across all buttons</li>
+      <li><strong>Searchable dropdowns</strong> — type to filter repos, workflows, branches, environments</li>
+      <li><strong>Cascading filters</strong> — selecting a repo loads its workflows and branches automatically</li>
     </ul>
-
-    <hr>
-
-    <h2>🔒 Privacy First</h2>
-    <p>Your credentials never leave your machine. The GitHub Personal Access Token is stored locally in Stream Deck's plugin settings — it's never transmitted to any third-party server.</p>
 
     <hr>
 
     <h2>📋 Requirements</h2>
     <ul>
-      <li>Stream Deck software version 6.9 or higher</li>
-      <li>macOS 13+ or Windows 10+</li>
-      <li>A GitHub Personal Access Token (free — fine-grained tokens recommended)</li>
+      <li>Stream Deck software 6.9+ · macOS 13+ or Windows 10+</li>
+      <li>GitHub Personal Access Token (fine-grained recommended) with Metadata, Actions, Deployments, Pull Requests, Issues, Contents, and Dependabot Alerts (all read)</li>
     </ul>
-
-    <hr>
-
-    <h2>🚀 Getting Started</h2>
-    <ol>
-      <li><strong>Install</strong> the plugin from the Elgato Marketplace</li>
-      <li><strong>Create</strong> a GitHub Personal Access Token at github.com/settings/tokens with Metadata, Actions, Deployments, Pull requests, Issues, and Contents (all read) permissions</li>
-      <li><strong>Drag</strong> any action onto your Stream Deck</li>
-      <li><strong>Paste</strong> your token in the Settings panel — repositories load automatically</li>
-      <li><strong>Select</strong> a repository and configure your preferences</li>
-      <li><strong>Done!</strong> Your button updates automatically on a configurable interval</li>
-    </ol>
 
     <hr>
 
@@ -309,7 +319,8 @@
   </div>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="rn-150">v1.5.0</button>
+    <button class="tab-btn active" data-tab="rn-200">v2.0.0</button>
+    <button class="tab-btn" data-tab="rn-150">v1.5.0</button>
     <button class="tab-btn" data-tab="rn-140">v1.4.0</button>
     <button class="tab-btn" data-tab="rn-134">v1.3.4</button>
     <button class="tab-btn" data-tab="rn-133">v1.3.3</button>
@@ -323,8 +334,37 @@
 
   <div class="tab-content-wrapper">
 
+    <!-- v2.0.0 -->
+    <div class="tab-panel active" id="rn-200">
+      <div class="content-box rn-box">
+        <h2>v2.0.0 — 2026-03-19</h2>
+        <p>The biggest release yet — Stream Deck+ support and 5 brand-new actions.</p>
+        <h3>Stream Deck+ Support</h3>
+        <ul>
+          <li><strong>Full encoder support</strong> for all 12 actions — rotate dials, tap the touch strip, long-touch for quick actions</li>
+          <li><strong>Touch strip visualizations</strong> — Tufte-inspired sparklines, arc gauges, contribution heatmaps, metro-map branch diagrams, and fleet dashboards rendered directly on the strip</li>
+          <li><strong>Multi-quarter layouts</strong> — heatmaps and branch networks can span 2 or 4 adjacent encoder slots for panoramic views</li>
+          <li><strong>Workflow dispatch</strong> — long-touch the Workflow Status dial to trigger a workflow run</li>
+        </ul>
+        <h3>New Actions</h3>
+        <ul>
+          <li><strong>PR Review Queue</strong> — count of PRs awaiting your review with urgency gradient (blue → amber → red)</li>
+          <li><strong>Fleet Monitor</strong> — compact repo health dashboard: workflow status + PR count + commit sparkline in one key</li>
+          <li><strong>Security Health</strong> — Dependabot alert summary with A–F letter grade and arc gauge visualization</li>
+          <li><strong>Branch Network</strong> — metro-map style git branch diagram on the touch strip (SD+ only)</li>
+          <li><strong>Contribution Heatmap</strong> — 52-week GitHub contribution grid on the touch strip (SD+ only)</li>
+        </ul>
+        <h3>Improvements</h3>
+        <ul>
+          <li>Double-click any keypad button for instant refresh</li>
+          <li>Workflow run duration now displayed on the workflow status button</li>
+          <li>GraphQL API for profile-level contribution calendar data</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- v1.5.0 -->
-    <div class="tab-panel active" id="rn-150">
+    <div class="tab-panel" id="rn-150">
       <div class="content-box rn-box">
         <h2>v1.5.0 — 2026-02-25</h2>
         <p>Reliability and performance improvements under the hood.</p>
