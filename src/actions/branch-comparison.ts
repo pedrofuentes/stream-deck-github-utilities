@@ -15,12 +15,18 @@
 
 import {
 	action,
+	type Action,
 	KeyDownEvent,
 	SingletonAction,
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
 	type SendToPluginEvent,
+} from "@elgato/streamdeck";
+import type {
+	DialDownEvent,
+	DialUpEvent,
+	TouchTapEvent,
 } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
 
@@ -29,6 +35,7 @@ import { parseRepoIdentifier } from "../utils/github";
 import { fetchBranchComparison } from "../utils/github-api";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderBranchComparisonImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage, COLORS } from "../utils/button-renderer";
+import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
 import { PollingCoordinator } from "../utils/polling-coordinator";
 import type { JsonValue } from "@elgato/utils";
@@ -44,8 +51,12 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 	private actionSettings = new Map<string, BranchComparisonSettings>();
 	private lastUrl = new Map<string, string>();
 	private marqueeData = new Map<string, BranchMarqueeData>();
+	private lastKeyUpTime = new Map<string, number>();
+	/** Cached action contexts for O(1) lookup */
+	private actionContexts = new Map<string, Action<BranchComparisonSettings>>();
 
 	override async onWillAppear(ev: WillAppearEvent<BranchComparisonSettings>): Promise<void> {
+		this.actionContexts.set(ev.action.id, ev.action);
 		const settings = ev.payload.settings;
 		this.actionSettings.set(ev.action.id, settings);
 
@@ -61,6 +72,16 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 			await ev.action.setTitle("");
 		}
 
+		if (ev.action.isDial()) {
+			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			if (!settings.repo || !settings.baseBranch || !settings.headBranch || !globalSettings.githubToken) {
+				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				return;
+			}
+			await ev.action.setFeedback({ canvas: renderStripLoading() });
+		}
+
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		this.polling.start(ev.action.id, () => this.refreshComparison(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -73,9 +94,22 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
+		this.lastKeyUpTime.delete(ev.action.id);
+		this.actionContexts.delete(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<BranchComparisonSettings>): Promise<void> {
+		// Double-click detection → force refresh
+		const now = Date.now();
+		const lastUp = this.lastKeyUpTime.get(ev.action.id) ?? 0;
+		this.lastKeyUpTime.set(ev.action.id, now);
+		if (now - lastUp < 400) {
+			this.lastKeyUpTime.delete(ev.action.id);
+			this.polling.resetBackoff(ev.action.id);
+			await this.refreshComparison(ev.action.id);
+			return;
+		}
+
 		const settings = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
 		const repo = cached?.repo ?? settings.repo;
@@ -94,6 +128,45 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 		}
 	}
 
+	/**
+	 * Called when the user presses the dial (Stream Deck+).
+	 * Opens the compare page on GitHub.
+	 */
+	override async onDialDown(ev: DialDownEvent<BranchComparisonSettings>): Promise<void> {
+		const cached = this.actionSettings.get(ev.action.id);
+		const settings = cached ?? ev.payload.settings;
+		const repo = settings.repo;
+		if (!repo) return;
+
+		const url = this.lastUrl.get(ev.action.id);
+		if (url) {
+			await streamDeck.system.openUrl(url);
+		} else {
+			const parsed = parseRepoIdentifier(repo);
+			const base = settings.baseBranch ?? "main";
+			const head = settings.headBranch ?? "develop";
+			if (parsed) {
+				await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/compare/${base}...${head}`);
+			}
+		}
+	}
+
+	/**
+	 * Called when the user releases the dial (Stream Deck+).
+	 */
+	override async onDialUp(_ev: DialUpEvent<BranchComparisonSettings>): Promise<void> {
+		// No action needed on release
+	}
+
+	/**
+	 * Called when the user taps the touch strip (Stream Deck+).
+	 * Forces a data refresh.
+	 */
+	override async onTouchTap(ev: TouchTapEvent<BranchComparisonSettings>): Promise<void> {
+		this.polling.resetBackoff(ev.action.id);
+		await this.refreshComparison(ev.action.id);
+	}
+
 	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, BranchComparisonSettings>): Promise<void> {
 		try {
 			const data = ev.payload as PIDataRequest;
@@ -107,6 +180,7 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 	}
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<BranchComparisonSettings>): Promise<void> {
+		this.actionContexts.set(ev.action.id, ev.action);
 		const incoming = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
 		const settings: BranchComparisonSettings = { ...cached, ...incoming };
@@ -130,6 +204,17 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 			await ev.action.setTitle("");
 		}
 
+		if (ev.action.isDial()) {
+			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			if (!settings.repo || !settings.baseBranch || !settings.headBranch || !globalSettings.githubToken) {
+				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				this.polling.stop(ev.action.id);
+				return;
+			}
+			await ev.action.setFeedback({ canvas: renderStripLoading() });
+		}
+
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		this.polling.restart(ev.action.id, () => this.refreshComparison(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -142,13 +227,18 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 
 		const gen = this.polling.incrementGeneration(actionId);
 
-		const actionContext = [...this.actions].find((a) => a.id === actionId);
-		if (!actionContext || !actionContext.isKey()) return;
+		const actionContext = this.actionContexts.get(actionId);
+		if (!actionContext) return;
+
+		const isDial = actionContext.isDial();
 
 		const parsed = parseRepoIdentifier(settings.repo);
 		if (!parsed) {
-			await actionContext.setImage(renderErrorImage("Invalid"));
-			await actionContext.setTitle("");
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("Invalid"));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError("Invalid repo") });
 			return;
 		}
 
@@ -156,8 +246,11 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			const token = globalSettings.githubToken;
 			if (!token) {
-				await actionContext.setImage(renderUnconfiguredImage());
-				await actionContext.setTitle("");
+				if (actionContext.isKey()) {
+					await actionContext.setImage(renderUnconfiguredImage());
+					await actionContext.setTitle("");
+				}
+				if (isDial) await actionContext.setFeedback({ canvas: renderStripUnconfigured() });
 				return;
 			}
 
@@ -192,6 +285,12 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 			await this.renderWithMarquee(actionId);
 			this.updateMarqueeTimer(actionId);
 
+			if (isDial) {
+				await actionContext.setFeedback({
+					canvas: renderStatStrip(displayText, "branches", undefined, parsed.repo),
+				});
+			}
+
 			this.polling.reportSuccess(actionId);
 			this.lastUrl.set(actionId, comparison.html_url);
 			streamDeck.logger.debug(`Branch comparison updated: ${settings.repo} ${settings.headBranch}→${settings.baseBranch} ${displayText}`);
@@ -207,8 +306,11 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 			else if (message.includes("Access denied")) errorLabel = "No Access";
 
 			this.polling.reportError(actionId);
-			await actionContext.setImage(renderErrorImage(errorLabel));
-			await actionContext.setTitle("");
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage(errorLabel));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError(errorLabel) });
 		}
 	}
 
@@ -230,7 +332,7 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 
 	private async renderWithMarquee(actionId: string): Promise<void> {
 		const md = this.marqueeData.get(actionId);
-		const actionContext = [...this.actions].find((a) => a.id === actionId);
+		const actionContext = this.actionContexts.get(actionId);
 		if (!md || !actionContext?.isKey()) return;
 
 		const displayName = md.line1.needsAnimation()

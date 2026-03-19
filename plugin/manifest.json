@@ -170,9 +170,9 @@
       "Encoder": {
         "layout": "layouts/github-full-canvas.json",
         "TriggerDescription": {
-          "Rotate": "Scroll Timeline",
-          "Push": "Open Network",
-          "Touch": "Refresh"
+          "Rotate": "Scroll ↔",
+          "Push": "Hold + Rotate ↕",
+          "Touch": "Open Network"
         }
       },
       "States": [
@@ -185,6 +185,29 @@
       "UserTitleEnabled": false,
       "UUID": "com.pedrofuentes.github-utilities.branch-network",
       "PropertyInspectorPath": "ui/branch-network.html"
+    },
+    {
+      "Icon": "imgs/actions/contribution-heatmap/icon",
+      "Name": "Contribution Heatmap",
+      "Controllers": ["Encoder"],
+      "Encoder": {
+        "layout": "layouts/github-full-canvas.json",
+        "TriggerDescription": {
+          "Rotate": "Scroll Weeks",
+          "Push": "Open Activity",
+          "Touch": "Refresh"
+        }
+      },
+      "States": [
+        {
+          "Image": "imgs/actions/contribution-heatmap/key",
+          "ShowTitle": false
+        }
+      ],
+      "Tooltip": "Display a GitHub contribution heatmap on the touch strip",
+      "UserTitleEnabled": false,
+      "UUID": "com.pedrofuentes.github-utilities.contribution-heatmap",
+      "PropertyInspectorPath": "ui/contribution-heatmap.html"
     },
     {
       "Icon": "imgs/actions/pr-review-queue/icon",
@@ -208,6 +231,51 @@
       "UserTitleEnabled": false,
       "UUID": "com.pedrofuentes.github-utilities.pr-review-queue",
       "PropertyInspectorPath": "ui/pr-review-queue.html"
+    },
+    {
+      "Icon": "imgs/actions/fleet-monitor/icon",
+      "Name": "Fleet Monitor",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/github-full-canvas.json",
+        "TriggerDescription": {
+          "Rotate": "Refresh",
+          "Push": "Open Repo",
+          "Touch": "Refresh"
+        }
+      },
+      "States": [
+        {
+          "Image": "imgs/actions/fleet-monitor/key",
+          "ShowTitle": false
+        }
+      ],
+      "Tooltip": "Compact repository health monitor — place 4 across for fleet view",
+      "UserTitleEnabled": false,
+      "UUID": "com.pedrofuentes.github-utilities.fleet-monitor",
+      "PropertyInspectorPath": "ui/fleet-monitor.html"
+    },
+    {
+      "Icon": "imgs/actions/security-health/icon",
+      "Name": "Security Health",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/github-full-canvas.json",
+        "TriggerDescription": {
+          "Push": "Open Security",
+          "Touch": "Refresh"
+        }
+      },
+      "States": [
+        {
+          "Image": "imgs/actions/security-health/key",
+          "ShowTitle": false
+        }
+      ],
+      "Tooltip": "Display security health (Dependabot alerts) with arc gauge",
+      "UserTitleEnabled": false,
+      "UUID": "com.pedrofuentes.github-utilities.security-health",
+      "PropertyInspectorPath": "ui/security-health.html"
     }
   ],
   "Author": "Pedro Fuentes",

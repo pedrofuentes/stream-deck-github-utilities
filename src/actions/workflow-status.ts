@@ -24,7 +24,11 @@ import {
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
+	type Action,
 	type SendToPluginEvent,
+	type DialRotateEvent,
+	type DialDownEvent,
+	type TouchTapEvent,
 } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
 
@@ -32,8 +36,10 @@ import type { GlobalSettings, WorkflowStatusSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
 import {
 	fetchWorkflowInfo,
+	triggerWorkflowDispatch,
 	getWorkflowDisplayStatus,
 	getWorkflowStatusLabel,
+	formatRunDuration,
 	type DeploymentState,
 } from "../utils/github-api";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
@@ -44,6 +50,7 @@ import {
 	renderErrorImage,
 	renderUnconfiguredImage,
 } from "../utils/button-renderer";
+import { renderWorkflowStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
 import { PollingCoordinator } from "../utils/polling-coordinator";
 import type { JsonValue } from "@elgato/utils";
@@ -57,7 +64,7 @@ const LINE3_MAX_VISIBLE = 18; // max chars at 15px
 /** Render variant cache for marquee re-rendering without API calls. */
 type WfRenderVariant =
 	| { type: "deploying"; deployState: string }
-	| { type: "workflow"; statusLabel: string; displayStatus: string; deployLabel?: string }
+	| { type: "workflow"; statusLabel: string; displayStatus: string; deployLabel?: string; duration?: string }
 	| { type: "noRuns" };
 
 /** Cached render data and marquee state per action instance. */
@@ -84,10 +91,23 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	/** Marquee scroll state per action instance */
 	private marqueeData = new Map<string, WfMarqueeData>();
 
+	/** Recent workflow run history per action (for touch strip dots) */
+	private runHistory = new Map<string, string[]>();
+
+	/** Last seen workflow run ID per action (to avoid duplicate dots) */
+	private lastRunId = new Map<string, number>();
+
+	/** Timestamp of last key-down per action (for double-click detection) */
+	private lastKeyUpTime = new Map<string, number>();
+
+	/** Cached action contexts for O(1) lookup */
+	private actionContexts = new Map<string, Action<WorkflowStatusSettings>>();
+
 	/**
 	 * Called when the action becomes visible on the Stream Deck.
 	 */
 	override async onWillAppear(ev: WillAppearEvent<WorkflowStatusSettings>): Promise<void> {
+		this.actionContexts.set(ev.action.id, ev.action);
 		const settings = ev.payload.settings;
 		this.actionSettings.set(ev.action.id, settings);
 
@@ -101,6 +121,16 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 
 			await ev.action.setImage(renderAnimatedSpinner());
 			await ev.action.setTitle("");
+		}
+
+		if (ev.action.isDial()) {
+			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			if (!settings.repo || !globalSettings.githubToken) {
+				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				return;
+			}
+			await ev.action.setFeedback({ canvas: renderStripLoading() });
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
@@ -118,12 +148,27 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
+		this.runHistory.delete(ev.action.id);
+		this.lastRunId.delete(ev.action.id);
+		this.lastKeyUpTime.delete(ev.action.id);
+		this.actionContexts.delete(ev.action.id);
 	}
 
 	/**
 	 * Called when the user presses the button. Opens the workflow run URL in the browser.
 	 */
 	override async onKeyDown(ev: KeyDownEvent<WorkflowStatusSettings>): Promise<void> {
+		// Double-click detection → force refresh
+		const now = Date.now();
+		const lastUp = this.lastKeyUpTime.get(ev.action.id) ?? 0;
+		this.lastKeyUpTime.set(ev.action.id, now);
+		if (now - lastUp < 400) {
+			this.lastKeyUpTime.delete(ev.action.id);
+			this.polling.resetBackoff(ev.action.id);
+			await this.refreshStatus(ev.action.id);
+			return;
+		}
+
 		const settings = ev.payload.settings;
 
 		if (!settings.repo) {
@@ -144,6 +189,41 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 				await streamDeck.system.openUrl(fallbackUrl);
 			}
 		}
+	}
+
+	/**
+	 * Called when the user rotates the dial (Stream Deck+).
+	 * Triggers a data refresh.
+	 */
+	override async onDialRotate(ev: DialRotateEvent<WorkflowStatusSettings>): Promise<void> {
+		this.polling.resetBackoff(ev.action.id);
+		await this.refreshStatus(ev.action.id);
+	}
+
+	/**
+	 * Called when the user presses the dial (Stream Deck+).
+	 * Opens the workflow run URL in the browser.
+	 */
+	override async onDialDown(ev: DialDownEvent<WorkflowStatusSettings>): Promise<void> {
+		const url = this.lastUrl.get(ev.action.id);
+		if (url) {
+			await streamDeck.system.openUrl(url);
+		}
+	}
+
+	/**
+	 * Called when the user taps the touch strip (Stream Deck+).
+	 * Regular tap refreshes; long touch triggers workflow dispatch.
+	 */
+	override async onTouchTap(ev: TouchTapEvent<WorkflowStatusSettings>): Promise<void> {
+		if (ev.payload.hold) {
+			// Long touch → trigger workflow dispatch
+			await this.dispatchWorkflow(ev.action.id);
+			return;
+		}
+		// Regular tap → refresh
+		this.polling.resetBackoff(ev.action.id);
+		await this.refreshStatus(ev.action.id);
 	}
 
 	/**
@@ -191,6 +271,17 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			await ev.action.setTitle("");
 		}
 
+		if (ev.action.isDial()) {
+			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			if (!settings.repo || !globalSettings.githubToken) {
+				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				this.polling.stop(ev.action.id);
+				return;
+			}
+			await ev.action.setFeedback({ canvas: renderStripLoading() });
+		}
+
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		this.polling.restart(ev.action.id, () => this.refreshStatus(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -209,15 +300,19 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		// Generation counter — prevents stale async results from overwriting fresh data
 		const gen = this.polling.incrementGeneration(actionId);
 
-		const actionContext = [...this.actions].find((a) => a.id === actionId);
-		if (!actionContext || !actionContext.isKey()) {
+		const actionContext = this.actionContexts.get(actionId);
+		if (!actionContext) {
 			return;
 		}
 
 		const parsed = parseRepoIdentifier(settings.repo);
 		if (!parsed) {
-			await actionContext.setImage(renderErrorImage("Invalid"));
-			await actionContext.setTitle("");
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("Invalid"));
+				await actionContext.setTitle("");
+			} else if (actionContext.isDial()) {
+				await actionContext.setFeedback({ canvas: renderStripError("Invalid Repo") });
+			}
 			return;
 		}
 
@@ -226,8 +321,12 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			const token = globalSettings.githubToken;
 
 			if (!token) {
-				await actionContext.setImage(renderUnconfiguredImage());
-				await actionContext.setTitle("");
+				if (actionContext.isKey()) {
+					await actionContext.setImage(renderUnconfiguredImage());
+					await actionContext.setTitle("");
+				} else if (actionContext.isDial()) {
+					await actionContext.setFeedback({ canvas: renderStripUnconfigured() });
+				}
 				return;
 			}
 
@@ -262,6 +361,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			} else if (info.latestRun) {
 				const displayStatus = getWorkflowDisplayStatus(info.latestRun);
 				const statusLabel = getWorkflowStatusLabel(displayStatus);
+				const duration = formatRunDuration(info.latestRun.created_at, info.latestRun.updated_at);
 
 				let deployLabel: string | undefined;
 				if (info.deployment) {
@@ -269,10 +369,11 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 					deployLabel = `${envName}: ${info.deployment.state}`;
 				}
 
-				const line3Text = deployLabel ?? statusLabel;
+				// Show duration alongside status when no deploy label
+				const line3Text = deployLabel ?? (duration ? `${statusLabel} · ${duration}` : statusLabel);
 				md.line3Text = line3Text;
 				md.line3.setText(line3Text);
-				md.variant = { type: "workflow", statusLabel, displayStatus, deployLabel };
+				md.variant = { type: "workflow", statusLabel, displayStatus, deployLabel, duration };
 
 				this.lastUrl.set(actionId, info.latestRun.html_url || `https://github.com/${parsed.owner}/${parsed.repo}/actions`);
 			} else {
@@ -283,8 +384,41 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 				this.lastUrl.set(actionId, `https://github.com/${parsed.owner}/${parsed.repo}/actions`);
 			}
 
-			// Render with current marquee window position
+			// Render key with current marquee window position
 			await this.renderWithMarquee(actionId);
+
+			// Update touch strip for encoder
+			if (actionContext.isDial()) {
+				const currentStatus = md.variant.type === "workflow"
+					? md.variant.displayStatus
+					: md.variant.type === "deploying"
+						? "deploying"
+						: "neutral";
+
+				// Only add to history when a NEW run appears
+				const currentRunId = info.latestRun?.id ?? 0;
+				const previousRunId = this.lastRunId.get(actionId) ?? 0;
+				if (currentRunId !== previousRunId && currentRunId !== 0) {
+					this.lastRunId.set(actionId, currentRunId);
+					const history = this.runHistory.get(actionId) ?? [];
+					history.unshift(currentStatus);
+					if (history.length > 12) history.pop();
+					this.runHistory.set(actionId, history);
+				}
+
+				const history = this.runHistory.get(actionId) ?? [];
+
+				const wfName = settings.workflowFile ?? "workflow";
+				const branch = settings.branch ?? "";
+				const statusLabel = md.variant.type === "workflow"
+					? md.variant.statusLabel
+					: md.variant.type === "deploying"
+						? "Deploying"
+						: "No Runs";
+				await actionContext.setFeedback({
+					canvas: renderWorkflowStrip(statusLabel, currentStatus, wfName, branch, "", history),
+				});
+			}
 
 			// Start/stop marquee timer based on animation needs
 			this.updateMarqueeTimer(actionId);
@@ -312,8 +446,58 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			}
 
 			this.polling.reportError(actionId);
-			await actionContext.setImage(renderErrorImage(errorLabel));
-			await actionContext.setTitle("");
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage(errorLabel));
+				await actionContext.setTitle("");
+			} else if (actionContext.isDial()) {
+				await actionContext.setFeedback({ canvas: renderStripError(errorLabel) });
+			}
+		}
+	}
+
+	/**
+	 * Triggers a workflow dispatch for the configured workflow.
+	 * Requires Actions: Write permission. Fails gracefully without it.
+	 */
+	private async dispatchWorkflow(actionId: string): Promise<void> {
+		const settings = this.actionSettings.get(actionId);
+		if (!settings?.repo || !settings?.workflowFile) {
+			streamDeck.logger.debug("Workflow dispatch: no repo or workflow configured");
+			return;
+		}
+
+		const parsed = parseRepoIdentifier(settings.repo);
+		if (!parsed) return;
+
+		try {
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			const token = globalSettings.githubToken;
+			if (!token) return;
+
+			const branch = settings.branch || "main";
+			await triggerWorkflowDispatch(parsed.owner, parsed.repo, settings.workflowFile, branch, token);
+
+			streamDeck.logger.info(`Workflow dispatched: ${settings.workflowFile} on ${branch}`);
+
+			// Show brief confirmation on the action
+			const actionContext = this.actionContexts.get(actionId);
+			if (actionContext?.isKey()) {
+				await actionContext.showOk();
+			}
+
+			// Refresh after a short delay to show the new run
+			setTimeout(() => {
+				this.polling.resetBackoff(actionId);
+				this.refreshStatus(actionId).catch(() => { /* ignore */ });
+			}, 3000);
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : "Unknown error";
+			streamDeck.logger.error(`Workflow dispatch failed: ${message}`);
+
+			const actionContext = this.actionContexts.get(actionId);
+			if (actionContext) {
+				await actionContext.showAlert();
+			}
 		}
 	}
 
@@ -344,7 +528,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	 */
 	private async renderWithMarquee(actionId: string): Promise<void> {
 		const md = this.marqueeData.get(actionId);
-		const actionContext = [...this.actions].find((a) => a.id === actionId);
+		const actionContext = this.actionContexts.get(actionId);
 		if (!md || !actionContext?.isKey()) return;
 
 		const displayName = md.line1.needsAnimation()

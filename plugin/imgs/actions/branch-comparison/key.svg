@@ -1,6 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
-  <rect width="144" height="144" rx="16" fill="#0d1117"/>
-  <rect y="0" width="144" height="6" rx="3" fill="#8b949e"/>
-  <text x="72" y="70" text-anchor="middle" fill="#e6edf3" font-size="30" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Setup</text>
-  <text x="72" y="112" text-anchor="middle" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Open Settings</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144" fill="none">
+  <circle cx="52" cy="48" r="8" fill="none" stroke="white" stroke-width="3"/>
+  <circle cx="92" cy="48" r="8" fill="none" stroke="white" stroke-width="3"/>
+  <circle cx="72" cy="96" r="8" fill="none" stroke="white" stroke-width="3"/>
+  <line x1="52" y1="56" x2="52" y2="72" stroke="white" stroke-width="3"/>
+  <line x1="92" y1="56" x2="92" y2="72" stroke="white" stroke-width="3"/>
+  <path d="M52 72 Q52 84 72 88" fill="none" stroke="white" stroke-width="3"/>
+  <path d="M92 72 Q92 84 72 88" fill="none" stroke="white" stroke-width="3"/>
 </svg>

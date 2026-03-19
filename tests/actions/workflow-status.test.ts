@@ -555,6 +555,7 @@ describe("WorkflowStatusAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
+			(action as any).actionContexts.set("wf-14", mockAction);
 
 			setupFetchMock([makeRunData({ name: "Deploy" })]);
 
@@ -575,6 +576,7 @@ describe("WorkflowStatusAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
+			(action as any).actionContexts.set("wf-15", mockAction);
 
 			setupFetchMock([makeRunData()]);
 
@@ -672,6 +674,208 @@ describe("WorkflowStatusAction", () => {
 			await action.onWillAppear?.(ev as never);
 
 			expect(lastImage(mockAction)).toContain("Rate Limited");
+		});
+	});
+
+	// ── onTouchTap / dispatchWorkflow ──────────────
+
+	describe("onTouchTap", () => {
+		function createTouchTapEvent(actionMock: ReturnType<typeof createMockKeyAction>, settings: Record<string, unknown>, hold = false) {
+			return { action: actionMock, payload: { settings, hold } };
+		}
+
+		it("refreshes on regular tap (hold=false)", async () => {
+			const mockAction = createMockKeyAction("wf-touch-1");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			setupFetchMock();
+
+			// First appear to set settings
+			const appearEv = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(appearEv as never);
+
+			mockAction.setImage.mockClear();
+
+			const ev = createTouchTapEvent(mockAction, settings, false);
+			await action.onTouchTap?.(ev as never);
+
+			// Should have called setImage again for refresh
+			expect(mockAction.setImage).toHaveBeenCalled();
+		});
+
+		it("dispatches workflow on long touch (hold=true)", async () => {
+			const mockAction = createMockKeyAction("wf-touch-2");
+			const settings = { repo: "owner/repo", workflowFile: "deploy.yml", branch: "main" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			// Set up fetch to handle both workflow runs and the dispatch call
+			const fetchMock = vi.mocked(globalThis.fetch);
+			fetchMock.mockImplementation((url: string | URL | Request) => {
+				const urlStr = typeof url === "string" ? url : url.toString();
+				if (urlStr.includes("/dispatches")) {
+					return Promise.resolve({
+						ok: true,
+						status: 204,
+						headers: makeHeaders(),
+					} as unknown as Response);
+				}
+				return Promise.resolve(makeWorkflowRunsResponse([makeRunData()]));
+			});
+
+			// Appear to register settings
+			const appearEv = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(appearEv as never);
+
+			mockAction.showOk.mockClear();
+
+			const ev = createTouchTapEvent(mockAction, settings, true);
+			await action.onTouchTap?.(ev as never);
+
+			// Should have called the dispatch endpoint
+			const dispatchCall = fetchMock.mock.calls.find((c) => {
+				const url = typeof c[0] === "string" ? c[0] : c[0]?.toString() ?? "";
+				return url.includes("/dispatches");
+			});
+			expect(dispatchCall).toBeDefined();
+
+			// Should show OK feedback
+			expect(mockAction.showOk).toHaveBeenCalled();
+		});
+
+		it("does nothing on long touch when no workflowFile is configured", async () => {
+			const mockAction = createMockKeyAction("wf-touch-3");
+			const settings = { repo: "owner/repo" }; // no workflowFile
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			setupFetchMock();
+
+			const appearEv = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(appearEv as never);
+
+			const fetchCallsBefore = vi.mocked(globalThis.fetch).mock.calls.length;
+
+			const ev = createTouchTapEvent(mockAction, settings, true);
+			await action.onTouchTap?.(ev as never);
+
+			// No dispatch call should have been made (only the original setup calls)
+			const dispatchCalls = vi.mocked(globalThis.fetch).mock.calls.slice(fetchCallsBefore).filter((c) => {
+				const url = typeof c[0] === "string" ? c[0] : c[0]?.toString() ?? "";
+				return url.includes("/dispatches");
+			});
+			expect(dispatchCalls).toHaveLength(0);
+		});
+
+		it("shows alert on dispatch failure", async () => {
+			const mockAction = createMockKeyAction("wf-touch-4");
+			const settings = { repo: "owner/repo", workflowFile: "deploy.yml", branch: "main" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			const fetchMock = vi.mocked(globalThis.fetch);
+			fetchMock.mockImplementation((url: string | URL | Request) => {
+				const urlStr = typeof url === "string" ? url : url.toString();
+				if (urlStr.includes("/dispatches")) {
+					return Promise.resolve({
+						ok: false,
+						status: 403,
+						headers: makeHeaders(),
+					} as unknown as Response);
+				}
+				return Promise.resolve(makeWorkflowRunsResponse([makeRunData()]));
+			});
+
+			const appearEv = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(appearEv as never);
+
+			mockAction.showAlert.mockClear();
+
+			const ev = createTouchTapEvent(mockAction, settings, true);
+			await action.onTouchTap?.(ev as never);
+
+			expect(mockAction.showAlert).toHaveBeenCalled();
+		});
+
+		it("does nothing on long touch when no token is set", async () => {
+			const mockAction = createMockKeyAction("wf-touch-5");
+			const settings = { repo: "owner/repo", workflowFile: "deploy.yml" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			setupFetchMock();
+
+			// Appear with valid token to register settings
+			const appearEv = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(appearEv as never);
+
+			// Now remove token for the dispatch call
+			mockGetGlobalSettings.mockResolvedValue({ githubToken: "" });
+
+			const ev = createTouchTapEvent(mockAction, settings, true);
+			await action.onTouchTap?.(ev as never);
+
+			// Should not have called showOk or showAlert
+			const fetchCallsAfterAppear = vi.mocked(globalThis.fetch).mock.calls.filter((c) => {
+				const url = typeof c[0] === "string" ? c[0] : c[0]?.toString() ?? "";
+				return url.includes("/dispatches");
+			});
+			expect(fetchCallsAfterAppear).toHaveLength(0);
+		});
+
+		it("uses 'main' as default branch when none configured", async () => {
+			const mockAction = createMockKeyAction("wf-touch-6");
+			const settings = { repo: "owner/repo", workflowFile: "deploy.yml" }; // no branch
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			const fetchMock = vi.mocked(globalThis.fetch);
+			fetchMock.mockImplementation((url: string | URL | Request) => {
+				const urlStr = typeof url === "string" ? url : url.toString();
+				if (urlStr.includes("/dispatches")) {
+					return Promise.resolve({
+						ok: true,
+						status: 204,
+						headers: makeHeaders(),
+					} as unknown as Response);
+				}
+				return Promise.resolve(makeWorkflowRunsResponse([makeRunData()]));
+			});
+
+			const appearEv = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(appearEv as never);
+
+			const ev = createTouchTapEvent(mockAction, settings, true);
+			await action.onTouchTap?.(ev as never);
+
+			// Find the dispatch call and verify the body ref
+			const dispatchCall = fetchMock.mock.calls.find((c) => {
+				const url = typeof c[0] === "string" ? c[0] : c[0]?.toString() ?? "";
+				return url.includes("/dispatches");
+			});
+			expect(dispatchCall).toBeDefined();
+			const body = JSON.parse(dispatchCall![1]?.body as string);
+			expect(body.ref).toBe("main");
 		});
 	});
 });

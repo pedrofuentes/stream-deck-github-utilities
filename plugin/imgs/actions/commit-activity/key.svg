@@ -1,6 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
-  <rect width="144" height="144" rx="16" fill="#0d1117"/>
-  <rect y="0" width="144" height="6" rx="3" fill="#8b949e"/>
-  <text x="72" y="70" text-anchor="middle" fill="#e6edf3" font-size="30" font-weight="bold" font-family="Arial,Helvetica,sans-serif">Setup</text>
-  <text x="72" y="112" text-anchor="middle" fill="#8b949e" font-size="15" font-family="Arial,Helvetica,sans-serif">Open Settings</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144" fill="none">
+  <circle cx="72" cy="72" r="30" fill="none" stroke="white" stroke-width="3.5"/>
+  <line x1="72" y1="72" x2="72" y2="52" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <line x1="72" y1="72" x2="88" y2="72" stroke="white" stroke-width="3" stroke-linecap="round"/>
 </svg>

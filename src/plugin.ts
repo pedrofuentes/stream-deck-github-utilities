@@ -16,7 +16,10 @@ import { ReleaseMonitorAction } from "./actions/release-monitor";
 import { CommitActivityAction } from "./actions/commit-activity";
 import { BranchComparisonAction } from "./actions/branch-comparison";
 import { BranchNetworkAction } from "./actions/branch-network";
+import { ContributionHeatmapAction } from "./actions/contribution-heatmap";
 import { PRReviewQueueAction } from "./actions/pr-review-queue";
+import { FleetMonitorAction } from "./actions/fleet-monitor";
+import { SecurityHealthAction } from "./actions/security-health";
 
 // Configure the logger
 streamDeck.logger.setLevel("debug");
@@ -30,7 +33,10 @@ streamDeck.actions.registerAction(new ReleaseMonitorAction());
 streamDeck.actions.registerAction(new CommitActivityAction());
 streamDeck.actions.registerAction(new BranchComparisonAction());
 streamDeck.actions.registerAction(new BranchNetworkAction());
+streamDeck.actions.registerAction(new ContributionHeatmapAction());
 streamDeck.actions.registerAction(new PRReviewQueueAction());
+streamDeck.actions.registerAction(new FleetMonitorAction());
+streamDeck.actions.registerAction(new SecurityHealthAction());
 
 // Connect to the Stream Deck
 streamDeck.connect();

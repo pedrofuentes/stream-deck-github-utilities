@@ -289,7 +289,7 @@ export function getStatUrl(owner: string, repo: string, statType: StatType): str
 		case "license":
 			return `${base}`;
 		case "default_branch":
-			return `${base}/tree/${repo}`;
+			return `${base}`;
 		case "visibility":
 			return `${base}/settings`;
 	}
@@ -685,6 +685,48 @@ export async function fetchCommitActivity(
 		total += weeks[i].total;
 	}
 	return total;
+}
+
+/**
+ * Fetches raw weekly commit activity data for a repository.
+ * Returns the full 52-week history with daily breakdowns, suitable for
+ * rendering contribution heatmaps.
+ *
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param token - GitHub personal access token
+ * @returns Array of weekly commit data, or null if still computing
+ * @throws {GitHubApiError} on API errors
+ */
+export async function fetchCommitActivityWeeks(
+	owner: string,
+	repo: string,
+	token?: string,
+): Promise<CommitActivityWeek[] | null> {
+	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/stats/commit_activity`;
+	const headers = buildHeaders(token);
+
+	const response = await fetch(url, { headers });
+	const rateLimitInfo = parseRateLimitHeaders(response.headers);
+
+	// Stats endpoints return 202 while computing — data not ready yet
+	if (response.status === 202) {
+		return null;
+	}
+
+	if (response.status === 204) {
+		return [];
+	}
+
+	if (!response.ok) {
+		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
+	}
+
+	const weeks = (await response.json()) as CommitActivityWeek[];
+	if (!Array.isArray(weeks)) {
+		return [];
+	}
+	return weeks;
 }
 
 /** Branch comparison data */
@@ -1148,6 +1190,56 @@ function handleApiError(status: number, rateLimitInfo: RateLimitInfo, owner: str
 	}
 
 	throw new GitHubApiError(`GitHub API error (${status})`, status, rateLimitInfo);
+}
+
+// ─── Security Alert APIs ────────────────────────────────────────────
+
+/** Dependabot alert severity levels */
+export type AlertSeverity = "critical" | "high" | "medium" | "low";
+
+/** Summary of security alerts for a repository */
+export interface SecurityAlertSummary {
+	critical: number;
+	high: number;
+	medium: number;
+	low: number;
+	total: number;
+}
+
+/**
+ * Fetches open Dependabot alerts and summarizes by severity.
+ * Requires `Dependabot alerts: Read` permission.
+ *
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param token - GitHub PAT
+ * @returns Alert summary with counts by severity
+ * @throws {GitHubApiError} on API errors
+ */
+export async function fetchDependabotAlerts(
+	owner: string,
+	repo: string,
+	token: string,
+): Promise<SecurityAlertSummary> {
+	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dependabot/alerts?state=open&per_page=100`;
+	const headers = buildHeaders(token);
+	const response = await fetch(url, { headers });
+
+	if (!response.ok) {
+		const rateLimitInfo = parseRateLimitHeaders(response.headers);
+		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
+	}
+
+	const alerts = await response.json() as Array<{ security_advisory?: { severity?: string } }>;
+	const summary: SecurityAlertSummary = { critical: 0, high: 0, medium: 0, low: 0, total: 0 };
+	for (const alert of alerts) {
+		const severity = alert.security_advisory?.severity ?? "low";
+		if (severity in summary && severity !== "total") {
+			summary[severity as AlertSeverity]++;
+		}
+		summary.total++;
+	}
+	return summary;
 }
 
 // ─── Property Inspector Data Source APIs ────────────────────────────

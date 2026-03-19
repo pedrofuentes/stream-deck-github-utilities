@@ -1,0 +1,340 @@
+/**
+ * Contribution Heatmap Action — displays a GitHub contribution grid
+ * on the Stream Deck+ touch strip.
+ *
+ * Encoder-only action designed for the Stream Deck+ touch strip.
+ * Shows weekly commit activity as a color-intensity heatmap grid.
+ *
+ * @author Pedro Fuentes <git@pedrofuent.es>
+ * @copyright Pedro Pablo Fuentes Schuster
+ * @license MIT
+ */
+
+import {
+	action,
+	SingletonAction,
+	WillAppearEvent,
+	WillDisappearEvent,
+	DidReceiveSettingsEvent,
+	type Action,
+	type SendToPluginEvent,
+	type DialRotateEvent,
+	type DialDownEvent,
+	type TouchTapEvent,
+} from "@elgato/streamdeck";
+import streamDeck from "@elgato/streamdeck";
+
+import type { GlobalSettings, ContributionHeatmapSettings } from "../types";
+import { parseRepoIdentifier } from "../utils/github";
+import { fetchCommitActivityWeeks } from "../utils/github-api";
+import { fetchContributionCalendar, calendarToWeeklyData } from "../utils/github-graphql";
+import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
+import { renderHeatmapStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
+import { PollingCoordinator } from "../utils/polling-coordinator";
+import type { JsonValue } from "@elgato/utils";
+
+const DEFAULT_REFRESH_INTERVAL = 300;
+const MIN_REFRESH_INTERVAL = 30;
+
+/**
+ * Reorder days from GitHub API format [Sun, Mon, ..., Sat]
+ * to heatmap display format [Mon, Tue, ..., Sun].
+ */
+function reorderDays(apiDays: number[]): number[] {
+	return [...apiDays.slice(1), apiDays[0]];
+}
+
+@action({ UUID: "com.pedrofuentes.github-utilities.contribution-heatmap" })
+export class ContributionHeatmapAction extends SingletonAction<ContributionHeatmapSettings> {
+	private polling = new PollingCoordinator();
+	private actionSettings = new Map<string, ContributionHeatmapSettings>();
+	/** Cached action contexts for O(1) lookup */
+	private actionContexts = new Map<string, Action<ContributionHeatmapSettings>>();
+	private renderTimeout: ReturnType<typeof setTimeout> | null = null;
+	private lastUrl = new Map<string, string>();
+	/** Cached weekly data per action for rendering */
+	private weeklyCache = new Map<string, number[][]>();
+	/** Cached total commits per action */
+	private totalCommitsCache = new Map<string, number>();
+	/** Dial column position per action (0-3) */
+	private dialColumn = new Map<string, number>();
+	/** Shared horizontal scroll offset per scroll key (synced across siblings) */
+	private static sharedScrollH = new Map<string, number>();
+
+	/** Get the scroll map key — repo for per-repo mode, "__user__" for user mode */
+	private getScrollKey(settings?: ContributionHeatmapSettings): string | undefined {
+		if (settings?.dataSource === "user") return "__user__";
+		return settings?.repo;
+	}
+
+	/**
+	 * Compute base offset by finding this instance's relative position among
+	 * siblings with the same scroll key, sorted by column.
+	 */
+	private getBaseOffset(actionId: string): number {
+		const settings = this.actionSettings.get(actionId);
+		const scrollKey = this.getScrollKey(settings);
+		if (!scrollKey) return 0;
+
+		const myColumn = this.dialColumn.get(actionId) ?? 0;
+		const siblingColumns: number[] = [];
+		for (const a of this.actionContexts.values()) {
+			const s = this.actionSettings.get(a.id);
+			if (this.getScrollKey(s) === scrollKey && a.isDial()) {
+				siblingColumns.push(this.dialColumn.get(a.id) ?? 0);
+			}
+		}
+		siblingColumns.sort((a, b) => a - b);
+		const relativeIndex = siblingColumns.indexOf(myColumn);
+		return (relativeIndex >= 0 ? relativeIndex : 0) * 200;
+	}
+
+	/** Compute total horizontal offset: base position + shared scroll */
+	private getTotalOffset(actionId: string): number {
+		const settings = this.actionSettings.get(actionId);
+		const scrollKey = this.getScrollKey(settings);
+		const scroll = scrollKey ? (ContributionHeatmapAction.sharedScrollH.get(scrollKey) ?? 0) : 0;
+		return this.getBaseOffset(actionId) + scroll;
+	}
+
+	override async onWillAppear(ev: WillAppearEvent<ContributionHeatmapSettings>): Promise<void> {
+		this.actionContexts.set(ev.action.id, ev.action);
+		const settings = ev.payload.settings;
+		this.actionSettings.set(ev.action.id, settings);
+
+		if (ev.action.isDial()) {
+			this.dialColumn.set(ev.action.id, "coordinates" in ev.payload ? ev.payload.coordinates.column : 0);
+			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			const needsRepo = settings.dataSource !== "user";
+			if ((needsRepo && !settings.repo) || !globalSettings.githubToken) {
+				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				return;
+			}
+			await ev.action.setFeedback({ canvas: renderStripLoading() });
+		}
+
+		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		this.polling.start(ev.action.id, () => this.refreshHeatmap(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
+		await this.refreshHeatmap(ev.action.id);
+	}
+
+	override onWillDisappear(ev: WillDisappearEvent<ContributionHeatmapSettings>): void {
+		this.polling.stop(ev.action.id);
+		this.actionSettings.delete(ev.action.id);
+		this.actionContexts.delete(ev.action.id);
+		this.lastUrl.delete(ev.action.id);
+		this.weeklyCache.delete(ev.action.id);
+		this.totalCommitsCache.delete(ev.action.id);
+		this.dialColumn.delete(ev.action.id);
+		if (this.renderTimeout) { clearTimeout(this.renderTimeout); this.renderTimeout = null; }
+	}
+
+	override async onDialRotate(ev: DialRotateEvent<ContributionHeatmapSettings>): Promise<void> {
+		const settings = this.actionSettings.get(ev.action.id);
+		const scrollKey = this.getScrollKey(settings);
+		if (!scrollKey) return;
+
+		const hOffset = ContributionHeatmapAction.sharedScrollH.get(scrollKey) ?? 0;
+		const newH = Math.max(0, hOffset + ev.payload.ticks * 10);
+		ContributionHeatmapAction.sharedScrollH.set(scrollKey, newH);
+
+		if (this.renderTimeout) clearTimeout(this.renderTimeout);
+		this.renderTimeout = setTimeout(() => {
+			this.renderAllForScrollKey(scrollKey).catch(() => {});
+		}, 16);
+	}
+
+	override async onDialDown(ev: DialDownEvent<ContributionHeatmapSettings>): Promise<void> {
+		const url = this.lastUrl.get(ev.action.id);
+		if (url) {
+			await streamDeck.system.openUrl(url);
+		}
+	}
+
+	override async onTouchTap(ev: TouchTapEvent<ContributionHeatmapSettings>): Promise<void> {
+		const settings = this.actionSettings.get(ev.action.id);
+		const scrollKey = this.getScrollKey(settings);
+		if (scrollKey) {
+			ContributionHeatmapAction.sharedScrollH.set(scrollKey, 0);
+		}
+		this.polling.resetBackoff(ev.action.id);
+		await this.refreshHeatmap(ev.action.id);
+	}
+
+	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, ContributionHeatmapSettings>): Promise<void> {
+		try {
+			const data = ev.payload as PIDataRequest;
+			const event = data?.event;
+			if (!event || typeof event !== "string") return;
+			await handlePIDataRequest(event, () => ev.action.getSettings());
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : "Unknown error";
+			streamDeck.logger.error(`ContributionHeatmap onSendToPlugin error: ${message}`);
+		}
+	}
+
+	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<ContributionHeatmapSettings>): Promise<void> {
+		this.actionContexts.set(ev.action.id, ev.action);
+		const incoming = ev.payload.settings;
+		const cached = this.actionSettings.get(ev.action.id);
+		const settings: ContributionHeatmapSettings = { ...cached, ...incoming };
+		this.actionSettings.set(ev.action.id, settings);
+
+		if (ev.action.isDial()) {
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			const needsRepo = settings.dataSource !== "user";
+			if ((needsRepo && !settings.repo) || !globalSettings.githubToken) {
+				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				this.polling.stop(ev.action.id);
+				return;
+			}
+			await ev.action.setFeedback({ canvas: renderStripLoading() });
+		}
+
+		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		this.polling.restart(ev.action.id, () => this.refreshHeatmap(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
+		await this.refreshHeatmap(ev.action.id);
+	}
+
+	/** Re-render all instances that share the same scroll key */
+	private async renderAllForScrollKey(scrollKey: string): Promise<void> {
+		for (const actionContext of this.actionContexts.values()) {
+			const settings = this.actionSettings.get(actionContext.id);
+			if (this.getScrollKey(settings) !== scrollKey || !actionContext.isDial()) continue;
+
+			const weeklyData = this.weeklyCache.get(actionContext.id) ?? [];
+			if (weeklyData.length === 0) continue;
+
+			const totalCommits = this.totalCommitsCache.get(actionContext.id) ?? 0;
+			const baseOff = this.getBaseOffset(actionContext.id);
+			const hOff = baseOff + (ContributionHeatmapAction.sharedScrollH.get(scrollKey) ?? 0);
+
+			await actionContext.setFeedback({
+				canvas: renderHeatmapStrip(weeklyData, hOff, totalCommits, baseOff === 0),
+			});
+		}
+	}
+
+	private async refreshHeatmap(actionId: string): Promise<void> {
+		const settings = this.actionSettings.get(actionId);
+		const dataSource = settings?.dataSource ?? "repo";
+
+		// In repo mode, repo is required; in user mode it's optional
+		if (dataSource === "repo" && !settings?.repo) return;
+
+		const gen = this.polling.incrementGeneration(actionId);
+		const actionContext = this.actionContexts.get(actionId);
+		if (!actionContext) return;
+
+		// Validate repo format when in repo mode
+		let parsed: { owner: string; repo: string } | null = null;
+		if (dataSource === "repo") {
+			parsed = parseRepoIdentifier(settings!.repo!);
+			if (!parsed) {
+				if (actionContext.isDial()) await actionContext.setFeedback({ canvas: renderStripError("Invalid repo") });
+				return;
+			}
+		}
+
+		// Check if another instance already has data for the same scroll key
+		const scrollKey = this.getScrollKey(settings);
+		for (const otherAction of this.actionContexts.values()) {
+			if (otherAction.id === actionId) continue;
+			const otherSettings = this.actionSettings.get(otherAction.id);
+			if (this.getScrollKey(otherSettings) === scrollKey) {
+				const cached = this.weeklyCache.get(otherAction.id);
+				if (cached && cached.length > 0) {
+					const totalCommits = this.totalCommitsCache.get(otherAction.id) ?? 0;
+					this.weeklyCache.set(actionId, cached);
+					this.totalCommitsCache.set(actionId, totalCommits);
+					const offset = this.getTotalOffset(actionId);
+					if (actionContext.isDial()) {
+						await actionContext.setFeedback({
+							canvas: renderHeatmapStrip(cached, offset, totalCommits, this.getBaseOffset(actionId) === 0),
+						});
+					}
+					const url = dataSource === "user"
+						? "https://github.com"
+						: `https://github.com/${parsed!.owner}/${parsed!.repo}/graphs/contributors`;
+					this.lastUrl.set(actionId, url);
+					this.polling.reportSuccess(actionId);
+					return;
+				}
+			}
+		}
+
+		try {
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			const token = globalSettings.githubToken;
+			if (!token) {
+				if (actionContext.isDial()) await actionContext.setFeedback({ canvas: renderStripUnconfigured() });
+				return;
+			}
+
+			if (dataSource === "user") {
+				// GraphQL: profile-level contribution calendar
+				const calendar = await fetchContributionCalendar(token);
+				if (!this.polling.isCurrentGeneration(actionId, gen)) return;
+
+				const weeklyData = calendarToWeeklyData(calendar);
+				const totalCommits = calendar.totalContributions;
+
+				this.weeklyCache.set(actionId, weeklyData);
+				this.totalCommitsCache.set(actionId, totalCommits);
+
+				const hOff = this.getTotalOffset(actionId);
+
+				if (actionContext.isDial()) {
+					await actionContext.setFeedback({
+						canvas: renderHeatmapStrip(weeklyData, hOff, totalCommits, this.getBaseOffset(actionId) === 0),
+					});
+				}
+
+				this.lastUrl.set(actionId, "https://github.com");
+				this.polling.reportSuccess(actionId);
+				return;
+			}
+
+			// REST: per-repo commit activity
+			const weeks = await fetchCommitActivityWeeks(parsed!.owner, parsed!.repo, token);
+			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
+
+			if (weeks === null) {
+				if (actionContext.isDial()) {
+					await actionContext.setFeedback({ canvas: renderStripLoading("Computing…") });
+				}
+				return;
+			}
+
+			const weeklyData = weeks.map((w) => reorderDays(w.days));
+			const totalCommits = weeks.reduce((sum, w) => sum + w.total, 0);
+
+			this.weeklyCache.set(actionId, weeklyData);
+			this.totalCommitsCache.set(actionId, totalCommits);
+
+			const hOff = this.getTotalOffset(actionId);
+
+			if (actionContext.isDial()) {
+				await actionContext.setFeedback({
+					canvas: renderHeatmapStrip(weeklyData, hOff, totalCommits, this.getBaseOffset(actionId) === 0),
+				});
+			}
+
+			this.lastUrl.set(actionId, `https://github.com/${parsed!.owner}/${parsed!.repo}/graphs/contributors`);
+			this.polling.reportSuccess(actionId);
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : "Unknown error";
+			const label = dataSource === "user" ? "contribution calendar" : settings?.repo;
+			streamDeck.logger.error(`Failed to fetch ${label}: ${message}`);
+
+			let errorLabel = "Error";
+			if (message.includes("rate limit")) errorLabel = "Rate Limited";
+			else if (message.includes("not found")) errorLabel = "Not Found";
+			else if (message.includes("token") || message.includes("401")) errorLabel = "Auth Error";
+
+			this.polling.reportError(actionId);
+			if (actionContext.isDial()) await actionContext.setFeedback({ canvas: renderStripError(errorLabel) });
+		}
+	}
+}

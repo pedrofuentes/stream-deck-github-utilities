@@ -1,8 +1,8 @@
 # GitHub Utilities for Stream Deck — Roadmap
 
-> **Version**: v1.4.0 (current)
-> **Last Updated**: February 2026
-> **Status**: Active — Phase 1, Phase 2 & Visual Polish complete, Phase 3 next
+> **Version**: v1.5.0 (current)
+> **Last Updated**: March 2026
+> **Status**: Active — Phase 1, Phase 2 & Visual Polish complete; Stream Deck+ encoder support next
 
 ---
 
@@ -11,9 +11,16 @@
 - [Current State](#current-state)
 - [Completed — Phase 1](#completed--phase-1)
 - [Completed — Phase 2](#completed--phase-2)
-- [Phase 3 — Advanced Actions](#phase-3--advanced-actions)
-- [Phase 4 — Stream Deck+ & Polish](#phase-4--stream-deck--polish)
-- [Phase 5 — Future / Stretch Goals](#phase-5--future--stretch-goals)
+- [Phase 3 — Stream Deck+ Encoder Foundation](#phase-3--stream-deck-encoder-foundation-v160)
+- [Phase 4 — Encoder Expansion + New Actions](#phase-4--encoder-expansion--new-actions-v170)
+- [Phase 5 — Security & Data Visualizations](#phase-5--security--data-visualizations-v180)
+- [Phase 6 — Profiles & Ecosystem](#phase-6--profiles--ecosystem-v200)
+- [Touch Strip Design Language](#touch-strip-design-language)
+- [GraphQL API Migration](#graphql-api-migration)
+- [Multi-Quarter Compositions](#multi-quarter-compositions)
+- [Implementation Priority Matrix](#implementation-priority-matrix)
+- [Suggested Next Steps](#suggested-next-steps)
+- [Deferred / Dropped](#deferred--dropped)
 - [Token Permissions Reference](#token-permissions-reference)
 - [API Endpoints Reference](#api-endpoints-reference)
 - [Stream Deck SDK Features Reference](#stream-deck-sdk-features-reference)
@@ -22,7 +29,7 @@
 
 ## Current State
 
-### Existing Actions (v1.4.0)
+### Existing Actions (v1.5.0)
 
 | Action | Description | API Endpoints Used |
 |--------|-------------|-------------------|
@@ -130,271 +137,340 @@ Show ahead/behind counts between two branches.
 
 ---
 
-## Phase 3 — Advanced Actions
+## Phase 3 — Stream Deck+ Encoder Foundation (v1.6.0)
 
-More specialized actions for power users and teams.
+**Priority**: HIGH — biggest differentiator for the plugin. Stream Deck+ encoder and touch strip support transforms every existing action into a richer, more data-dense experience.
 
-### 3.1 Repository Traffic
-**Effort**: Medium | **Priority**: Medium
+### 3.1 Encoder Infrastructure
+**Effort**: Small | **Priority**: P0
 
-Show repo traffic data — views, unique visitors, clones.
+Shared foundation for all encoder-enabled actions:
+- Create `github-full-canvas.json` — shared `pixmap` layout file for full-canvas SVG rendering on the touch strip (200×100)
+- New `touch-strip-renderer.ts` module — SVG generation utilities for touch strip content (sparklines, hero numbers, status glows, run history dots)
+- Manifest updates: `"Controllers": ["Keypad", "Encoder"]` on existing actions, `Encoder.layout` pointing to `github-full-canvas.json`
+- Helper for `setFeedback({ canvas: encodedSVG })` to push rendered SVGs to the strip
 
-**Display**: View count, clone count, or unique visitors with trend arrow
+### 3.2 Repo Stats Encoder
+**Effort**: Medium | **Priority**: P0
 
-**Configuration**:
-- Repository selection
-- Metric: views / unique viewers / clones / unique cloners
-- Refresh interval
+Encoder support for the Repo Stats action:
+- **Touch strip**: Hero number (48–72px) displaying the current stat value, with a sparkline Bézier curve showing recent trend data where applicable (stars, issues, PRs). Left-edge ambient accent color identifies the stat type without reading.
+- **Rotate**: Cycle through stat types (same order as short-press on keypad)
+- **Press**: Open URL for the current stat type (same as long-press on keypad)
+- **Tap (touch)**: Force refresh data immediately
+- **TriggerDescription**: Dynamic labels — e.g., "Next Stat" / "Open GitHub" / "Refresh"
 
-**API**:
-- `GET /repos/{owner}/{repo}/traffic/views` — page view count (last 14 days)
-- `GET /repos/{owner}/{repo}/traffic/clones` — clone count (last 14 days)
-- `GET /repos/{owner}/{repo}/traffic/popular/paths` — top pages
-- `GET /repos/{owner}/{repo}/traffic/popular/referrers` — top referral sources
+**Manifest**: Add `Encoder` block to Repo Stats action definition
+**SDK Features**: `onDialRotate`, `onDialPress`, `onTouchTap`, `setFeedback`, `setTriggerDescription`
 
-**Token**: `Administration: Read` (traffic endpoints require admin permission)
-**URL on press**: `https://github.com/{owner}/{repo}/graphs/traffic`
+### 3.3 Workflow Status Encoder
+**Effort**: Medium | **Priority**: P0
 
-### 3.2 Dependabot Alert Counter
-**Effort**: Medium | **Priority**: Medium
+Encoder support for the Workflow Status action:
+- **Touch strip**: Atmospheric status glow — radial gradient fills the strip with the workflow status color (green/red/yellow/etc.). Run history dots across the bottom as Tufte small-multiples (each dot = one recent run, colored by status).
+- **Rotate**: Browse recent workflow runs (updates touch strip and keypad display)
+- **Press**: Open URL for the currently-selected run
+- **Tap (touch)**: Force refresh
+- **TriggerDescription**: Dynamic labels — e.g., "Browse Runs" / "Open Run" / "Refresh"
 
-Show count of open Dependabot security alerts.
+### 3.4 Remaining Phase 1 Polish
+**Effort**: Small | **Priority**: P1
 
-**Display**: Alert count with severity color (green = 0, yellow = low/medium, red = high/critical)
-
-**Configuration**:
-- Repository selection
-- Severity filter: `critical` | `high` | `medium` | `low`
-- Refresh interval
-
-**API**: `GET /repos/{owner}/{repo}/dependabot/alerts?state=open`
-**Token**: `Dependabot alerts: Read`
-**URL on press**: `https://github.com/{owner}/{repo}/security/dependabot`
-
-### 3.3 Code Scanning Alert Counter
-**Effort**: Medium | **Priority**: Medium
-
-Show count of open code scanning (CodeQL) alerts.
-
-**Display**: Alert count with severity color
-
-**Configuration**:
-- Repository selection
-- Severity filter
-- Tool filter (CodeQL, etc.)
-- Refresh interval
-
-**API**: `GET /repos/{owner}/{repo}/code-scanning/alerts?state=open`
-**Token**: `Code scanning alerts: Read`
-**URL on press**: `https://github.com/{owner}/{repo}/security/code-scanning`
-
-### 3.4 Secret Scanning Alert Counter
-**Effort**: Medium | **Priority**: Low
-
-Show count of open secret scanning alerts.
-
-**Display**: Alert count, red when > 0
-
-**API**: `GET /repos/{owner}/{repo}/secret-scanning/alerts?state=open`
-**Token**: `Secret scanning alerts: Read`
-**URL on press**: `https://github.com/{owner}/{repo}/security/secret-scanning`
-
-### 3.5 Security Dashboard (Combined)
-**Effort**: Large | **Priority**: Medium
-
-A single button that combines Dependabot + Code Scanning + Secret Scanning alert counts into one overview.
-
-**Display**: Total alert count, color-coded by worst severity. Could cycle between different alert types.
-
-**Token**: Requires `Dependabot alerts: Read` + `Code scanning alerts: Read` + `Secret scanning alerts: Read`
-
-### 3.6 Contributor Activity
-**Effort**: Medium | **Priority**: Low
-
-Show top contributor or contributor count for a repo.
-
-**API**:
-- `GET /repos/{owner}/{repo}/stats/contributors` — all contributors with commit counts
-- `GET /repos/{owner}/{repo}/contributors?per_page=1` — contributor list
-
-**Token**: `Metadata: Read`
-
-### 3.7 Milestone Progress
-**Effort**: Medium | **Priority**: Low
-
-Show progress of a specific milestone (open vs closed issues).
-
-**Display**: Progress percentage, visual bar, "12/20" format
-
-**Configuration**:
-- Repository selection
-- Milestone selection (via PI dropdown)
-- Refresh interval
-
-**API**:
-- `GET /repos/{owner}/{repo}/milestones` — list milestones with `open_issues` and `closed_issues`
-- `GET /repos/{owner}/{repo}/milestones/{milestone_number}` — specific milestone
-
-**Token**: `Issues: Read` or `Pull requests: Read`
-**URL on press**: `https://github.com/{owner}/{repo}/milestone/{number}`
-
-### 3.8 GitHub Pages Status
-**Effort**: Medium | **Priority**: Low
-
-Show GitHub Pages deployment status and last build result.
-
-**Display**: Status icon (checkmark/X), last build time
-
-**API**:
-- `GET /repos/{owner}/{repo}/pages` — Pages configuration and status
-- `GET /repos/{owner}/{repo}/pages/builds/latest` — latest build result
-
-**Token**: `Pages: Read`
-**URL on press**: Pages URL from `html_url` field, or `https://github.com/{owner}/{repo}/deployments/activity_log?environment=github-pages`
-
-### 3.9 Actions Usage / Billing
-**Effort**: Medium | **Priority**: Low
-
-Show GitHub Actions minutes usage for the user.
-
-**Display**: Minutes used, percentage of quota
-
-**API**: `GET /users/{username}/settings/billing/usage` (requires Plan permission)
-**Token**: `Plan: Read` (user permission)
+Finish the two remaining Phase 1 items alongside encoder work:
+- **1.3 Workflow Status: Show Run Duration** — Display run duration on the button (and on the touch strip for encoder view)
+- **1.4 Error State Improvements** — Rate limit display, distinct error visuals, `showAlert()` for transient errors (setup state partially addresses this)
 
 ---
 
-## Phase 4 — Stream Deck+ & Polish
+## Phase 4 — Encoder Expansion + New Actions (v1.7.0)
 
-Leveraging Stream Deck+ hardware features and UX improvements.
+Extend encoder support to all remaining actions and introduce new encoder-first actions.
 
-### 4.1 Encoder/Dial Support for Repo Stats
-**Effort**: Medium | **Priority**: Medium
+### 4.1 Encoder for Remaining 5 Actions
+**Effort**: Large | **Priority**: P1
 
-For Stream Deck+ owners, add dial/encoder controller support:
-- **Rotate**: Cycle through stat types (stars → forks → issues → watchers → PRs)
-- **Press**: Open URL for current stat
-- **Touch strip**: Display stat value with icon and label using layout
+Add encoder/touch strip support to the remaining Phase 2 actions:
 
-**Manifest**: Add `"Controllers": ["Keypad", "Encoder"]` and `Encoder.layout` to Repo Stats action
-**SDK Features**: `onDialRotate`, `setFeedback`, `setFeedbackLayout`, `setTriggerDescription`
+- **Commit Activity** — Two touch strip views:
+  - *Heatmap view*: 7×4 grid (28 days) of colored cells showing commit density
+  - *Sparkline view*: Smooth Bézier curve of daily commit counts with area fill gradient and endpoint dot
+  - Rotate cycles time window (24h → 7d → 30d), press opens commits page
+- **Branch Comparison** — Touch strip shows ahead/behind as a divergence diagram (two bar segments from center). Rotate swaps head/base branches, press opens compare page.
+- **PR Counter** — Hero number with accent color, optional mini-bar showing open vs closed ratio. Rotate cycles state filter (open → closed → all), press opens PRs page.
+- **Issue Counter** — Same pattern as PR Counter. Rotate cycles state filter, press opens issues page.
+- **Release Monitor** — Hero version tag with relative time. Sparkline of release frequency if multiple releases exist. Rotate cycles between release details (tag, time, author), press opens release page.
 
-### 4.2 Encoder/Dial Support for Workflow Status
-**Effort**: Medium | **Priority**: Medium
+### 4.2 PR Review Queue (NEW Action)
+**Effort**: Medium | **Priority**: P1
 
-- **Rotate**: Cycle through recent workflow runs
-- **Press**: Open URL for current run
-- **Touch strip**: Display run status, branch, duration using layout
+A new action (button + encoder) showing how many PRs are waiting for your review.
 
-### 4.3 Multi-Repo Dashboard Dial
-**Effort**: Large | **Priority**: Low
+**Button display**: Review-requested PR count with urgency gradient — green (0), yellow (1–3), orange (4–6), red (7+)
+**Touch strip**: Hero count with list of PR titles scrollable via rotate. Urgency gradient background matches the button.
+**Rotate**: Browse individual PRs waiting for review
+**Press**: Open the selected PR (or the review-requested search page if on the count view)
 
-A dial action that lets you cycle through multiple repos and shows stats on the touch strip.
+**API**: `GET /search/issues?q=review-requested:@me+type:pr+is:open`
+**Token**: `Pull requests: Read` (already required)
+**URL on press**: `https://github.com/pulls/review-requested` or individual PR URL
 
-- **Rotate**: Cycle through configured repos
-- **Press**: Open current repo in browser
-- **Touch strip**: Show repo name, stats overview
+### 4.3 Git Branch Network (NEW Encoder-Only Action)
+**Effort**: Large | **Priority**: P1
 
-### 4.4 Bundled Profiles
-**Effort**: Small | **Priority**: Low
+Metro-map style branch diagram rendered on the touch strip. Encoder-only — no keypad button.
 
-Ship pre-configured profiles for common layouts:
-- **DevOps Dashboard**: Workflow status × 4 repos
-- **Open Source Monitor**: Stars + Issues + PRs + Releases
-- **Security Overview**: Dependabot + Code Scanning + Secret Scanning + Workflow Status
+**Touch strip**: Stylized branch topology showing merge/diverge points as a metro/subway map. Branches rendered as colored lines with dots at commit points. Supports **contiguous rendering** across 1, 2, or 4 adjacent encoder quarters for a wider view.
+
+**Rotate**: Scroll the timeline (left = older, right = newer)
+**Press**: Open the network graph page in the browser
+
+**API**: `GET /repos/{owner}/{repo}/commits` (for commit history), `GET /repos/{owner}/{repo}/branches` (for branch topology)
+**Token**: `Contents: Read` (already required)
+**URL on press**: `https://github.com/{owner}/{repo}/network`
+
+### 4.4 Workflow Dispatch
+**Effort**: Medium | **Priority**: P1
+
+Add workflow dispatch capability to the existing Workflow Status encoder:
+- **Long-touch** on the Workflow Status encoder touch strip triggers a workflow dispatch for the configured workflow
+- Confirmation glow before dispatching (touch-and-hold 1.5s)
+- Graceful degradation: if the token only has `Actions: Read`, the long-touch does nothing (no error, no prompt to upgrade)
+- Success/failure feedback via `showOk()` / `showAlert()`
+
+**API**: `POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches`
+**Token**: `Actions: Write` (optional — plugin works fully without it, dispatch simply unavailable)
+
+---
+
+## Phase 5 — Security & Data Visualizations (v1.8.0)
+
+Rich data visualization actions leveraging the touch strip's graphical capabilities.
+
+### 5.1 Security Health (NEW Action)
+**Effort**: Medium | **Priority**: P2
+
+Apple Watch-inspired arc gauge on the touch strip combining Dependabot + Code Scanning alert data into a single health score.
+
+**Button display**: Overall health score (0–100) with color gradient (red → yellow → green)
+**Touch strip**: Circular arc gauge filling from left to right. Severity dots breakdown below the arc — critical (red), high (orange), medium (yellow), low (blue). Total count as hero number inside the arc.
+**Rotate**: Cycle between alert types (All → Dependabot → Code Scanning)
+**Press**: Open the repository security overview page
+**Tap (touch)**: Force refresh
+
+**API**:
+- `GET /repos/{owner}/{repo}/dependabot/alerts?state=open` — Dependabot alerts
+- `GET /repos/{owner}/{repo}/code-scanning/alerts?state=open` — Code scanning alerts
+
+**Token**: `Dependabot alerts: Read` (required), `Code scanning alerts: Read` (optional — graceful degradation if not granted)
+**URL on press**: `https://github.com/{owner}/{repo}/security`
+
+### 5.2 Contribution Heatmap (NEW Encoder-Only Action)
+**Effort**: Medium | **Priority**: P2
+
+GitHub's iconic 52-week contribution grid rendered on the touch strip. Encoder-only — no keypad button.
+
+**Touch strip**: 364 data points rendered as a color-coded grid across 800×100px. Supports **contiguous rendering** across 1 or 4 adjacent encoder quarters. When using 4 quarters, the full 52-week heatmap is displayed seamlessly across all strips. Single quarter shows ~13 weeks.
+
+**Color scale**: GitHub's contribution palette — `#0d1117` (none), `#0e4429`, `#006d32`, `#26a641`, `#39d353` (most)
+**Rotate**: Scroll through weeks (useful in single-quarter mode)
+**Press**: Open the user's contribution page
+
+**API**: `GET /users/{username}/events` (approximation from public events) or GraphQL `contributionsCollection` query
+**Token**: `Metadata: Read`
+
+### 5.3 Fleet Monitor (NEW Action)
+**Effort**: Medium | **Priority**: P2
+
+Compact per-repo summary designed to be placed across 4 encoder quarters for fleet-wide monitoring.
+
+**Touch strip (per quarter)**: Compact layout showing repo name (truncated), workflow status badge (colored dot), open PR count, and a tiny activity sparkline. Each quarter monitors one repo independently.
+
+**Button display**: Aggregate health — "4/4 ✓" or "3/4 ⚠" showing how many monitored repos are healthy
+**Rotate**: Cycle through repos in the quarter (if multiple configured)
+**Press**: Open the currently-displayed repo in the browser
+
+**API**: Reuses existing endpoints — `GET /repos/{owner}/{repo}/actions/runs`, `GET /search/issues?q=...+type:pr+is:open`, `GET /repos/{owner}/{repo}/stats/commit_activity`
+**Token**: Same as existing actions (no new permissions)
+
+---
+
+## Phase 6 — Profiles & Ecosystem (v2.0.0)
+
+Pre-built configurations and ecosystem expansion for effortless setup.
+
+### 6.1 Bundled Profiles
+**Effort**: Small | **Priority**: P3
+
+Ship pre-configured `.streamDeckProfile` files that users can install with one click:
+
+| Profile | Layout | Actions |
+|---------|--------|---------|
+| **GitHub Dashboard** | 4/4 encoders | Stats + Workflow + PRs/Issues + Activity |
+| **Contribution Graph** | 4/4 encoders | Heatmap × 4 (contiguous 52-week view) |
+| **Branch Network** | 4/4 encoders | Branch Network × 4 (contiguous timeline) |
+| **Repo Health** | 3/4 encoders | PR Review + Workflow + Security |
+| **Fleet Monitor** | 4/4 encoders | Fleet × 4 (one repo per quarter) |
 
 **Manifest**: Use `Profiles` property to bundle `.streamDeckProfile` files
 
-### 4.5 Multi-State Button for Workflow Status
-**Effort**: Medium | **Priority**: Low
+### 6.2 Multi-Repo Workflow Grid
+**Effort**: Large | **Priority**: P3
 
-Use the SDK's 2-state feature to toggle between:
-- **State 0**: Latest run status
-- **State 1**: Deployment status
-
-Or: State 0 = normal view, State 1 = detailed view (duration, branch, etc.)
-
-### ✅ 4.6 Visual Polish
-Shipped in **v1.4.0**.
-
-- **Animated loading states** — frame-based spinner SVG animation during API fetches (SpinnerAnimator class)
-- **Consistent color palette** — centralized `COLORS` constant used across all actions (including new accent colors for releases, commits, branches)
-- **Dark theme only** — confirmed OLED Stream Deck displays are always dark; no light theme needed
-- **Typography** — existing dynamic font sizing system (30/26/22/18px breakpoints) adequate
+If demand warrants: a single action that monitors workflows across multiple repos, displaying a grid of status indicators (colored dots) showing fleet health. May be superseded by Fleet Monitor (5.3) depending on user feedback.
 
 ---
 
-## Phase 5 — Future / Stretch Goals
+## Touch Strip Design Language
 
-Ideas that require more research or may depend on future API/SDK capabilities.
+Design principles governing all touch strip / encoder rendering in this plugin.
 
-### 5.1 Notification Counter
-**Effort**: Large | **Priority**: Medium
+### Canvas & Layout
+- **Single `pixmap` layout** (`github-full-canvas.json`) for full rendering freedom — all touch strip content is a 200×100 SVG pushed as a single canvas element via `setFeedback({ canvas })`. No built-in layout widgets.
+- **GitHub dark palette**: True black `#000000` background, `#e6edf3` primary text, accent color per data type (matching the existing `COLORS` constant from `button-renderer.ts`).
 
-Show unread GitHub notification count. Requires the Notifications API which is **not available with fine-grained tokens** — only classic tokens support `GET /notifications`. This would require supporting classic tokens as an alternative auth method.
+### Typography & Data Density
+- **Tufte's data-ink ratio**: Maximize data, minimize chrome. Hero numbers rendered at 48–72px dominate the strip. Minimal labels at 12–14px only where needed for context.
+- **Ambient accent color**: A subtle vertical bar or gradient on the left edge of the strip identifies the stat/action type by color — the user can identify the data without reading text.
 
-**Workaround**: Could poll `GET /repos/{owner}/{repo}/events` for recent activity as a proxy.
+### Sparklines
+- **Smooth Bézier curves** with area fill gradient (accent color at 30% opacity fading to transparent). Endpoint dot marks the current value.
+- Data normalized to strip height; no axis labels, no gridlines — pure data shape.
 
-### 5.2 Workflow Dispatch (Trigger Builds)
-**Effort**: Large | **Priority**: Medium
+### Status Visualization
+- **Atmospheric status glow**: For workflow/deployment status, a radial gradient fills the entire strip with the status color at low opacity, creating an ambient mood that's visible at a glance.
+- **Run history dots**: Tufte small-multiples principle — each dot represents one data point (one workflow run), colored by its conclusion status, arranged in a horizontal row near the bottom of the strip.
 
-Trigger a workflow run from a button press.
+### Multi-Quarter Rendering
+- **Contiguous rendering**: Actions that span multiple encoder quarters (Heatmap, Branch Network, Fleet Monitor) share a global coordinate system. Each quarter renders its portion of the full SVG by offsetting into the shared canvas. The plugin calculates which segment to render based on the action's configured quarter position (1 of 4, 2 of 4, etc.).
 
-**API**: `POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches`
-**Token**: `Actions: Write` (requires write permission — currently read-only)
+---
 
-This is a compelling feature but requires the user to grant write permissions. Could be optional, with the button showing just status when read-only.
+## GraphQL API Migration
 
-### 5.3 Organization Dashboard
-**Effort**: Large | **Priority**: Low
+The plugin now supports GitHub's GraphQL API alongside REST. GraphQL enables richer data with fewer API calls.
 
-For users who work with GitHub organizations:
-- Org-level stats, member count
-- Cross-repo workflow status
-- Org billing/usage
+### Current GraphQL Usage
+- **Contribution Heatmap** (v1.8.0) — `contributionsCollection` query fetches the profile-level contribution calendar (all repos, all contribution types)
 
-**API**: Various `/orgs/{org}/*` endpoints
-**Token**: Various organization-level permissions
+### Planned GraphQL Migration (v2.x)
 
-### 5.4 PR Review Status
-**Effort**: Large | **Priority**: Medium
+**Batched Queries** — Replace multiple REST calls with single GraphQL queries:
+- A single query can fetch repo stats + PR count + latest workflow + latest release simultaneously
+- Reduces API calls from ~4 per action to 1, significantly improving rate limit efficiency
+- Actions sharing the same repo can share a single batched query result
 
-Show PR review status (approved/changes requested/pending review) for a specific PR or for all PRs you need to review.
+**New Actions Enabled by GraphQL:**
+| Action | GraphQL Query | What It Shows |
+|--------|--------------|---------------|
+| **Discussions Monitor** | `repository.discussions` | Discussion count, latest topics, answer status |
+| **Projects V2 Board** | `repository.projectsV2` | Project board status, item counts, progress |
+| **Sponsorship Tracker** | `user.sponsorsListing` | Sponsor count, monthly income (for OSS maintainers) |
+| **Review Requests (Enhanced)** | `search(type:ISSUE)` with review-requested | Richer PR data: review status, checks, mergeable state |
 
-**API**:
-- `GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews`
-- `GET /repos/{owner}/{repo}/pulls?requested_reviewer={username}`
+**Improvements to Existing Actions:**
+| Action | Current (REST) | Improved (GraphQL) |
+|--------|---------------|-------------------|
+| Repo Stats | 1 call per stat | All stats in 1 query |
+| PR Review Queue | Search API (limited fields) | Full PR details (reviews, checks, labels) |
+| Fleet Monitor | 3 parallel REST calls per repo | 1 batched query per repo |
+| Commit Activity | `/stats/commit_activity` (52 weeks max) | `contributionsCollection` (configurable range) |
 
-**Token**: `Pull requests: Read`
+**Architecture for Batched Queries:**
+- A shared `GraphQLQueryCoordinator` will collect all active actions' data needs
+- On each polling tick, build ONE batched query for all actions sharing the same token
+- Distribute results to individual actions
+- Force-refresh on a single action triggers only that action's portion of the query
 
-### 5.5 Commit Status Checks
-**Effort**: Medium | **Priority**: Low
+### Migration Strategy
+- Phase 1 (done): Contribution calendar via GraphQL ✅
+- Phase 2: Batch query coordinator for repo data (stats + PRs + workflows in one call)
+- Phase 3: New GraphQL-only actions (Discussions, Projects V2)
+- Phase 4: Full REST → GraphQL migration for all repo-scoped data
 
-Show combined commit status for a specific branch/commit.
+---
 
-**API**: `GET /repos/{owner}/{repo}/commits/{ref}/status`
-**Token**: `Commit statuses: Read`
+## Multi-Quarter Compositions
 
-### 5.6 Repository Language Breakdown
-**Effort**: Medium | **Priority**: Low
+Approved multi-quarter layouts for Stream Deck+ touch strip. Each layout documents which actions occupy which encoder quarters.
 
-Show language breakdown as a visual bar or list.
+| Layout | Name | Quarters | Composition |
+|--------|------|----------|-------------|
+| **A** | Repository Dashboard | 4/4 | Stats + Workflow + PRs/Issues + Activity |
+| **B** | Full Contribution Heatmap | 4/4 | 52-week heatmap rendered contiguously across all 4 quarters |
+| **C** | Workflow + Deployment Pair | 2/4 | Workflow Status + Workflow Status (different repos or workflows) |
+| **D** | Branch Comparison Head vs Base | 2/4 | Branch Comparison × 2 (head branch quarter + base branch quarter) |
+| **E** | Repo Health Trio | 3/4 | PR Review Queue + Workflow Status + Security Health |
+| **F** | Multi-Repo Fleet Monitor | 4/4 | Fleet Monitor × 4 (one repo per quarter) |
+| **G** | Git Branch Network | 2/4 or 4/4 | Branch Network spanning 2 or 4 quarters for timeline depth |
 
-**API**: `GET /repos/{owner}/{repo}/languages`
-**Token**: `Metadata: Read`
+---
 
-### 5.7 Releases Changelog Quick View
-**Effort**: Large | **Priority**: Low
+## Implementation Priority Matrix
 
-Show latest release notes rendered on the touch strip or as a quick notification.
+| Feature | Effort | Impact | Priority | Phase | Status |
+|---------|--------|--------|----------|-------|--------|
+| ~~Repo Stats: Open URL~~ | Small | High | ~~P0~~ | 1 | ✅ v1.2.0 |
+| ~~Long Press vs Short Press~~ | Medium | Medium | ~~P1~~ | 1 | ✅ v1.2.0 |
+| ~~Repo Stats: Additional Types~~ | Small | Medium | ~~P1~~ | 1 | ✅ v1.2.0 |
+| ~~Setup State Prompt~~ | Small | Medium | ~~P1~~ | 1 | ✅ v1.3.0 |
+| ~~Stability & Polish~~ | Small | High | ~~P0~~ | — | ✅ v1.3.1–v1.3.4 |
+| ~~PR Counter~~ | Medium | High | ~~P0~~ | 2 | ✅ v1.4.0 |
+| ~~Issue Counter~~ | Medium | High | ~~P0~~ | 2 | ✅ v1.4.0 |
+| ~~Release Monitor~~ | Medium | High | ~~P1~~ | 2 | ✅ v1.4.0 |
+| ~~Commit Activity~~ | Medium | Medium | ~~P1~~ | 2 | ✅ v1.4.0 |
+| ~~Branch Comparison~~ | Medium | Medium | ~~P2~~ | 2 | ✅ v1.4.0 |
+| ~~Visual Polish~~ | Medium | Medium | ~~P2~~ | — | ✅ v1.4.0 |
+| ~~v1.5.0 Release~~ | — | — | — | — | ✅ v1.5.0 |
+| Encoder Infrastructure | Small | High | **P0** | 3 | — |
+| Repo Stats Encoder | Medium | High | **P0** | 3 | — |
+| Workflow Status Encoder | Medium | High | **P0** | 3 | — |
+| Workflow Run Duration | Small | Low | **P1** | 3 | Planned |
+| Error State Improvements | Small | Medium | **P1** | 3 | Partial (setup state done) |
+| Encoder for Remaining Actions | Large | Medium | **P1** | 4 | — |
+| PR Review Queue | Medium | High | **P1** | 4 | — |
+| Git Branch Network | Large | Medium | **P1** | 4 | — |
+| Workflow Dispatch | Medium | Medium | **P1** | 4 | — |
+| Security Health | Medium | Medium | **P2** | 5 | — |
+| Contribution Heatmap | Medium | Medium | **P2** | 5 | — |
+| Fleet Monitor | Medium | Medium | **P2** | 5 | — |
+| Bundled Profiles | Small | Low | **P3** | 6 | — |
+| Multi-Repo Workflow Grid | Large | Low | **P3** | 6 | — |
 
-**API**: `GET /repos/{owner}/{repo}/releases/latest` — `body` field contains markdown
-**Token**: `Contents: Read`
+---
 
-### 5.8 Multi-Repo Workflow Grid
-**Effort**: Large | **Priority**: Low
+## Suggested Next Steps
 
-A single action that monitors workflows across multiple repos. Display as a grid of status indicators (colored dots) showing health of your fleet.
+1. ~~**v1.2.0**: Phase 1 quick wins (Repo Stats URL + additional stat types + long press)~~ ✅ **Done**
+2. ~~**v1.3.x**: Stability & polish (setup state, packaging, PI race conditions, SDK compat)~~ ✅ **Done**
+3. ~~**v1.4.0**: Phase 2 actions (PR Counter, Issue Counter, Release Monitor, Commit Activity, Branch Comparison) + Visual Polish (animated loading, consistent palette)~~ ✅ **Done**
+4. ~~**v1.5.0**: Release polish and stabilization~~ ✅ **Done**
+5. **v1.6.0**: Stream Deck+ encoder foundation — `pixmap` layout, `touch-strip-renderer.ts`, Repo Stats encoder, Workflow Status encoder, remaining Phase 1 polish (run duration, error improvements)
+6. **v1.7.0**: Encoder for all remaining actions + PR Review Queue + Git Branch Network + Workflow Dispatch
+7. **v1.8.0**: Security Health gauge + Contribution Heatmap + Fleet Monitor
+8. **v2.0.0**: Bundled Profiles, ecosystem expansion
+9. **v2.1.0**: GraphQL batched query coordinator — reduce API calls across all actions sharing the same repo
+10. **v2.2.0**: New GraphQL actions — Discussions Monitor, Projects V2 Board
+
+---
+
+## Deferred / Dropped
+
+Items from earlier roadmap phases that have been deprioritized, subsumed by other features, or dropped entirely.
+
+| Item | Original Phase | Status | Reason |
+|------|---------------|--------|--------|
+| Repository Traffic (3.1) | Phase 3 (old) | **Deferred** | Requires `Administration: Read` permission, niche audience |
+| Code Scanning Alerts (3.3) | Phase 3 (old) | **Deferred** | Subsumed by Security Health gauge (Phase 5) |
+| Secret Scanning Alerts (3.4) | Phase 3 (old) | **Deferred** | Subsumed by Security Health gauge (Phase 5) |
+| Contributor Activity (3.6) | Phase 3 (old) | **Dropped** | Novelty, not actionable — doesn't drive developer decisions |
+| Milestone Progress (3.7) | Phase 3 (old) | **Dropped** | GitHub Projects V2 has largely replaced milestones |
+| GitHub Pages Status (3.8) | Phase 3 (old) | **Dropped** | Workflow Status already covers deployment status for Pages workflows |
+| Actions Usage / Billing (3.9) | Phase 3 (old) | **Dropped** | Rarely needed day-to-day; billing dashboard in GitHub is sufficient |
+| Notification Counter (5.1) | Phase 5 (old) | **Blocked** | Fine-grained tokens don't support `GET /notifications`; no viable workaround |
+| Organization Dashboard (5.3) | Phase 5 (old) | **Dropped** | Too complex, niche audience — org-level monitoring better served by dedicated tools |
+| Commit Status Checks (5.5) | Phase 5 (old) | **Dropped** | Redundant with Workflow Status action (which already shows CI/CD status) |
+| Language Breakdown (5.6) | Phase 5 (old) | **Dropped** | Not useful at 144px button size; already available as Repo Stats "Language" type |
+| Releases Changelog View (5.7) | Phase 5 (old) | **Dropped** | Touch strip too small for meaningful markdown rendering |
 
 ---
 
@@ -406,24 +482,22 @@ Summary of which permissions each action/feature requires with a **fine-grained 
 | Permission | Level | Used By |
 |-----------|-------|---------|
 | Metadata | Read | Repo Stats (stars, forks, watchers, language, size, license, default branch, visibility) |
-| Pull requests | Read | Repo Stats — PR count, PR Counter action |
+| Pull requests | Read | Repo Stats — PR count, PR Counter action, PR Review Queue (Phase 4) |
 | Actions | Read | Workflow Status (runs, workflows, environments) |
 | Deployments | Read | Workflow Status (deployments, deployment statuses) |
 | Issues | Read | Issue Counter action |
-| Contents | Read | Release Monitor, Commit Activity, Branch Comparison |
+| Contents | Read | Release Monitor, Commit Activity, Branch Comparison, Git Branch Network (Phase 4) |
 
 ### New Permissions Needed by Phase
 
 | Permission | Level | Required For |
 |-----------|-------|-------------|
-| Administration | Read | Repository Traffic (3.1) |
-| Dependabot alerts | Read | Dependabot Alerts (3.2), Security Dashboard (3.5) |
-| Code scanning alerts | Read | Code Scanning Alerts (3.3), Security Dashboard (3.5) |
-| Secret scanning alerts | Read | Secret Scanning Alerts (3.4), Security Dashboard (3.5) |
-| Pages | Read | GitHub Pages Status (3.8) |
-| Commit statuses | Read | Commit Status Checks (5.5) |
-| Plan | Read (user) | Actions Usage/Billing (3.9) |
-| Actions | Write | Workflow Dispatch (5.2) — optional |
+| Actions | Write | Workflow Dispatch (Phase 4) — optional, graceful degradation if not granted |
+| Dependabot alerts | Read | Security Health (Phase 5) |
+| Code scanning alerts | Read | Security Health (Phase 5) — optional, graceful degradation if not granted |
+
+### GraphQL API
+The GraphQL API uses the same personal access token as REST. No additional permissions needed for public data. For private contribution data in the Contribution Heatmap "All contributions" mode, the token needs access to the user's private repositories.
 
 ### Not Available with Fine-Grained Tokens
 | Feature | Reason |
@@ -504,6 +578,15 @@ GET /repos/{owner}/{repo}/commits/{ref}/status     → combined status
 GET /repos/{owner}/{repo}/commits/{ref}/statuses   → individual statuses
 ```
 
+### GraphQL API
+```
+https://api.github.com/graphql (POST)
+
+Queries used:
+- `viewer { contributionsCollection { contributionCalendar { ... } } }` — Profile heatmap
+- Planned: `repository { ... }` batched queries for multi-action data
+```
+
 ---
 
 ## Stream Deck SDK Features Reference
@@ -538,58 +621,3 @@ SDK capabilities available for enhancing the plugin.
 | **Target.Hardware / Software** | Separate HW/SW rendering | Different displays per target |
 | **Multi-Actions** | User combines actions into one key press | Named states for multi-action support |
 | **VisibleInActionsList** | Hide deprecated actions | Action deprecation without breaking |
-
----
-
-## Implementation Priority Matrix
-
-| Feature | Effort | Impact | Priority | Phase | Status |
-|---------|--------|--------|----------|-------|--------|
-| ~~Repo Stats: Open URL~~ | Small | High | ~~P0~~ | 1 | ✅ v1.2.0 |
-| ~~Long Press vs Short Press~~ | Medium | Medium | ~~P1~~ | 1 | ✅ v1.2.0 |
-| ~~Repo Stats: Additional Types~~ | Small | Medium | ~~P1~~ | 1 | ✅ v1.2.0 |
-| ~~Setup State Prompt~~ | Small | Medium | ~~P1~~ | 1 | ✅ v1.3.0 |
-| ~~Stability & Polish~~ | Small | High | ~~P0~~ | — | ✅ v1.3.1–v1.3.4 |
-| ~~PR Counter~~ | Medium | High | ~~P0~~ | 2 | ✅ v1.4.0 |
-| ~~Issue Counter~~ | Medium | High | ~~P0~~ | 2 | ✅ v1.4.0 |
-| ~~Release Monitor~~ | Medium | High | ~~P1~~ | 2 | ✅ v1.4.0 |
-| Workflow: Show Run Duration | Small | Low | **P1** | 1 | Planned |
-| Error State Improvements | Small | Medium | **P1** | 1 | Partial (setup state done) |
-| ~~Commit Activity~~ | Medium | Medium | ~~P1~~ | 2 | ✅ v1.4.0 |
-| ~~Branch Comparison~~ | Medium | Medium | ~~P2~~ | 2 | ✅ v1.4.0 |
-| Encoder/Dial for Repo Stats | Medium | Medium | **P2** | 4 | — |
-| Encoder/Dial for Workflow | Medium | Medium | **P2** | 4 | — |
-| Dependabot Alerts | Medium | Medium | **P2** | 3 | — |
-| Code Scanning Alerts | Medium | Medium | **P2** | 3 | — |
-| Repository Traffic | Medium | Medium | **P2** | 3 | — |
-| Security Dashboard | Large | Medium | **P2** | 3 | — |
-| ~~Visual Polish~~ | Medium | Medium | ~~P2~~ | 4 | ✅ v1.4.0 |
-| Workflow Dispatch | Large | Medium | **P3** | 5 | — |
-| Milestone Progress | Medium | Low | **P3** | 3 | — |
-| GitHub Pages Status | Medium | Low | **P3** | 3 | — |
-| Bundled Profiles | Small | Low | **P3** | 4 | — |
-| PR Review Status | Large | Medium | **P3** | 5 | — |
-| Organization Dashboard | Large | Low | **P4** | 5 | — |
-| Notifications (classic token) | Large | Medium | **P4** | 5 | — |
-
----
-
-## Suggested Next Steps
-
-1. ~~**v1.2.0**: Phase 1 quick wins (Repo Stats URL + additional stat types + long press)~~ ✅ **Done**
-2. ~~**v1.3.x**: Stability & polish (setup state, packaging, PI race conditions, SDK compat)~~ ✅ **Done**
-3. ~~**v1.4.0**: Phase 2 actions (PR Counter, Issue Counter, Release Monitor, Commit Activity, Branch Comparison) + Visual Polish (animated loading, consistent palette)~~ ✅ **Done**
-4. **v1.5.0**: Remaining Phase 1 polish (run duration, error improvements) + Phase 3 security actions
-5. **v2.0.0**: Stream Deck+ support (dials/encoders), advanced actions, visual overhaul
-
----
-
-## Notes for Discussion
-
-- **Token permission strategy**: Should we prompt users to add permissions as they enable features? Or require all upfront?
-- **Classic token support**: Worth adding for notification access? Or stay fine-grained only?
-- **GraphQL API**: GitHub's GraphQL API could enable Discussions, Projects V2 board status, and more efficient batched queries. Worth considering for v3.0?
-- **Caching strategy**: As we add more actions, consider a shared cache layer to avoid redundant API calls across actions monitoring the same repo.
-- **Rate limiting**: With more actions, rate limit management becomes critical. Consider a request queue/throttle system.
-- **Multi-repo monitoring**: Several features could benefit from a "repo group" concept where users configure multiple repos and see aggregate data.
-- **Topics stat type**: Deferred from v1.2.0 — needs UI design for displaying a list on a small button (marquee list? count only?).

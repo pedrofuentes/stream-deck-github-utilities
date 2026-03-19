@@ -282,6 +282,7 @@ describe("CommitActivityAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
+			(action as any).actionContexts.set("commit-5", mockAction);
 
 			const weeks = Array.from({ length: 52 }, (_, i) => ({
 				total: 100,
@@ -305,6 +306,7 @@ describe("CommitActivityAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
+			(action as any).actionContexts.set("commit-5b", mockAction);
 
 			const weeks = Array.from({ length: 52 }, () => ({
 				total: 5,

@@ -268,8 +268,13 @@ This produces a `.streamDeckPlugin` file in the `release/` directory.
 - [x] **Release Monitor** — Track and display latest release version with pre-release support
 - [x] **Commit Activity** — Show recent commit count (24h / 7d / 30d)
 - [x] **Branch Comparison** — Show ahead/behind counts between two branches
-- [ ] **Notification Count** — Show unread GitHub notification count
-- [ ] **Repository Traffic** — Display repo traffic data (views, clones, visitors)
+- [ ] **Stream Deck+ Encoder Support** — Dial/touch strip controls for Repo Stats and Workflow Status with rich visualizations (sparklines, heatmaps, status atmospheres)
+- [ ] **PR Review Queue** — Show review-requested PR count with urgency gradient, browse individual PRs via dial
+- [ ] **Git Branch Network** — Metro-map style branch diagram on touch strip (1, 2, or 4 quarter layouts)
+- [ ] **Workflow Dispatch** — Trigger workflow runs via long-touch on Stream Deck+
+- [ ] **Security Health** — Arc gauge combining Dependabot + Code Scanning alerts
+- [ ] **Contribution Heatmap** — 52-week GitHub contribution grid spanning the full touch strip
+- [ ] **Fleet Monitor** — Monitor multiple repos at a glance across 4 touch strip quarters
 
 ## Contributing
 

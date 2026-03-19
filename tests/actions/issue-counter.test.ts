@@ -429,6 +429,7 @@ describe("IssueCounterAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
+			(action as any).actionContexts.set("issue-5b", mockAction);
 
 			globalThis.fetch = mockFetchForOpenIssues(8, 2);
 

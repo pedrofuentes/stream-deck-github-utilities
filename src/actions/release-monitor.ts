@@ -21,7 +21,14 @@ import {
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
+	type Action,
 	type SendToPluginEvent,
+} from "@elgato/streamdeck";
+import type {
+	DialRotateEvent,
+	DialDownEvent,
+	DialUpEvent,
+	TouchTapEvent,
 } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
 
@@ -30,6 +37,7 @@ import { parseRepoIdentifier } from "../utils/github";
 import { fetchLatestRelease, formatRelativeTime } from "../utils/github-api";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderReleaseImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
+import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
 import { PollingCoordinator } from "../utils/polling-coordinator";
 import type { JsonValue } from "@elgato/utils";
@@ -56,8 +64,14 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 	private actionSettings = new Map<string, ReleaseMonitorSettings>();
 	private lastUrl = new Map<string, string>();
 	private marqueeData = new Map<string, ReleaseMarqueeData>();
+	private recentSetSettings = new Set<string>();
+	private lastKeyUpTime = new Map<string, number>();
+
+	/** Cached action contexts for O(1) lookup */
+	private actionContexts = new Map<string, Action<ReleaseMonitorSettings>>();
 
 	override async onWillAppear(ev: WillAppearEvent<ReleaseMonitorSettings>): Promise<void> {
+		this.actionContexts.set(ev.action.id, ev.action);
 		const settings = ev.payload.settings;
 		this.actionSettings.set(ev.action.id, settings);
 
@@ -73,6 +87,16 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 			await ev.action.setTitle("");
 		}
 
+		if (ev.action.isDial()) {
+			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			if (!settings.repo || !globalSettings.githubToken) {
+				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				return;
+			}
+			await ev.action.setFeedback({ canvas: renderStripLoading() });
+		}
+
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		this.polling.start(ev.action.id, () => this.refreshRelease(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -85,9 +109,23 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
+		this.recentSetSettings.delete(ev.action.id);
+		this.lastKeyUpTime.delete(ev.action.id);
+		this.actionContexts.delete(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<ReleaseMonitorSettings>): Promise<void> {
+		// Double-click detection → force refresh
+		const now = Date.now();
+		const lastUp = this.lastKeyUpTime.get(ev.action.id) ?? 0;
+		this.lastKeyUpTime.set(ev.action.id, now);
+		if (now - lastUp < 400) {
+			this.lastKeyUpTime.delete(ev.action.id);
+			this.polling.resetBackoff(ev.action.id);
+			await this.refreshRelease(ev.action.id);
+			return;
+		}
+
 		const settings = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
 		const repo = cached?.repo ?? settings.repo;
@@ -104,6 +142,61 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 		}
 	}
 
+	/**
+	 * Called when the user rotates the dial (Stream Deck+).
+	 * Toggles includePreReleases setting.
+	 */
+	override async onDialRotate(ev: DialRotateEvent<ReleaseMonitorSettings>): Promise<void> {
+		const cached = this.actionSettings.get(ev.action.id);
+		const settings = cached ?? ev.payload.settings;
+		const current = settings.includePreReleases === true;
+
+		const newSettings: ReleaseMonitorSettings = { ...settings, includePreReleases: !current };
+		this.recentSetSettings.add(ev.action.id);
+		await ev.action.setSettings(newSettings);
+		this.actionSettings.set(ev.action.id, newSettings);
+
+		this.polling.resetBackoff(ev.action.id);
+		await this.refreshRelease(ev.action.id);
+	}
+
+	/**
+	 * Called when the user presses the dial (Stream Deck+).
+	 * Opens the release page on GitHub.
+	 */
+	override async onDialDown(ev: DialDownEvent<ReleaseMonitorSettings>): Promise<void> {
+		const cached = this.actionSettings.get(ev.action.id);
+		const settings = cached ?? ev.payload.settings;
+		const repo = settings.repo;
+		if (!repo) return;
+
+		const url = this.lastUrl.get(ev.action.id);
+		if (url) {
+			await streamDeck.system.openUrl(url);
+		} else {
+			const parsed = parseRepoIdentifier(repo);
+			if (parsed) {
+				await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/releases`);
+			}
+		}
+	}
+
+	/**
+	 * Called when the user releases the dial (Stream Deck+).
+	 */
+	override async onDialUp(_ev: DialUpEvent<ReleaseMonitorSettings>): Promise<void> {
+		// No action needed on release
+	}
+
+	/**
+	 * Called when the user taps the touch strip (Stream Deck+).
+	 * Forces a data refresh.
+	 */
+	override async onTouchTap(ev: TouchTapEvent<ReleaseMonitorSettings>): Promise<void> {
+		this.polling.resetBackoff(ev.action.id);
+		await this.refreshRelease(ev.action.id);
+	}
+
 	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, ReleaseMonitorSettings>): Promise<void> {
 		try {
 			const data = ev.payload as PIDataRequest;
@@ -118,6 +211,12 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<ReleaseMonitorSettings>): Promise<void> {
 		const incoming = ev.payload.settings;
+
+		if (this.recentSetSettings.delete(ev.action.id)) {
+			this.actionSettings.set(ev.action.id, incoming);
+			return;
+		}
+
 		const cached = this.actionSettings.get(ev.action.id);
 		const settings: ReleaseMonitorSettings = { ...cached, ...incoming };
 
@@ -140,6 +239,17 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 			await ev.action.setTitle("");
 		}
 
+		if (ev.action.isDial()) {
+			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			if (!settings.repo || !globalSettings.githubToken) {
+				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				this.polling.stop(ev.action.id);
+				return;
+			}
+			await ev.action.setFeedback({ canvas: renderStripLoading() });
+		}
+
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		this.polling.restart(ev.action.id, () => this.refreshRelease(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -152,13 +262,18 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 
 		const gen = this.polling.incrementGeneration(actionId);
 
-		const actionContext = [...this.actions].find((a) => a.id === actionId);
-		if (!actionContext || !actionContext.isKey()) return;
+		const actionContext = this.actionContexts.get(actionId);
+		if (!actionContext) return;
+
+		const isDial = actionContext.isDial();
 
 		const parsed = parseRepoIdentifier(settings.repo);
 		if (!parsed) {
-			await actionContext.setImage(renderErrorImage("Invalid"));
-			await actionContext.setTitle("");
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("Invalid"));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError("Invalid repo") });
 			return;
 		}
 
@@ -166,8 +281,11 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			const token = globalSettings.githubToken;
 			if (!token) {
-				await actionContext.setImage(renderUnconfiguredImage());
-				await actionContext.setTitle("");
+				if (actionContext.isKey()) {
+					await actionContext.setImage(renderUnconfiguredImage());
+					await actionContext.setTitle("");
+				}
+				if (isDial) await actionContext.setFeedback({ canvas: renderStripUnconfigured() });
 				return;
 			}
 
@@ -177,8 +295,11 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
 
 			if (!release) {
-				await actionContext.setImage(renderReleaseImage("None", "No Releases", parsed.repo));
-				await actionContext.setTitle("");
+				if (actionContext.isKey()) {
+					await actionContext.setImage(renderReleaseImage("None", "No Releases", parsed.repo));
+					await actionContext.setTitle("");
+				}
+				if (isDial) await actionContext.setFeedback({ canvas: renderStatStrip("None", "releases", undefined, parsed.repo) });
 				this.lastUrl.set(actionId, `https://github.com/${parsed.owner}/${parsed.repo}/releases`);
 				return;
 			}
@@ -199,6 +320,12 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 			await this.renderWithMarquee(actionId);
 			this.updateMarqueeTimer(actionId);
 
+			if (isDial) {
+				await actionContext.setFeedback({
+					canvas: renderStatStrip(tag, "releases", undefined, parsed.repo, settings.includePreReleases ? "pre" : undefined),
+				});
+			}
+
 			this.polling.reportSuccess(actionId);
 			this.lastUrl.set(actionId, release.html_url || `https://github.com/${parsed.owner}/${parsed.repo}/releases`);
 			streamDeck.logger.debug(`Release updated: ${settings.repo} tag=${tag}`);
@@ -214,8 +341,11 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 			else if (message.includes("Access denied")) errorLabel = "No Access";
 
 			this.polling.reportError(actionId);
-			await actionContext.setImage(renderErrorImage(errorLabel));
-			await actionContext.setTitle("");
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage(errorLabel));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError(errorLabel) });
 		}
 	}
 
@@ -237,7 +367,7 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 
 	private async renderWithMarquee(actionId: string): Promise<void> {
 		const md = this.marqueeData.get(actionId);
-		const actionContext = [...this.actions].find((a) => a.id === actionId);
+		const actionContext = this.actionContexts.get(actionId);
 		if (!md || !actionContext?.isKey()) return;
 
 		const displayName = md.line1.needsAnimation()

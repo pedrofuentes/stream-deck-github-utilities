@@ -325,6 +325,7 @@ describe("ReleaseMonitorAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
+			(action as any).actionContexts.set("rel-5", mockAction);
 
 			vi.mocked(globalThis.fetch).mockResolvedValue(mockReleaseResponse({
 				tag_name: "v3.0.0",

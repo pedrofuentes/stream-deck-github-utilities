@@ -20,7 +20,14 @@ import {
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
+	type Action,
 	type SendToPluginEvent,
+} from "@elgato/streamdeck";
+import type {
+	DialRotateEvent,
+	DialDownEvent,
+	DialUpEvent,
+	TouchTapEvent,
 } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
 
@@ -31,6 +38,7 @@ import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provid
 import { renderPRCountImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
 import { PollingCoordinator } from "../utils/polling-coordinator";
+import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
@@ -58,8 +66,15 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 	private polling = new PollingCoordinator();
 	private actionSettings = new Map<string, PullRequestCounterSettings>();
 	private marqueeData = new Map<string, PRMarqueeData>();
+	private recentSetSettings = new Set<string>();
+	private trendCache = new Map<string, number[]>();
+	private lastKeyUpTime = new Map<string, number>();
+
+	/** Cached action contexts for O(1) lookup */
+	private actionContexts = new Map<string, Action<PullRequestCounterSettings>>();
 
 	override async onWillAppear(ev: WillAppearEvent<PullRequestCounterSettings>): Promise<void> {
+		this.actionContexts.set(ev.action.id, ev.action);
 		const settings = ev.payload.settings;
 		this.actionSettings.set(ev.action.id, settings);
 
@@ -75,6 +90,16 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 			await ev.action.setTitle("");
 		}
 
+		if (ev.action.isDial()) {
+			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			if (!settings.repo || !globalSettings.githubToken) {
+				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				return;
+			}
+			await ev.action.setFeedback({ canvas: renderStripLoading() });
+		}
+
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		this.polling.start(ev.action.id, () => this.refreshCount(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -86,9 +111,24 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 		this.stopMarquee(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
+		this.recentSetSettings.delete(ev.action.id);
+		this.trendCache.delete(ev.action.id);
+		this.lastKeyUpTime.delete(ev.action.id);
+		this.actionContexts.delete(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<PullRequestCounterSettings>): Promise<void> {
+		// Double-click detection → force refresh
+		const now = Date.now();
+		const lastUp = this.lastKeyUpTime.get(ev.action.id) ?? 0;
+		this.lastKeyUpTime.set(ev.action.id, now);
+		if (now - lastUp < 400) {
+			this.lastKeyUpTime.delete(ev.action.id);
+			this.polling.resetBackoff(ev.action.id);
+			await this.refreshCount(ev.action.id);
+			return;
+		}
+
 		const settings = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
 		const repo = cached?.repo ?? settings.repo;
@@ -98,6 +138,61 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 		if (parsed) {
 			await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/pulls`);
 		}
+	}
+
+	/**
+	 * Called when the user rotates the dial (Stream Deck+).
+	 * Cycles stateFilter between "open", "closed", and "all".
+	 */
+	override async onDialRotate(ev: DialRotateEvent<PullRequestCounterSettings>): Promise<void> {
+		const cached = this.actionSettings.get(ev.action.id);
+		const settings = cached ?? ev.payload.settings;
+		const states: Array<"open" | "closed" | "all"> = ["open", "closed", "all"];
+		const current = settings.stateFilter ?? "open";
+		const currentIndex = states.indexOf(current);
+		const direction = ev.payload.ticks > 0 ? 1 : -1;
+		const nextIndex = (currentIndex + direction + states.length) % states.length;
+		const nextState = states[nextIndex];
+
+		const newSettings: PullRequestCounterSettings = { ...settings, stateFilter: nextState };
+		this.recentSetSettings.add(ev.action.id);
+		await ev.action.setSettings(newSettings);
+		this.actionSettings.set(ev.action.id, newSettings);
+
+		this.polling.resetBackoff(ev.action.id);
+		await this.refreshCount(ev.action.id);
+	}
+
+	/**
+	 * Called when the user presses the dial (Stream Deck+).
+	 * Opens the PRs page on GitHub.
+	 */
+	override async onDialDown(ev: DialDownEvent<PullRequestCounterSettings>): Promise<void> {
+		const cached = this.actionSettings.get(ev.action.id);
+		const settings = cached ?? ev.payload.settings;
+		const repo = settings.repo;
+		if (!repo) return;
+
+		const parsed = parseRepoIdentifier(repo);
+		if (parsed) {
+			await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/pulls`);
+		}
+	}
+
+	/**
+	 * Called when the user releases the dial (Stream Deck+).
+	 */
+	override async onDialUp(_ev: DialUpEvent<PullRequestCounterSettings>): Promise<void> {
+		// No action needed on release
+	}
+
+	/**
+	 * Called when the user taps the touch strip (Stream Deck+).
+	 * Forces a data refresh.
+	 */
+	override async onTouchTap(ev: TouchTapEvent<PullRequestCounterSettings>): Promise<void> {
+		this.polling.resetBackoff(ev.action.id);
+		await this.refreshCount(ev.action.id);
 	}
 
 	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, PullRequestCounterSettings>): Promise<void> {
@@ -114,6 +209,12 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<PullRequestCounterSettings>): Promise<void> {
 		const incoming = ev.payload.settings;
+
+		if (this.recentSetSettings.delete(ev.action.id)) {
+			this.actionSettings.set(ev.action.id, incoming);
+			return;
+		}
+
 		const cached = this.actionSettings.get(ev.action.id);
 		const settings: PullRequestCounterSettings = { ...cached, ...incoming };
 
@@ -139,6 +240,17 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 			await ev.action.setTitle("");
 		}
 
+		if (ev.action.isDial()) {
+			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			if (!settings.repo || !globalSettings.githubToken) {
+				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				this.polling.stop(ev.action.id);
+				return;
+			}
+			await ev.action.setFeedback({ canvas: renderStripLoading() });
+		}
+
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		this.polling.restart(ev.action.id, () => this.refreshCount(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -151,13 +263,18 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 
 		const gen = this.polling.incrementGeneration(actionId);
 
-		const actionContext = [...this.actions].find((a) => a.id === actionId);
-		if (!actionContext || !actionContext.isKey()) return;
+		const actionContext = this.actionContexts.get(actionId);
+		if (!actionContext) return;
+
+		const isDial = actionContext.isDial();
 
 		const parsed = parseRepoIdentifier(settings.repo);
 		if (!parsed) {
-			await actionContext.setImage(renderErrorImage("Invalid"));
-			await actionContext.setTitle("");
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("Invalid"));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError("Invalid repo") });
 			return;
 		}
 
@@ -165,8 +282,11 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			const token = globalSettings.githubToken;
 			if (!token) {
-				await actionContext.setImage(renderUnconfiguredImage());
-				await actionContext.setTitle("");
+				if (actionContext.isKey()) {
+					await actionContext.setImage(renderUnconfiguredImage());
+					await actionContext.setTitle("");
+				}
+				if (isDial) await actionContext.setFeedback({ canvas: renderStripUnconfigured() });
 				return;
 			}
 
@@ -186,6 +306,18 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 			await this.renderWithMarquee(actionId);
 			this.updateMarqueeTimer(actionId);
 
+			if (isDial) {
+				const numericCount = parseInt(displayCount.replace(/[^0-9]/g, "")) || 0;
+				const trend = this.trendCache.get(actionId) ?? [];
+				trend.push(numericCount);
+				if (trend.length > 14) trend.shift();
+				this.trendCache.set(actionId, trend);
+
+				await actionContext.setFeedback({
+					canvas: renderStatStrip(displayCount, "pull_requests", trend.length >= 2 ? trend : undefined, parsed.repo, settings.stateFilter ?? "open"),
+				});
+			}
+
 			this.polling.reportSuccess(actionId);
 			streamDeck.logger.debug(`PR count updated: ${settings.repo} ${stateFilter}=${displayCount}`);
 		} catch (error: unknown) {
@@ -200,8 +332,11 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 			else if (message.includes("Access denied")) errorLabel = "No Access";
 
 			this.polling.reportError(actionId);
-			await actionContext.setImage(renderErrorImage(errorLabel));
-			await actionContext.setTitle("");
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage(errorLabel));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError(errorLabel) });
 		}
 	}
 
@@ -222,7 +357,7 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 
 	private async renderWithMarquee(actionId: string): Promise<void> {
 		const md = this.marqueeData.get(actionId);
-		const actionContext = [...this.actions].find((a) => a.id === actionId);
+		const actionContext = this.actionContexts.get(actionId);
 		if (!md || !actionContext?.isKey()) return;
 
 		const displayName = md.line1.needsAnimation()

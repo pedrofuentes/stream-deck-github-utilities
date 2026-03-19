@@ -15,6 +15,7 @@ export {
 	fetchIssueCount,
 	fetchLatestRelease,
 	fetchCommitActivity,
+	fetchCommitActivityWeeks,
 	fetchBranchComparison,
 	fetchBranchNetwork,
 	formatRelativeTime,
@@ -47,6 +48,9 @@ export {
 	type BranchComparison,
 	type BranchInfo,
 	type ReviewRequestedPR,
+	type AlertSeverity,
+	type SecurityAlertSummary,
+	fetchDependabotAlerts,
 	fetchUserRepos,
 	fetchRepoWorkflows,
 	fetchRepoBranches,
@@ -97,11 +101,21 @@ export {
 	PollingCoordinator,
 } from "./polling-coordinator";
 export {
+	fetchContributionCalendar,
+	calendarToWeeklyData,
+	type ContributionCalendar,
+	type ContributionDay,
+	type ContributionWeek,
+} from "./github-graphql";
+export {
 	renderStatStrip,
 	renderWorkflowStrip,
 	renderPRQueueStrip,
 	renderBranchNetworkStrip,
+	renderFleetStrip,
+	renderHeatmapStrip,
 	renderStripLoading,
 	renderStripError,
 	renderStripUnconfigured,
+	renderSecurityArcStrip,
 } from "./touch-strip-renderer";

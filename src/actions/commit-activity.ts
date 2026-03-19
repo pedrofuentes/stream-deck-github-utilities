@@ -21,15 +21,23 @@ import {
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
+	type Action,
 	type SendToPluginEvent,
+} from "@elgato/streamdeck";
+import type {
+	DialRotateEvent,
+	DialDownEvent,
+	DialUpEvent,
+	TouchTapEvent,
 } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
 
 import type { GlobalSettings, CommitActivitySettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
-import { fetchCommitActivity } from "../utils/github-api";
+import { fetchCommitActivityWeeks } from "../utils/github-api";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderCommitActivityImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
+import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
 import { PollingCoordinator } from "../utils/polling-coordinator";
 import type { JsonValue } from "@elgato/utils";
@@ -59,9 +67,14 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 	private polling = new PollingCoordinator();
 	private actionSettings = new Map<string, CommitActivitySettings>();
 	private marqueeData = new Map<string, CommitMarqueeData>();
+	private recentSetSettings = new Set<string>();
+	private lastKeyUpTime = new Map<string, number>();
 
+	/** Cached action contexts for O(1) lookup */
+	private actionContexts = new Map<string, Action<CommitActivitySettings>>();
 
 	override async onWillAppear(ev: WillAppearEvent<CommitActivitySettings>): Promise<void> {
+		this.actionContexts.set(ev.action.id, ev.action);
 		const settings = ev.payload.settings;
 		this.actionSettings.set(ev.action.id, settings);
 
@@ -77,6 +90,16 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 			await ev.action.setTitle("");
 		}
 
+		if (ev.action.isDial()) {
+			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			if (!settings.repo || !globalSettings.githubToken) {
+				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				return;
+			}
+			await ev.action.setFeedback({ canvas: renderStripLoading() });
+		}
+
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		this.polling.start(ev.action.id, () => this.refreshActivity(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -88,9 +111,23 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 		this.stopMarquee(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
+		this.recentSetSettings.delete(ev.action.id);
+		this.lastKeyUpTime.delete(ev.action.id);
+		this.actionContexts.delete(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<CommitActivitySettings>): Promise<void> {
+		// Double-click detection → force refresh
+		const now = Date.now();
+		const lastUp = this.lastKeyUpTime.get(ev.action.id) ?? 0;
+		this.lastKeyUpTime.set(ev.action.id, now);
+		if (now - lastUp < 400) {
+			this.lastKeyUpTime.delete(ev.action.id);
+			this.polling.resetBackoff(ev.action.id);
+			await this.refreshActivity(ev.action.id);
+			return;
+		}
+
 		const settings = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
 		const repo = cached?.repo ?? settings.repo;
@@ -100,6 +137,61 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 		if (parsed) {
 			await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/commits`);
 		}
+	}
+
+	/**
+	 * Called when the user rotates the dial (Stream Deck+).
+	 * Cycles timeRange between "24h", "7d", and "30d".
+	 */
+	override async onDialRotate(ev: DialRotateEvent<CommitActivitySettings>): Promise<void> {
+		const cached = this.actionSettings.get(ev.action.id);
+		const settings = cached ?? ev.payload.settings;
+		const ranges: Array<"24h" | "7d" | "30d"> = ["24h", "7d", "30d"];
+		const current = settings.timeRange ?? "7d";
+		const currentIndex = ranges.indexOf(current);
+		const direction = ev.payload.ticks > 0 ? 1 : -1;
+		const nextIndex = (currentIndex + direction + ranges.length) % ranges.length;
+		const nextRange = ranges[nextIndex];
+
+		const newSettings: CommitActivitySettings = { ...settings, timeRange: nextRange };
+		this.recentSetSettings.add(ev.action.id);
+		await ev.action.setSettings(newSettings);
+		this.actionSettings.set(ev.action.id, newSettings);
+
+		this.polling.resetBackoff(ev.action.id);
+		await this.refreshActivity(ev.action.id);
+	}
+
+	/**
+	 * Called when the user presses the dial (Stream Deck+).
+	 * Opens the commits page on GitHub.
+	 */
+	override async onDialDown(ev: DialDownEvent<CommitActivitySettings>): Promise<void> {
+		const cached = this.actionSettings.get(ev.action.id);
+		const settings = cached ?? ev.payload.settings;
+		const repo = settings.repo;
+		if (!repo) return;
+
+		const parsed = parseRepoIdentifier(repo);
+		if (parsed) {
+			await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/commits`);
+		}
+	}
+
+	/**
+	 * Called when the user releases the dial (Stream Deck+).
+	 */
+	override async onDialUp(_ev: DialUpEvent<CommitActivitySettings>): Promise<void> {
+		// No action needed on release
+	}
+
+	/**
+	 * Called when the user taps the touch strip (Stream Deck+).
+	 * Forces a data refresh.
+	 */
+	override async onTouchTap(ev: TouchTapEvent<CommitActivitySettings>): Promise<void> {
+		this.polling.resetBackoff(ev.action.id);
+		await this.refreshActivity(ev.action.id);
 	}
 
 	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, CommitActivitySettings>): Promise<void> {
@@ -116,6 +208,12 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<CommitActivitySettings>): Promise<void> {
 		const incoming = ev.payload.settings;
+
+		if (this.recentSetSettings.delete(ev.action.id)) {
+			this.actionSettings.set(ev.action.id, incoming);
+			return;
+		}
+
 		const cached = this.actionSettings.get(ev.action.id);
 		const settings: CommitActivitySettings = { ...cached, ...incoming };
 
@@ -141,6 +239,17 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 			await ev.action.setTitle("");
 		}
 
+		if (ev.action.isDial()) {
+			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			if (!settings.repo || !globalSettings.githubToken) {
+				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				this.polling.stop(ev.action.id);
+				return;
+			}
+			await ev.action.setFeedback({ canvas: renderStripLoading() });
+		}
+
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		this.polling.restart(ev.action.id, () => this.refreshActivity(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -153,13 +262,18 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 
 		const gen = this.polling.incrementGeneration(actionId);
 
-		const actionContext = [...this.actions].find((a) => a.id === actionId);
-		if (!actionContext || !actionContext.isKey()) return;
+		const actionContext = this.actionContexts.get(actionId);
+		if (!actionContext) return;
+
+		const isDial = actionContext.isDial();
 
 		const parsed = parseRepoIdentifier(settings.repo);
 		if (!parsed) {
-			await actionContext.setImage(renderErrorImage("Invalid"));
-			await actionContext.setTitle("");
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("Invalid"));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError("Invalid repo") });
 			return;
 		}
 
@@ -167,20 +281,53 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			const token = globalSettings.githubToken;
 			if (!token) {
-				await actionContext.setImage(renderUnconfiguredImage());
-				await actionContext.setTitle("");
+				if (actionContext.isKey()) {
+					await actionContext.setImage(renderUnconfiguredImage());
+					await actionContext.setTitle("");
+				}
+				if (isDial) await actionContext.setFeedback({ canvas: renderStripUnconfigured() });
 				return;
 			}
 
 			const timeRange = settings.timeRange ?? "7d";
-			const count = await fetchCommitActivity(parsed.owner, parsed.repo, token, timeRange);
+			const weeks = await fetchCommitActivityWeeks(parsed.owner, parsed.repo, token);
 
 			let displayCount: string;
-			if (count === -1) {
+			let dailyTrend: number[] | undefined;
+
+			if (weeks === null) {
 				// Stats are being computed — show a transient state
 				displayCount = "...";
+			} else if (weeks.length === 0) {
+				displayCount = formatCount(0);
 			} else {
+				// Compute count based on timeRange
+				const nowMs = Date.now();
+				let count: number;
+				if (timeRange === "24h") {
+					const latestWeek = weeks[weeks.length - 1];
+					const weekStartMs = latestWeek.week * 1000;
+					const dayOfWeek = Math.floor((nowMs - weekStartMs) / 86400000);
+					count = (dayOfWeek >= 0 && dayOfWeek < 7) ? (latestWeek.days[dayOfWeek] ?? 0) : 0;
+				} else if (timeRange === "7d") {
+					count = weeks[weeks.length - 1].total;
+				} else {
+					const weeksToSum = Math.min(4, weeks.length);
+					count = 0;
+					for (let i = weeks.length - weeksToSum; i < weeks.length; i++) {
+						count += weeks[i].total;
+					}
+				}
 				displayCount = formatCount(count);
+
+				// Extract daily data for sparkline
+				if (timeRange === "24h") {
+					dailyTrend = [...weeks[weeks.length - 1].days];
+				} else if (timeRange === "7d") {
+					dailyTrend = weeks.slice(-2).flatMap((w) => w.days);
+				} else {
+					dailyTrend = weeks.slice(-8).map((w) => w.total);
+				}
 			}
 
 			const rangeLabel = RANGE_LABELS[timeRange] ?? "Commits";
@@ -196,6 +343,12 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 			await this.renderWithMarquee(actionId);
 			this.updateMarqueeTimer(actionId);
 
+			if (isDial) {
+				await actionContext.setFeedback({
+					canvas: renderStatStrip(displayCount, "commits", dailyTrend && dailyTrend.length >= 2 ? dailyTrend : undefined, parsed.repo, settings.timeRange ?? "7d"),
+				});
+			}
+
 			this.polling.reportSuccess(actionId);
 			streamDeck.logger.debug(`Commit activity updated: ${settings.repo} ${timeRange}=${displayCount}`);
 		} catch (error: unknown) {
@@ -210,8 +363,11 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 			else if (message.includes("Access denied")) errorLabel = "No Access";
 
 			this.polling.reportError(actionId);
-			await actionContext.setImage(renderErrorImage(errorLabel));
-			await actionContext.setTitle("");
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage(errorLabel));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError(errorLabel) });
 		}
 	}
 
@@ -232,7 +388,7 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 
 	private async renderWithMarquee(actionId: string): Promise<void> {
 		const md = this.marqueeData.get(actionId);
-		const actionContext = [...this.actions].find((a) => a.id === actionId);
+		const actionContext = this.actionContexts.get(actionId);
 		if (!md || !actionContext?.isKey()) return;
 
 		const displayName = md.line1.needsAnimation()

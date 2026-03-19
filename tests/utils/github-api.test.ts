@@ -13,6 +13,7 @@ import {
 	fetchRepoStats,
 	fetchOpenPullRequestCount,
 	fetchReviewRequestedPRs,
+	fetchBranchNetwork,
 	getStatValue,
 	getStatLabel,
 	getStatUrl,
@@ -679,5 +680,118 @@ describe("fetchReviewRequestedPRs", () => {
 
 		const result = await fetchReviewRequestedPRs("ghp_test");
 		expect(result.items[0].user_login).toBe("");
+	});
+});
+
+// ── fetchBranchNetwork ────────────────────────────────────────────────────
+
+describe("fetchBranchNetwork", () => {
+	let originalFetch: typeof globalThis.fetch;
+
+	beforeEach(() => {
+		originalFetch = globalThis.fetch;
+		globalThis.fetch = vi.fn();
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	it("should return branch info from API response", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: true,
+			status: 200,
+			headers: mockHeaders(),
+			json: () => Promise.resolve([
+				{ name: "main", commit: { sha: "abc123" } },
+				{ name: "develop", commit: { sha: "def456" } },
+				{ name: "feature/auth", commit: { sha: "ghi789" } },
+			]),
+			text: () => Promise.resolve(""),
+		} as unknown as Response);
+
+		const result = await fetchBranchNetwork("owner", "repo", "ghp_test");
+
+		expect(result).toHaveLength(3);
+		expect(result[0]).toEqual({ name: "main", commitSha: "abc123" });
+		expect(result[1]).toEqual({ name: "develop", commitSha: "def456" });
+		expect(result[2]).toEqual({ name: "feature/auth", commitSha: "ghi789" });
+	});
+
+	it("should send correct API URL with per_page=10", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: true,
+			status: 200,
+			headers: mockHeaders(),
+			json: () => Promise.resolve([]),
+			text: () => Promise.resolve(""),
+		} as unknown as Response);
+
+		await fetchBranchNetwork("owner", "repo", "ghp_test");
+
+		expect(globalThis.fetch).toHaveBeenCalledWith(
+			expect.stringContaining("/repos/owner/repo/branches?per_page=10"),
+			expect.any(Object),
+		);
+	});
+
+	it("should throw GitHubApiError for 404", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: false,
+			status: 404,
+			headers: mockHeaders(),
+			json: () => Promise.resolve({ message: "Not Found" }),
+			text: () => Promise.resolve("Not Found"),
+		} as unknown as Response);
+
+		await expect(fetchBranchNetwork("owner", "repo", "ghp_test"))
+			.rejects.toThrow(GitHubApiError);
+	});
+
+	it("should throw GitHubApiError for 401", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: false,
+			status: 401,
+			headers: mockHeaders(),
+			json: () => Promise.resolve({ message: "Bad credentials" }),
+			text: () => Promise.resolve("Bad credentials"),
+		} as unknown as Response);
+
+		await expect(fetchBranchNetwork("owner", "repo", "ghp_test"))
+			.rejects.toThrow("Invalid or expired GitHub token");
+	});
+
+	it("should return empty array for repos with no branches", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: true,
+			status: 200,
+			headers: mockHeaders(),
+			json: () => Promise.resolve([]),
+			text: () => Promise.resolve(""),
+		} as unknown as Response);
+
+		const result = await fetchBranchNetwork("owner", "repo", "ghp_test");
+		expect(result).toEqual([]);
+	});
+
+	it("should include authorization header", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: true,
+			status: 200,
+			headers: mockHeaders(),
+			json: () => Promise.resolve([]),
+			text: () => Promise.resolve(""),
+		} as unknown as Response);
+
+		await fetchBranchNetwork("owner", "repo", "ghp_mytoken");
+
+		expect(globalThis.fetch).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({
+				headers: expect.objectContaining({
+					Authorization: "Bearer ghp_mytoken",
+				}),
+			}),
+		);
 	});
 });

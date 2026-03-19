@@ -732,6 +732,7 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
+			(action as any).actionContexts.set("action-7", mockAction);
 
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,

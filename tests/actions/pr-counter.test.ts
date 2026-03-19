@@ -318,6 +318,7 @@ describe("PRCounterAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
+			(action as any).actionContexts.set("pr-5", mockAction);
 
 			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchPRCountResponse(15));
 
@@ -337,6 +338,7 @@ describe("PRCounterAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
+			(action as any).actionContexts.set("pr-5b", mockAction);
 
 			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchPRCountResponse(3));
 

@@ -101,8 +101,30 @@ export interface CommitActivitySettings {
 export interface BranchNetworkSettings {
 	/** Repository in "owner/repo" format */
 	repo?: string;
-	/** Quarter position for multi-quarter layouts (1-4, default: 1) */
+	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
+	refreshInterval?: number;
+	/** Quarter position for multi-quarter layout (1-4, default: 1). Set to 1 for standalone. */
 	quarterPosition?: number;
+	[key: string]: JsonValue;
+}
+
+/** Per-action settings for the Contribution Heatmap action */
+export interface ContributionHeatmapSettings {
+	/** Repository in "owner/repo" format (used for REST per-repo mode) */
+	repo?: string;
+	/** Data source: "repo" for per-repo commits, "user" for profile-level contributions */
+	dataSource?: "repo" | "user";
+	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
+	refreshInterval?: number;
+	/** Quarter position for multi-quarter layout (1-4, default: 1). Set to 1 for standalone. */
+	quarterPosition?: number;
+	[key: string]: JsonValue;
+}
+
+/** Per-action settings for the Fleet Monitor action */
+export interface FleetMonitorSettings {
+	/** Repository in "owner/repo" format */
+	repo?: string;
 	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
 	refreshInterval?: number;
 	[key: string]: JsonValue;
@@ -116,6 +138,15 @@ export interface BranchComparisonSettings {
 	baseBranch?: string;
 	/** Head branch to compare (e.g. "develop") */
 	headBranch?: string;
+	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
+	refreshInterval?: number;
+	[key: string]: JsonValue;
+}
+
+/** Per-action settings for the Security Health action */
+export interface SecurityHealthSettings {
+	/** Repository in "owner/repo" format */
+	repo?: string;
 	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
 	refreshInterval?: number;
 	[key: string]: JsonValue;

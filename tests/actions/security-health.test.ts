@@ -1,8 +1,8 @@
 /**
- * Tests for the PRReviewQueueAction (src/actions/pr-review-queue.ts).
+ * Tests for the SecurityHealthAction (src/actions/security-health.ts).
  *
  * Mocks the @elgato/streamdeck module and the fetch API to test
- * the action's lifecycle, settings handling, encoder support, and error states.
+ * the action's lifecycle, settings handling, encoder support, grading, and error states.
  *
  * @author Pedro Fuentes <git@pedrofuent.es>
  * @copyright Pedro Pablo Fuentes Schuster
@@ -60,7 +60,7 @@ vi.mock("@elgato/streamdeck", () => {
 	};
 });
 
-import { PRReviewQueueAction } from "../../src/actions/pr-review-queue";
+import { SecurityHealthAction, computeGrade } from "../../src/actions/security-health";
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -69,7 +69,7 @@ import { PRReviewQueueAction } from "../../src/actions/pr-review-queue";
 function createMockKeyAction(id: string, settings: Record<string, unknown> = {}) {
 	return {
 		id,
-		manifestId: "com.pedrofuentes.github-utilities.pr-review-queue",
+		manifestId: "com.pedrofuentes.github-utilities.security-health",
 		isKey: () => true,
 		isDial: () => false,
 		setImage: vi.fn().mockResolvedValue(undefined),
@@ -85,7 +85,7 @@ function createMockKeyAction(id: string, settings: Record<string, unknown> = {})
 function createMockDialAction(id: string, settings: Record<string, unknown> = {}) {
 	return {
 		id,
-		manifestId: "com.pedrofuentes.github-utilities.pr-review-queue",
+		manifestId: "com.pedrofuentes.github-utilities.security-health",
 		isKey: () => false,
 		isDial: () => true,
 		setImage: vi.fn().mockResolvedValue(undefined),
@@ -163,28 +163,21 @@ function lastImage(mockAction: ReturnType<typeof createMockKeyAction>): string {
 	return decodeSvg(calls[calls.length - 1][0] as string);
 }
 
-function mockFetchReviewResponse(totalCount: number, items?: Array<Record<string, unknown>>) {
-	const defaultItems = Array.from({ length: Math.min(totalCount, 10) }, (_, i) => ({
-		number: i + 1,
-		title: `PR ${i + 1}`,
-		user: { login: "testuser" },
-		html_url: `https://github.com/owner/repo/pull/${i + 1}`,
-		created_at: "2024-01-01T00:00:00Z",
-	}));
+function mockFetchDependabotResponse(alerts: Array<{ severity: string }>) {
 	return {
 		ok: true,
 		status: 200,
 		headers: new Headers({
-			"x-ratelimit-limit": "30",
-			"x-ratelimit-remaining": "29",
+			"x-ratelimit-limit": "5000",
+			"x-ratelimit-remaining": "4999",
 			"x-ratelimit-reset": "9999999999",
 			"x-ratelimit-used": "1",
 		}),
-		json: () => Promise.resolve({
-			total_count: totalCount,
-			incomplete_results: false,
-			items: items ?? defaultItems,
-		}),
+		json: () => Promise.resolve(
+			alerts.map((a) => ({
+				security_advisory: { severity: a.severity },
+			}))
+		),
 		text: () => Promise.resolve(""),
 	} as unknown as Response;
 }
@@ -193,12 +186,12 @@ function mockFetchReviewResponse(totalCount: number, items?: Array<Record<string
 // Tests
 // ──────────────────────────────────────────────
 
-describe("PRReviewQueueAction", () => {
-	let action: PRReviewQueueAction;
+describe("SecurityHealthAction", () => {
+	let action: SecurityHealthAction;
 	let originalFetch: typeof globalThis.fetch;
 
 	beforeEach(() => {
-		action = new PRReviewQueueAction();
+		action = new SecurityHealthAction();
 		originalFetch = globalThis.fetch;
 		globalThis.fetch = vi.fn();
 
@@ -216,7 +209,17 @@ describe("PRReviewQueueAction", () => {
 	describe("onWillAppear", () => {
 		it("shows unconfigured state when token is not set", async () => {
 			mockGetGlobalSettings.mockResolvedValue({});
-			const mockAction = createMockKeyAction("prq-1");
+			const mockAction = createMockKeyAction("sh-1");
+			const ev = createWillAppearEvent(mockAction, { repo: "owner/repo" });
+
+			await action.onWillAppear?.(ev as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Setup");
+		});
+
+		it("shows unconfigured state when repo is not set", async () => {
+			const mockAction = createMockKeyAction("sh-2");
 			const ev = createWillAppearEvent(mockAction, {});
 
 			await action.onWillAppear?.(ev as never);
@@ -225,29 +228,8 @@ describe("PRReviewQueueAction", () => {
 			expect(lastImage(mockAction)).toContain("Setup");
 		});
 
-		it("fetches and displays review count for all repos when no repo configured", async () => {
-			const mockAction = createMockKeyAction("prq-2");
-			const settings = {};
-
-			Object.defineProperty(action, "actions", {
-				get: () => [mockAction],
-				configurable: true,
-			});
-
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(5));
-
-			const ev = createWillAppearEvent(mockAction, settings);
-			await action.onWillAppear?.(ev as never);
-
-			expect(mockAction.setImage).toHaveBeenCalled();
-			const svg = lastImage(mockAction);
-			expect(svg).toContain("5");
-			expect(svg).toContain("Reviews");
-			expect(svg).toContain("All Repos");
-		});
-
-		it("fetches and displays review count for a specific repo", async () => {
-			const mockAction = createMockKeyAction("prq-3");
+		it("fetches and displays grade A for zero alerts", async () => {
+			const mockAction = createMockKeyAction("sh-3");
 			const settings = { repo: "owner/myrepo" };
 
 			Object.defineProperty(action, "actions", {
@@ -255,42 +237,88 @@ describe("PRReviewQueueAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(2));
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([]));
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
 
 			expect(mockAction.setImage).toHaveBeenCalled();
 			const svg = lastImage(mockAction);
-			expect(svg).toContain("2");
-			expect(svg).toContain("Reviews");
-			expect(svg).toContain("myrepo");
+			expect(svg).toContain("A");
+			expect(svg).toContain("No Alerts");
 		});
 
-		it("displays zero count correctly", async () => {
-			const mockAction = createMockKeyAction("prq-4");
-			const settings = {};
+		it("fetches and displays grade B for low-severity alerts", async () => {
+			const mockAction = createMockKeyAction("sh-4");
+			const settings = { repo: "owner/myrepo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(0, []));
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([
+				{ severity: "low" },
+				{ severity: "medium" },
+			]));
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
 
 			expect(mockAction.setImage).toHaveBeenCalled();
 			const svg = lastImage(mockAction);
-			expect(svg).toContain("0");
-			expect(svg).toContain("Reviews");
+			expect(svg).toContain("B");
+			expect(svg).toContain("2 alerts");
+		});
+
+		it("fetches and displays grade D for critical alerts", async () => {
+			const mockAction = createMockKeyAction("sh-5");
+			const settings = { repo: "owner/myrepo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([
+				{ severity: "critical" },
+				{ severity: "low" },
+			]));
+
+			const ev = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(ev as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			const svg = lastImage(mockAction);
+			expect(svg).toContain("D");
+			expect(svg).toContain("2 alerts");
+		});
+
+		it("shows singular 'alert' for exactly one alert", async () => {
+			const mockAction = createMockKeyAction("sh-6");
+			const settings = { repo: "owner/myrepo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([
+				{ severity: "low" },
+			]));
+
+			const ev = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(ev as never);
+
+			const svg = lastImage(mockAction);
+			expect(svg).toContain("1 alert");
+			expect(svg).not.toContain("1 alerts");
 		});
 
 		it("shows unconfigured on dial when token is not set", async () => {
 			mockGetGlobalSettings.mockResolvedValue({});
-			const mockAction = createMockDialAction("prq-dial-1");
-			const ev = createWillAppearEvent(mockAction, {});
+			const mockAction = createMockDialAction("sh-dial-1");
+			const ev = createWillAppearEvent(mockAction, { repo: "owner/repo" });
 
 			await action.onWillAppear?.(ev as never);
 
@@ -299,40 +327,43 @@ describe("PRReviewQueueAction", () => {
 			expect(decodeSvg(feedbackCall.canvas)).toContain("Setup Required");
 		});
 
-		it("shows review count on dial (encoder)", async () => {
-			const mockAction = createMockDialAction("prq-dial-2");
-			const settings = {};
+		it("shows security arc strip on dial with alert data", async () => {
+			const mockAction = createMockDialAction("sh-dial-2");
+			const settings = { repo: "owner/myrepo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(3));
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([
+				{ severity: "high" },
+				{ severity: "medium" },
+			]));
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
 
 			expect(mockAction.setFeedback).toHaveBeenCalled();
 			const lastCall = mockAction.setFeedback.mock.calls[mockAction.setFeedback.mock.calls.length - 1][0] as { canvas: string };
-			expect(decodeSvg(lastCall.canvas)).toContain("3");
-			expect(decodeSvg(lastCall.canvas)).toContain("reviews");
+			expect(decodeSvg(lastCall.canvas)).toContain("Security");
+			expect(decodeSvg(lastCall.canvas)).toContain("high");
 		});
 	});
 
 	// ── onWillDisappear ─────────────────────────
 
 	describe("onWillDisappear", () => {
-		it("cleans up timer on disappear", async () => {
-			const mockAction = createMockKeyAction("prq-d-1");
-			const settings = {};
+		it("cleans up on disappear", async () => {
+			const mockAction = createMockKeyAction("sh-d-1");
+			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(1));
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([]));
 
 			const appearEv = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(appearEv as never);
@@ -345,7 +376,7 @@ describe("PRReviewQueueAction", () => {
 		});
 
 		it("handles disappear without prior appear", () => {
-			const mockAction = createMockKeyAction("prq-never-appeared");
+			const mockAction = createMockKeyAction("sh-never-appeared");
 			const ev = createWillDisappearEvent(mockAction);
 
 			action.onWillDisappear?.(ev as never);
@@ -355,78 +386,60 @@ describe("PRReviewQueueAction", () => {
 	// ── onKeyDown ───────────────────────────────
 
 	describe("onKeyDown", () => {
-		it("opens global review-requested page when no repo configured", async () => {
-			const mockAction = createMockKeyAction("prq-k-1");
-
-			Object.defineProperty(action, "actions", {
-				get: () => [mockAction],
-				configurable: true,
-			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(1));
-			await action.onWillAppear?.(createWillAppearEvent(mockAction, {}) as never);
-
-			const ev = createKeyDownEvent(mockAction, {});
-			await action.onKeyDown?.(ev as never);
-
-			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/pulls/review-requested");
-		});
-
-		it("opens repo-specific review page when repo is configured", async () => {
-			const mockAction = createMockKeyAction("prq-k-2");
+		it("opens repo security page when repo is configured", async () => {
+			const mockAction = createMockKeyAction("sh-k-1");
 			const settings = { repo: "facebook/react" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(1));
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([]));
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
 			const ev = createKeyDownEvent(mockAction, settings);
 			await action.onKeyDown?.(ev as never);
 
-			expect(mockOpenUrl).toHaveBeenCalledWith(
-				"https://github.com/facebook/react/pulls?q=is%3Apr+is%3Aopen+review-requested%3A%40me"
-			);
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/facebook/react/security");
+		});
+
+		it("opens github.com when no repo configured", async () => {
+			const mockAction = createMockKeyAction("sh-k-2");
+
+			const ev = createKeyDownEvent(mockAction, {});
+			await action.onKeyDown?.(ev as never);
+
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com");
 		});
 	});
 
 	// ── Encoder: onDialDown ─────────────────────
 
 	describe("onDialDown", () => {
-		it("opens global review-requested page when no repo configured", async () => {
-			const mockAction = createMockDialAction("prq-dd-1");
-
-			Object.defineProperty(action, "actions", {
-				get: () => [mockAction],
-				configurable: true,
-			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(1));
-			await action.onWillAppear?.(createWillAppearEvent(mockAction, {}) as never);
-
-			const ev = createDialDownEvent(mockAction);
-			await action.onDialDown?.(ev as never);
-
-			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/pulls/review-requested");
-		});
-
-		it("opens repo-specific review page when repo is configured", async () => {
-			const mockAction = createMockDialAction("prq-dd-2");
+		it("opens security page when repo is configured", async () => {
+			const mockAction = createMockDialAction("sh-dd-1");
 			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(1));
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([]));
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
 			const ev = createDialDownEvent(mockAction, settings);
 			await action.onDialDown?.(ev as never);
 
-			expect(mockOpenUrl).toHaveBeenCalledWith(
-				"https://github.com/owner/repo/pulls?q=is%3Apr+is%3Aopen+review-requested%3A%40me"
-			);
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/security");
+		});
+
+		it("opens github.com when no repo configured", async () => {
+			const mockAction = createMockDialAction("sh-dd-2");
+
+			const ev = createDialDownEvent(mockAction);
+			await action.onDialDown?.(ev as never);
+
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com");
 		});
 	});
 
@@ -434,22 +447,25 @@ describe("PRReviewQueueAction", () => {
 
 	describe("onDialRotate", () => {
 		it("triggers a refresh on dial rotate", async () => {
-			const mockAction = createMockDialAction("prq-dr-1");
+			const mockAction = createMockDialAction("sh-dr-1");
+			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(2));
-			await action.onWillAppear?.(createWillAppearEvent(mockAction, {}) as never);
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([]));
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(7));
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([
+				{ severity: "high" },
+			]));
 
-			const ev = createDialRotateEvent(mockAction);
+			const ev = createDialRotateEvent(mockAction, settings);
 			await action.onDialRotate?.(ev as never);
 
 			const lastCall = mockAction.setFeedback.mock.calls[mockAction.setFeedback.mock.calls.length - 1][0] as { canvas: string };
-			expect(decodeSvg(lastCall.canvas)).toContain("7");
+			expect(decodeSvg(lastCall.canvas)).toContain("C");
 		});
 	});
 
@@ -457,22 +473,27 @@ describe("PRReviewQueueAction", () => {
 
 	describe("onTouchTap", () => {
 		it("triggers a refresh on touch tap", async () => {
-			const mockAction = createMockDialAction("prq-tt-1");
+			const mockAction = createMockDialAction("sh-tt-1");
+			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(1));
-			await action.onWillAppear?.(createWillAppearEvent(mockAction, {}) as never);
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([]));
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(4));
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([
+				{ severity: "critical" },
+				{ severity: "critical" },
+				{ severity: "critical" },
+			]));
 
-			const ev = createTouchTapEvent(mockAction);
+			const ev = createTouchTapEvent(mockAction, settings);
 			await action.onTouchTap?.(ev as never);
 
 			const lastCall = mockAction.setFeedback.mock.calls[mockAction.setFeedback.mock.calls.length - 1][0] as { canvas: string };
-			expect(decodeSvg(lastCall.canvas)).toContain("4");
+			expect(decodeSvg(lastCall.canvas)).toContain("F");
 		});
 	});
 
@@ -480,7 +501,7 @@ describe("PRReviewQueueAction", () => {
 
 	describe("onDidReceiveSettings", () => {
 		it("refreshes data when settings change", async () => {
-			const mockAction = createMockKeyAction("prq-s-1");
+			const mockAction = createMockKeyAction("sh-s-1");
 			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
@@ -488,19 +509,39 @@ describe("PRReviewQueueAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(8));
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([
+				{ severity: "medium" },
+				{ severity: "medium" },
+				{ severity: "low" },
+			]));
 
 			const ev = createDidReceiveSettingsEvent(mockAction, settings);
 			await action.onDidReceiveSettings?.(ev as never);
 
 			expect(mockAction.setImage).toHaveBeenCalled();
 			const svg = lastImage(mockAction);
-			expect(svg).toContain("8");
+			expect(svg).toContain("B");
 		});
 
 		it("shows unconfigured when token is cleared", async () => {
 			mockGetGlobalSettings.mockResolvedValue({});
-			const mockAction = createMockKeyAction("prq-s-2");
+			const mockAction = createMockKeyAction("sh-s-2");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			const ev = createDidReceiveSettingsEvent(mockAction, settings);
+			await action.onDidReceiveSettings?.(ev as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Setup");
+		});
+
+		it("shows unconfigured when repo is cleared", async () => {
+			const mockAction = createMockKeyAction("sh-s-3");
 			const settings = {};
 
 			Object.defineProperty(action, "actions", {
@@ -517,8 +558,8 @@ describe("PRReviewQueueAction", () => {
 
 		it("shows unconfigured on dial when token is cleared", async () => {
 			mockGetGlobalSettings.mockResolvedValue({});
-			const mockAction = createMockDialAction("prq-s-3");
-			const settings = {};
+			const mockAction = createMockDialAction("sh-s-4");
+			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
@@ -538,8 +579,8 @@ describe("PRReviewQueueAction", () => {
 
 	describe("error handling", () => {
 		it("shows auth error when API returns 401", async () => {
-			const mockAction = createMockKeyAction("prq-err-1");
-			const settings = {};
+			const mockAction = createMockKeyAction("sh-err-1");
+			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
@@ -550,10 +591,10 @@ describe("PRReviewQueueAction", () => {
 				ok: false,
 				status: 401,
 				headers: new Headers({
-					"x-ratelimit-limit": "30",
+					"x-ratelimit-limit": "5000",
 					"x-ratelimit-remaining": "0",
 					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "30",
+					"x-ratelimit-used": "5000",
 				}),
 				json: () => Promise.resolve({ message: "Bad credentials" }),
 				text: () => Promise.resolve("Bad credentials"),
@@ -566,8 +607,8 @@ describe("PRReviewQueueAction", () => {
 		});
 
 		it("shows rate limited error on key", async () => {
-			const mockAction = createMockKeyAction("prq-err-2");
-			const settings = {};
+			const mockAction = createMockKeyAction("sh-err-2");
+			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
@@ -578,10 +619,10 @@ describe("PRReviewQueueAction", () => {
 				ok: false,
 				status: 403,
 				headers: new Headers({
-					"x-ratelimit-limit": "30",
+					"x-ratelimit-limit": "5000",
 					"x-ratelimit-remaining": "0",
 					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "30",
+					"x-ratelimit-used": "5000",
 				}),
 				json: () => Promise.resolve({ message: "rate limit exceeded" }),
 				text: () => Promise.resolve("rate limit exceeded"),
@@ -594,8 +635,8 @@ describe("PRReviewQueueAction", () => {
 		});
 
 		it("shows error on dial when API fails", async () => {
-			const mockAction = createMockDialAction("prq-err-3");
-			const settings = {};
+			const mockAction = createMockDialAction("sh-err-3");
+			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
@@ -606,10 +647,10 @@ describe("PRReviewQueueAction", () => {
 				ok: false,
 				status: 401,
 				headers: new Headers({
-					"x-ratelimit-limit": "30",
+					"x-ratelimit-limit": "5000",
 					"x-ratelimit-remaining": "0",
 					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "30",
+					"x-ratelimit-used": "5000",
 				}),
 				json: () => Promise.resolve({ message: "Bad credentials" }),
 				text: () => Promise.resolve("Bad credentials"),
@@ -621,13 +662,41 @@ describe("PRReviewQueueAction", () => {
 			const lastCall = mockAction.setFeedback.mock.calls[mockAction.setFeedback.mock.calls.length - 1][0] as { canvas: string };
 			expect(decodeSvg(lastCall.canvas)).toContain("Auth Error");
 		});
+
+		it("shows not found error for 404", async () => {
+			const mockAction = createMockKeyAction("sh-err-4");
+			const settings = { repo: "owner/nonexistent" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			vi.mocked(globalThis.fetch).mockResolvedValue({
+				ok: false,
+				status: 404,
+				headers: new Headers({
+					"x-ratelimit-limit": "5000",
+					"x-ratelimit-remaining": "4999",
+					"x-ratelimit-reset": "9999999999",
+					"x-ratelimit-used": "1",
+				}),
+				json: () => Promise.resolve({ message: "Not Found" }),
+				text: () => Promise.resolve("Not Found"),
+			} as unknown as Response);
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Not Found");
+		});
 	});
 
 	// ── onSendToPlugin ──────────────────────────
 
 	describe("onSendToPlugin", () => {
 		it("handles PI data requests for getRepos", async () => {
-			const mockAction = createMockKeyAction("prq-pi-1", { repo: "owner/repo" });
+			const mockAction = createMockKeyAction("sh-pi-1", { repo: "owner/repo" });
 
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,
@@ -649,11 +718,80 @@ describe("PRReviewQueueAction", () => {
 		});
 
 		it("ignores events without event property", async () => {
-			const mockAction = createMockKeyAction("prq-pi-2");
+			const mockAction = createMockKeyAction("sh-pi-2");
 			const ev = createSendToPluginEvent(mockAction, { something: "else" });
 
 			await action.onSendToPlugin?.(ev as never);
 			// No crash
 		});
+	});
+});
+
+// ── computeGrade ────────────────────────────────
+
+describe("computeGrade", () => {
+	it("returns grade A and score 100 for zero alerts", () => {
+		const result = computeGrade({ critical: 0, high: 0, medium: 0, low: 0, total: 0 });
+		expect(result.grade).toBe("A");
+		expect(result.score).toBe(100);
+	});
+
+	it("returns grade B for 1-3 low/medium alerts", () => {
+		const result = computeGrade({ critical: 0, high: 0, medium: 1, low: 1, total: 2 });
+		expect(result.grade).toBe("B");
+		expect(result.score).toBe(96); // 100 - 3 - 1
+	});
+
+	it("returns grade B for 3 low alerts", () => {
+		const result = computeGrade({ critical: 0, high: 0, medium: 0, low: 3, total: 3 });
+		expect(result.grade).toBe("B");
+		expect(result.score).toBe(97); // 100 - 3
+	});
+
+	it("returns grade C for 4+ total alerts without high/critical", () => {
+		const result = computeGrade({ critical: 0, high: 0, medium: 2, low: 2, total: 4 });
+		expect(result.grade).toBe("C");
+		expect(result.score).toBe(92); // 100 - 6 - 2
+	});
+
+	it("returns grade C for any high alerts (no critical)", () => {
+		const result = computeGrade({ critical: 0, high: 1, medium: 0, low: 0, total: 1 });
+		expect(result.grade).toBe("C");
+		expect(result.score).toBe(90); // 100 - 10
+	});
+
+	it("returns grade D for any critical alert (less than 3)", () => {
+		const result = computeGrade({ critical: 1, high: 0, medium: 0, low: 0, total: 1 });
+		expect(result.grade).toBe("D");
+		expect(result.score).toBe(75); // 100 - 25
+	});
+
+	it("returns grade D for 2 critical alerts", () => {
+		const result = computeGrade({ critical: 2, high: 0, medium: 0, low: 0, total: 2 });
+		expect(result.grade).toBe("D");
+		expect(result.score).toBe(50); // 100 - 50
+	});
+
+	it("returns grade F for 3+ critical alerts", () => {
+		const result = computeGrade({ critical: 3, high: 0, medium: 0, low: 0, total: 3 });
+		expect(result.grade).toBe("F");
+		expect(result.score).toBe(25); // 100 - 75
+	});
+
+	it("returns grade F for many critical alerts", () => {
+		const result = computeGrade({ critical: 5, high: 2, medium: 3, low: 4, total: 14 });
+		expect(result.grade).toBe("F");
+		expect(result.score).toBe(0); // 100 - 125 - 20 - 9 - 4 = capped at 0
+	});
+
+	it("caps score at 0 (never negative)", () => {
+		const result = computeGrade({ critical: 10, high: 10, medium: 10, low: 10, total: 40 });
+		expect(result.score).toBe(0);
+	});
+
+	it("handles mixed severity for grade C", () => {
+		const result = computeGrade({ critical: 0, high: 2, medium: 3, low: 5, total: 10 });
+		expect(result.grade).toBe("C");
+		expect(result.score).toBe(66); // 100 - 20 - 9 - 5
 	});
 });

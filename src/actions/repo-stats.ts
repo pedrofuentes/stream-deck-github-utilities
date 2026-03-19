@@ -21,7 +21,14 @@ import {
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
+	type Action,
 	type SendToPluginEvent,
+} from "@elgato/streamdeck";
+import type {
+	DialRotateEvent,
+	DialDownEvent,
+	DialUpEvent,
+	TouchTapEvent,
 } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
 
@@ -30,6 +37,7 @@ import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { fetchRepoStats, fetchOpenPullRequestCount, getStatDisplay, getStatUrl, STAT_TYPES, type StatType } from "../utils/github-api";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderStatImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
+import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
 import { PollingCoordinator } from "../utils/polling-coordinator";
 import type { JsonValue } from "@elgato/utils";
@@ -65,6 +73,9 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	/** Timestamp when key was pressed down (for long/short press detection) */
 	private keyDownTime = new Map<string, number>();
 
+	/** Timestamp of last key-up per action (for double-click detection) */
+	private lastKeyUpTime = new Map<string, number>();
+
 	/** Marquee scroll state per action instance */
 	private marqueeData = new Map<string, MarqueeData>();
 
@@ -75,11 +86,18 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	 */
 	private recentSetSettings = new Set<string>();
 
+	/** Sparkline trend cache per action instance (last N stat values) */
+	private trendCache = new Map<string, number[]>();
+
+	/** Cached action contexts for O(1) lookup */
+	private actionContexts = new Map<string, Action<RepoStatsSettings>>();
+
 	/**
 	 * Called when the action becomes visible on the Stream Deck.
 	 * Sets up initial display and starts the polling timer.
 	 */
 	override async onWillAppear(ev: WillAppearEvent<RepoStatsSettings>): Promise<void> {
+		this.actionContexts.set(ev.action.id, ev.action);
 		const settings = ev.payload.settings;
 		this.actionSettings.set(ev.action.id, settings);
 
@@ -93,6 +111,16 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 
 			await ev.action.setImage(renderAnimatedSpinner());
 			await ev.action.setTitle("");
+		}
+
+		if (ev.action.isDial()) {
+			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			if (!settings.repo || !globalSettings.githubToken) {
+				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				return;
+			}
+			await ev.action.setFeedback({ canvas: renderStripLoading() });
 		}
 
 		// Start polling (creates state for generation counter)
@@ -112,8 +140,11 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.keyDownTime.delete(ev.action.id);
+		this.lastKeyUpTime.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
 		this.recentSetSettings.delete(ev.action.id);
+		this.trendCache.delete(ev.action.id);
+		this.actionContexts.delete(ev.action.id);
 	}
 
 	/**
@@ -129,6 +160,17 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	 * Long press (≥ 500ms): opens the stat's GitHub page in the browser.
 	 */
 	override async onKeyUp(ev: KeyUpEvent<RepoStatsSettings>): Promise<void> {
+		// Double-click detection → force refresh
+		const now = Date.now();
+		const lastUp = this.lastKeyUpTime.get(ev.action.id) ?? 0;
+		this.lastKeyUpTime.set(ev.action.id, now);
+		if (now - lastUp < 400) {
+			this.lastKeyUpTime.delete(ev.action.id);
+			this.polling.resetBackoff(ev.action.id);
+			await this.refreshStats(ev.action.id);
+			return;
+		}
+
 		const settings = ev.payload.settings;
 		// Prefer cached settings — the event payload may be missing fields if
 		// sdpi-components sent a partial setSettings (overwriting repo to undefined).
@@ -202,6 +244,69 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	}
 
 	/**
+	 * Called when the user rotates the dial (Stream Deck+).
+	 * Cycles to the next/previous stat type.
+	 */
+	override async onDialRotate(ev: DialRotateEvent<RepoStatsSettings>): Promise<void> {
+		const cached = this.actionSettings.get(ev.action.id);
+		const settings = cached ?? ev.payload.settings;
+		const currentType: StatType = settings.statType ?? "stars";
+		const currentIndex = STAT_TYPES.indexOf(currentType);
+		const direction = ev.payload.ticks > 0 ? 1 : -1;
+		const nextIndex = (currentIndex + direction + STAT_TYPES.length) % STAT_TYPES.length;
+		const nextType = STAT_TYPES[nextIndex];
+
+		const newSettings: RepoStatsSettings = { ...settings, statType: nextType };
+		this.recentSetSettings.add(ev.action.id);
+		await ev.action.setSettings(newSettings);
+		this.actionSettings.set(ev.action.id, newSettings);
+
+		this.polling.resetBackoff(ev.action.id);
+		await this.refreshStats(ev.action.id);
+	}
+
+	/**
+	 * Called when the user presses the dial (Stream Deck+).
+	 * Records timestamp for long/short press detection.
+	 */
+	override async onDialDown(ev: DialDownEvent<RepoStatsSettings>): Promise<void> {
+		this.keyDownTime.set(ev.action.id, Date.now());
+	}
+
+	/**
+	 * Called when the user releases the dial (Stream Deck+).
+	 * Opens the stat's GitHub page.
+	 */
+	override async onDialUp(ev: DialUpEvent<RepoStatsSettings>): Promise<void> {
+		this.keyDownTime.delete(ev.action.id);
+		const cached = this.actionSettings.get(ev.action.id);
+		const settings = cached ?? ev.payload.settings;
+		const repo = settings.repo;
+
+		if (!repo) return;
+
+		const url = this.lastUrl.get(ev.action.id);
+		if (url) {
+			await streamDeck.system.openUrl(url);
+		} else {
+			const parsed = parseRepoIdentifier(repo);
+			if (parsed) {
+				const statType: StatType = settings.statType ?? "stars";
+				await streamDeck.system.openUrl(getStatUrl(parsed.owner, parsed.repo, statType));
+			}
+		}
+	}
+
+	/**
+	 * Called when the user taps the touch strip (Stream Deck+).
+	 * Forces a data refresh.
+	 */
+	override async onTouchTap(ev: TouchTapEvent<RepoStatsSettings>): Promise<void> {
+		this.polling.resetBackoff(ev.action.id);
+		await this.refreshStats(ev.action.id);
+	}
+
+	/**
 	 * Called when settings are changed from the Property Inspector.
 	 */
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<RepoStatsSettings>): Promise<void> {
@@ -245,6 +350,17 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			await ev.action.setTitle("");
 		}
 
+		if (ev.action.isDial()) {
+			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			if (!settings.repo || !globalSettings.githubToken) {
+				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				this.polling.stop(ev.action.id);
+				return;
+			}
+			await ev.action.setFeedback({ canvas: renderStripLoading() });
+		}
+
 		// Restart timer with potentially new interval (creates fresh state for generation counter)
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		this.polling.restart(ev.action.id, () => this.refreshStats(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
@@ -266,15 +382,20 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 		const gen = this.polling.incrementGeneration(actionId);
 
 		// Find the action context by ID
-		const actionContext = [...this.actions].find((a) => a.id === actionId);
-		if (!actionContext || !actionContext.isKey()) {
+		const actionContext = this.actionContexts.get(actionId);
+		if (!actionContext) {
 			return;
 		}
 
+		const isDial = actionContext.isDial();
+
 		const parsed = parseRepoIdentifier(settings.repo);
 		if (!parsed) {
-			await actionContext.setImage(renderErrorImage("Invalid"));
-			await actionContext.setTitle("");
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("Invalid"));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError("Invalid repo") });
 			return;
 		}
 
@@ -284,8 +405,11 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			const token = globalSettings.githubToken;
 
 			if (!token) {
-				await actionContext.setImage(renderUnconfiguredImage());
-				await actionContext.setTitle("");
+				if (actionContext.isKey()) {
+					await actionContext.setImage(renderUnconfiguredImage());
+					await actionContext.setTitle("");
+				}
+				if (isDial) await actionContext.setFeedback({ canvas: renderStripUnconfigured() });
 				return;
 			}
 
@@ -319,6 +443,19 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			// Start/stop marquee timer based on whether any line needs animation
 			this.updateMarqueeTimer(actionId);
 
+			// Update touch strip for encoder
+			if (isDial) {
+				const numericValue = parseFloat(displayValue.replace(/[^0-9.]/g, "")) || 0;
+				const trend = this.trendCache.get(actionId) ?? [];
+				trend.push(numericValue);
+				if (trend.length > 14) trend.shift();
+				this.trendCache.set(actionId, trend);
+
+				await actionContext.setFeedback({
+					canvas: renderStatStrip(displayValue, statType, trend.length >= 2 ? trend : undefined, parsed.repo),
+				});
+			}
+
 			// Store URL for key press
 			this.lastUrl.set(actionId, getStatUrl(parsed.owner, parsed.repo, statType));
 
@@ -344,8 +481,11 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			}
 
 			this.polling.reportError(actionId);
-			await actionContext.setImage(renderErrorImage(errorLabel));
-			await actionContext.setTitle("");
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage(errorLabel));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError(errorLabel) });
 		}
 	}
 
@@ -376,7 +516,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	 */
 	private async renderWithMarquee(actionId: string): Promise<void> {
 		const md = this.marqueeData.get(actionId);
-		const actionContext = [...this.actions].find((a) => a.id === actionId);
+		const actionContext = this.actionContexts.get(actionId);
 		if (!md || !actionContext?.isKey()) return;
 
 		const displayName = md.line1.needsAnimation()

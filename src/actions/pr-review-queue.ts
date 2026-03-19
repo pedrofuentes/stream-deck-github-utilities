@@ -17,6 +17,7 @@
 
 import {
 	action,
+	type Action,
 	KeyDownEvent,
 	SingletonAction,
 	WillAppearEvent,
@@ -58,8 +59,12 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 	private polling = new PollingCoordinator();
 	private actionSettings = new Map<string, PRReviewQueueSettings>();
 	private marqueeData = new Map<string, PRQueueMarqueeData>();
+	private lastKeyUpTime = new Map<string, number>();
+	/** Cached action contexts for O(1) lookup */
+	private actionContexts = new Map<string, Action<PRReviewQueueSettings>>();
 
 	override async onWillAppear(ev: WillAppearEvent<PRReviewQueueSettings>): Promise<void> {
+		this.actionContexts.set(ev.action.id, ev.action);
 		const settings = ev.payload.settings;
 		this.actionSettings.set(ev.action.id, settings);
 
@@ -92,12 +97,25 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 		this.stopMarquee(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
+		this.lastKeyUpTime.delete(ev.action.id);
+		this.actionContexts.delete(ev.action.id);
 	}
 
 	/**
 	 * Called when the user presses the button. Opens the review-requested page on GitHub.
 	 */
 	override async onKeyDown(ev: KeyDownEvent<PRReviewQueueSettings>): Promise<void> {
+		// Double-click detection → force refresh
+		const now = Date.now();
+		const lastUp = this.lastKeyUpTime.get(ev.action.id) ?? 0;
+		this.lastKeyUpTime.set(ev.action.id, now);
+		if (now - lastUp < 400) {
+			this.lastKeyUpTime.delete(ev.action.id);
+			this.polling.resetBackoff(ev.action.id);
+			await this.refreshQueue(ev.action.id);
+			return;
+		}
+
 		const settings = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
 		const repo = cached?.repo ?? settings.repo;
@@ -161,6 +179,7 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 	}
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<PRReviewQueueSettings>): Promise<void> {
+		this.actionContexts.set(ev.action.id, ev.action);
 		const incoming = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
 		const settings: PRReviewQueueSettings = { ...cached, ...incoming };
@@ -200,7 +219,7 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 		const settings = this.actionSettings.get(actionId);
 		const gen = this.polling.incrementGeneration(actionId);
 
-		const actionContext = [...this.actions].find((a) => a.id === actionId);
+		const actionContext = this.actionContexts.get(actionId);
 		if (!actionContext) return;
 
 		try {
@@ -285,7 +304,7 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 
 	private async renderWithMarquee(actionId: string): Promise<void> {
 		const md = this.marqueeData.get(actionId);
-		const actionContext = [...this.actions].find((a) => a.id === actionId);
+		const actionContext = this.actionContexts.get(actionId);
 		if (!md || !actionContext?.isKey()) return;
 
 		const displayName = md.line1.needsAnimation()
