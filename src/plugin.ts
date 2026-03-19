@@ -15,6 +15,8 @@ import { IssueCounterAction } from "./actions/issue-counter";
 import { ReleaseMonitorAction } from "./actions/release-monitor";
 import { CommitActivityAction } from "./actions/commit-activity";
 import { BranchComparisonAction } from "./actions/branch-comparison";
+import { BranchNetworkAction } from "./actions/branch-network";
+import { PRReviewQueueAction } from "./actions/pr-review-queue";
 
 // Configure the logger
 streamDeck.logger.setLevel("debug");
@@ -27,6 +29,8 @@ streamDeck.actions.registerAction(new IssueCounterAction());
 streamDeck.actions.registerAction(new ReleaseMonitorAction());
 streamDeck.actions.registerAction(new CommitActivityAction());
 streamDeck.actions.registerAction(new BranchComparisonAction());
+streamDeck.actions.registerAction(new BranchNetworkAction());
+streamDeck.actions.registerAction(new PRReviewQueueAction());
 
 // Connect to the Stream Deck
 streamDeck.connect();

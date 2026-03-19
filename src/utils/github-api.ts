@@ -43,6 +43,15 @@ export interface RateLimitInfo {
 	used: number;
 }
 
+/** Summary of a PR requesting the user's review */
+export interface ReviewRequestedPR {
+	number: number;
+	title: string;
+	user_login: string;
+	html_url: string;
+	created_at: string;
+}
+
 /** Structured error from the GitHub API */
 export class GitHubApiError extends Error {
 	constructor(
@@ -348,6 +357,78 @@ export async function fetchPullRequestCount(
 }
 
 /**
+ * Fetches PRs that are requesting the authenticated user's review.
+ * Uses the Search API with the review-requested qualifier.
+ *
+ * @param token - GitHub personal access token
+ * @param repo - Optional "owner/repo" filter (shows all repos if omitted)
+ * @returns Object with total_count and array of PR summary objects
+ * @throws {GitHubApiError} on API errors
+ */
+export async function fetchReviewRequestedPRs(
+	token: string,
+	repo?: string,
+): Promise<{ total_count: number; items: ReviewRequestedPR[] }> {
+	let query = "is:open is:pr review-requested:@me";
+	if (repo) {
+		query += ` repo:${repo}`;
+	}
+
+	const url = `${GITHUB_API_BASE}/search/issues?q=${encodeURIComponent(query)}&per_page=10&sort=created&order=desc`;
+	const headers = buildHeaders(token);
+
+	const response = await fetch(url, { headers });
+	const rateLimitInfo = parseRateLimitHeaders(response.headers);
+
+	if (!response.ok) {
+		if (response.status === 401) {
+			throw new GitHubApiError("Invalid or expired GitHub token", response.status, rateLimitInfo);
+		}
+		if (response.status === 422) {
+			throw new GitHubApiError("Search query error — token may lack permissions", response.status, rateLimitInfo);
+		}
+		if (response.status === 429) {
+			const retryAfterSeconds = parseRetryAfter(response.headers);
+			const waitSec = retryAfterSeconds ?? Math.max(Math.ceil((rateLimitInfo.reset.getTime() - Date.now()) / 1000), 60);
+			throw new GitHubApiError(
+				`GitHub API rate limit exceeded (429). Retry after ${waitSec}s`,
+				response.status,
+				rateLimitInfo,
+				waitSec,
+			);
+		}
+		if (response.status === 403 && rateLimitInfo.remaining === 0) {
+			const resetTime = rateLimitInfo.reset.toLocaleTimeString();
+			const waitSec = Math.max(Math.ceil((rateLimitInfo.reset.getTime() - Date.now()) / 1000), 0);
+			throw new GitHubApiError(
+				`GitHub API rate limit exceeded. Resets at ${resetTime}`,
+				response.status,
+				rateLimitInfo,
+				waitSec > 0 ? waitSec : undefined,
+			);
+		}
+		if (response.status === 403) {
+			throw new GitHubApiError("Access denied. Check token permissions.", response.status, rateLimitInfo);
+		}
+		throw new GitHubApiError(`GitHub API error (${response.status})`, response.status, rateLimitInfo);
+	}
+
+	const data = (await response.json()) as Record<string, unknown>;
+	const items = (data.items as Record<string, unknown>[] ?? []).map((item) => ({
+		number: item.number as number,
+		title: item.title as string,
+		user_login: ((item.user as Record<string, unknown>)?.login as string) ?? "",
+		html_url: item.html_url as string,
+		created_at: item.created_at as string,
+	}));
+
+	return {
+		total_count: (data.total_count as number) ?? 0,
+		items,
+	};
+}
+
+/**
  * Fetches issue count for a repository with a given state filter.
  * For "open" state, uses repo stats minus open PRs.
  * For "closed" or "all", uses the GitHub Search API with `type:issue` qualifier
@@ -501,6 +582,31 @@ export function formatRelativeTime(isoDate: string): string {
 	return `${diffYear}y ago`;
 }
 
+/**
+ * Formats a workflow run duration from created_at → updated_at.
+ * Returns a compact duration string like "3m 42s", "1h 5m", or "" if unavailable.
+ *
+ * @param createdAt - ISO 8601 start time
+ * @param updatedAt - ISO 8601 end time
+ * @returns Formatted duration string or empty string
+ */
+export function formatRunDuration(createdAt: string, updatedAt: string): string {
+	if (!createdAt || !updatedAt) return "";
+	const start = new Date(createdAt).getTime();
+	const end = new Date(updatedAt).getTime();
+	const diffMs = end - start;
+	if (diffMs <= 0 || isNaN(diffMs)) return "";
+
+	const totalSec = Math.floor(diffMs / 1000);
+	const hours = Math.floor(totalSec / 3600);
+	const minutes = Math.floor((totalSec % 3600) / 60);
+	const seconds = totalSec % 60;
+
+	if (hours > 0) return `${hours}h ${minutes}m`;
+	if (minutes > 0) return `${minutes}m ${seconds}s`;
+	return `${seconds}s`;
+}
+
 /** Commit activity data from the GitHub stats API */
 export interface CommitActivityWeek {
 	/** Unix timestamp of the start of this week */
@@ -626,6 +732,46 @@ export async function fetchBranchComparison(
 		html_url: (data.html_url as string) ?? `https://github.com/${owner}/${repo}/compare/${base}...${head}`,
 		status: (data.status as BranchComparison["status"]) ?? "identical",
 	};
+}
+
+// ─── Branch Network API ──────────────────────────────────────
+
+/** Branch info with latest commit for network visualization */
+export interface BranchInfo {
+	name: string;
+	commitSha: string;
+}
+
+/**
+ * Fetches branch info for network visualization.
+ * Returns the list of branches with their latest commit SHA.
+ *
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param token - GitHub personal access token
+ * @returns Array of branch info
+ * @throws {GitHubApiError} on API errors
+ */
+export async function fetchBranchNetwork(
+	owner: string,
+	repo: string,
+	token: string,
+): Promise<BranchInfo[]> {
+	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=10`;
+	const headers = buildHeaders(token);
+
+	const response = await fetch(url, { headers });
+	const rateLimitInfo = parseRateLimitHeaders(response.headers);
+
+	if (!response.ok) {
+		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
+	}
+
+	const data = (await response.json()) as Array<{ name: string; commit: { sha: string } }>;
+	return data.map((b) => ({
+		name: b.name,
+		commitSha: b.commit.sha,
+	}));
 }
 
 // ─── Workflow Status API ─────────────────────────────────────
@@ -853,6 +999,52 @@ export async function fetchWorkflowInfo(
 	]);
 
 	return { latestRun, deployment };
+}
+
+/**
+ * Triggers a workflow dispatch event for the specified workflow.
+ * Requires the token to have `Actions: Write` permission.
+ *
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param workflowFile - Workflow filename (e.g., "deploy.yml")
+ * @param ref - Branch or tag to run the workflow on
+ * @param token - GitHub PAT with Actions write permission
+ * @throws GitHubApiError if the request fails (e.g., 403 for missing permissions)
+ */
+export async function triggerWorkflowDispatch(
+	owner: string,
+	repo: string,
+	workflowFile: string,
+	ref: string,
+	token: string,
+): Promise<void> {
+	const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
+	const response = await fetch(url, {
+		method: "POST",
+		headers: {
+			Accept: "application/vnd.github+json",
+			Authorization: `Bearer ${token}`,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({ ref }),
+	});
+
+	if (!response.ok) {
+		const rateLimitInfo = parseRateLimitHeaders(response.headers);
+		if (response.status === 403) {
+			throw new GitHubApiError(
+				"Workflow dispatch requires Actions: Write permission on your token",
+				403,
+				rateLimitInfo,
+			);
+		}
+		throw new GitHubApiError(
+			`Failed to trigger workflow dispatch: ${response.status}`,
+			response.status,
+			rateLimitInfo,
+		);
+	}
 }
 
 /**

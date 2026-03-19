@@ -12,11 +12,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
 	fetchRepoStats,
 	fetchOpenPullRequestCount,
+	fetchReviewRequestedPRs,
 	getStatValue,
 	getStatLabel,
 	getStatUrl,
 	getStatDisplay,
 	formatRepoSize,
+	formatRunDuration,
 	parseRateLimitHeaders,
 	GitHubApiError,
 	type RepoStats,
@@ -500,5 +502,182 @@ describe("github-api", () => {
 			expect(decodeURIComponent(url)).toContain("type:pr");
 			expect(decodeURIComponent(url)).toContain("is:open");
 		});
+	});
+
+	// ── formatRunDuration ──────────────────────────────────────────────────
+
+	describe("formatRunDuration", () => {
+		it("returns seconds for short durations", () => {
+			expect(formatRunDuration("2026-01-01T00:00:00Z", "2026-01-01T00:00:45Z")).toBe("45s");
+		});
+
+		it("returns minutes and seconds for medium durations", () => {
+			expect(formatRunDuration("2026-01-01T00:00:00Z", "2026-01-01T00:03:42Z")).toBe("3m 42s");
+		});
+
+		it("returns hours and minutes for long durations", () => {
+			expect(formatRunDuration("2026-01-01T00:00:00Z", "2026-01-01T01:05:00Z")).toBe("1h 5m");
+		});
+
+		it("returns empty string for empty inputs", () => {
+			expect(formatRunDuration("", "2026-01-01T00:00:00Z")).toBe("");
+			expect(formatRunDuration("2026-01-01T00:00:00Z", "")).toBe("");
+			expect(formatRunDuration("", "")).toBe("");
+		});
+
+		it("returns empty string when end is before start", () => {
+			expect(formatRunDuration("2026-01-01T01:00:00Z", "2026-01-01T00:00:00Z")).toBe("");
+		});
+
+		it("returns empty string for identical timestamps", () => {
+			expect(formatRunDuration("2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z")).toBe("");
+		});
+
+		it("handles multi-hour durations", () => {
+			expect(formatRunDuration("2026-01-01T00:00:00Z", "2026-01-01T02:30:00Z")).toBe("2h 30m");
+		});
+	});
+});
+
+// ──────────────────────────────────────────────
+// fetchReviewRequestedPRs
+// ──────────────────────────────────────────────
+
+describe("fetchReviewRequestedPRs", () => {
+	let originalFetch: typeof globalThis.fetch;
+
+	beforeEach(() => {
+		originalFetch = globalThis.fetch;
+		globalThis.fetch = vi.fn();
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	it("returns total_count and items from search results", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: true,
+			status: 200,
+			headers: mockHeaders(),
+			json: () => Promise.resolve({
+				total_count: 2,
+				incomplete_results: false,
+				items: [
+					{
+						number: 42,
+						title: "Fix bug",
+						user: { login: "alice" },
+						html_url: "https://github.com/owner/repo/pull/42",
+						created_at: "2024-01-15T10:00:00Z",
+					},
+					{
+						number: 99,
+						title: "Add feature",
+						user: { login: "bob" },
+						html_url: "https://github.com/owner/repo/pull/99",
+						created_at: "2024-01-16T12:00:00Z",
+					},
+				],
+			}),
+		} as unknown as Response);
+
+		const result = await fetchReviewRequestedPRs("ghp_test");
+		expect(result.total_count).toBe(2);
+		expect(result.items).toHaveLength(2);
+		expect(result.items[0].number).toBe(42);
+		expect(result.items[0].title).toBe("Fix bug");
+		expect(result.items[0].user_login).toBe("alice");
+		expect(result.items[1].number).toBe(99);
+	});
+
+	it("includes repo filter in search query when provided", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: true,
+			status: 200,
+			headers: mockHeaders(),
+			json: () => Promise.resolve({ total_count: 0, items: [] }),
+		} as unknown as Response);
+
+		await fetchReviewRequestedPRs("ghp_test", "owner/repo");
+
+		const call = vi.mocked(globalThis.fetch).mock.calls[0];
+		const url = call[0] as string;
+		expect(url).toContain(encodeURIComponent("repo:owner/repo"));
+	});
+
+	it("does not include repo filter when not provided", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: true,
+			status: 200,
+			headers: mockHeaders(),
+			json: () => Promise.resolve({ total_count: 0, items: [] }),
+		} as unknown as Response);
+
+		await fetchReviewRequestedPRs("ghp_test");
+
+		const call = vi.mocked(globalThis.fetch).mock.calls[0];
+		const url = call[0] as string;
+		expect(url).not.toContain("repo%3A");
+	});
+
+	it("throws GitHubApiError on 401", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: false,
+			status: 401,
+			headers: mockHeaders({ "x-ratelimit-remaining": "0" }),
+			json: () => Promise.resolve({ message: "Bad credentials" }),
+			text: () => Promise.resolve("Bad credentials"),
+		} as unknown as Response);
+
+		await expect(fetchReviewRequestedPRs("bad_token")).rejects.toThrow(GitHubApiError);
+		await expect(fetchReviewRequestedPRs("bad_token")).rejects.toThrow("Invalid or expired");
+	});
+
+	it("throws GitHubApiError on 403 rate limit", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: false,
+			status: 403,
+			headers: mockHeaders({ "x-ratelimit-remaining": "0" }),
+			json: () => Promise.resolve({ message: "rate limit exceeded" }),
+			text: () => Promise.resolve("rate limit exceeded"),
+		} as unknown as Response);
+
+		await expect(fetchReviewRequestedPRs("ghp_test")).rejects.toThrow(GitHubApiError);
+		await expect(fetchReviewRequestedPRs("ghp_test")).rejects.toThrow("rate limit");
+	});
+
+	it("returns zero count gracefully", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: true,
+			status: 200,
+			headers: mockHeaders(),
+			json: () => Promise.resolve({ total_count: 0, items: [] }),
+		} as unknown as Response);
+
+		const result = await fetchReviewRequestedPRs("ghp_test");
+		expect(result.total_count).toBe(0);
+		expect(result.items).toHaveLength(0);
+	});
+
+	it("handles missing user.login gracefully", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: true,
+			status: 200,
+			headers: mockHeaders(),
+			json: () => Promise.resolve({
+				total_count: 1,
+				items: [{
+					number: 1,
+					title: "Test PR",
+					user: null,
+					html_url: "https://github.com/owner/repo/pull/1",
+					created_at: "2024-01-01T00:00:00Z",
+				}],
+			}),
+		} as unknown as Response);
+
+		const result = await fetchReviewRequestedPRs("ghp_test");
+		expect(result.items[0].user_login).toBe("");
 	});
 });

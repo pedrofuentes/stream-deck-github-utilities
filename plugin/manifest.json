@@ -4,6 +4,16 @@
     {
       "Icon": "imgs/actions/repo-stats/icon",
       "Name": "Repo Stats",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/github-full-canvas.json",
+        "TriggerDescription": {
+          "Rotate": "Next Stat",
+          "Push": "Open GitHub",
+          "Touch": "Refresh",
+          "LongTouch": "Open Repo"
+        }
+      },
       "States": [
         {
           "Image": "imgs/actions/repo-stats/key",
@@ -18,6 +28,16 @@
     {
       "Icon": "imgs/actions/workflow-status/icon",
       "Name": "Workflow Status",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/github-full-canvas.json",
+        "TriggerDescription": {
+          "Rotate": "Browse Runs",
+          "Push": "Open Run",
+          "Touch": "Refresh",
+          "LongTouch": "Dispatch"
+        }
+      },
       "States": [
         {
           "Image": "imgs/actions/workflow-status/key",
@@ -32,6 +52,15 @@
     {
       "Icon": "imgs/actions/pr-counter/icon",
       "Name": "PR Counter",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/github-full-canvas.json",
+        "TriggerDescription": {
+          "Rotate": "Cycle State",
+          "Push": "Open PRs",
+          "Touch": "Refresh"
+        }
+      },
       "States": [
         {
           "Image": "imgs/actions/pr-counter/key",
@@ -46,6 +75,15 @@
     {
       "Icon": "imgs/actions/issue-counter/icon",
       "Name": "Issue Counter",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/github-full-canvas.json",
+        "TriggerDescription": {
+          "Rotate": "Cycle State",
+          "Push": "Open Issues",
+          "Touch": "Refresh"
+        }
+      },
       "States": [
         {
           "Image": "imgs/actions/issue-counter/key",
@@ -60,6 +98,15 @@
     {
       "Icon": "imgs/actions/release-monitor/icon",
       "Name": "Release Monitor",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/github-full-canvas.json",
+        "TriggerDescription": {
+          "Rotate": "Toggle Pre-release",
+          "Push": "Open Release",
+          "Touch": "Refresh"
+        }
+      },
       "States": [
         {
           "Image": "imgs/actions/release-monitor/key",
@@ -74,6 +121,15 @@
     {
       "Icon": "imgs/actions/commit-activity/icon",
       "Name": "Commit Activity",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/github-full-canvas.json",
+        "TriggerDescription": {
+          "Rotate": "Change Range",
+          "Push": "Open Commits",
+          "Touch": "Refresh"
+        }
+      },
       "States": [
         {
           "Image": "imgs/actions/commit-activity/key",
@@ -88,6 +144,14 @@
     {
       "Icon": "imgs/actions/branch-comparison/icon",
       "Name": "Branch Comparison",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/github-full-canvas.json",
+        "TriggerDescription": {
+          "Push": "Open Compare",
+          "Touch": "Refresh"
+        }
+      },
       "States": [
         {
           "Image": "imgs/actions/branch-comparison/key",
@@ -98,6 +162,52 @@
       "UserTitleEnabled": false,
       "UUID": "com.pedrofuentes.github-utilities.branch-comparison",
       "PropertyInspectorPath": "ui/branch-comparison.html"
+    },
+    {
+      "Icon": "imgs/actions/branch-network/icon",
+      "Name": "Branch Network",
+      "Controllers": ["Encoder"],
+      "Encoder": {
+        "layout": "layouts/github-full-canvas.json",
+        "TriggerDescription": {
+          "Rotate": "Scroll Timeline",
+          "Push": "Open Network",
+          "Touch": "Refresh"
+        }
+      },
+      "States": [
+        {
+          "Image": "imgs/actions/branch-network/key",
+          "ShowTitle": false
+        }
+      ],
+      "Tooltip": "Display a visual git branch network diagram on the touch strip",
+      "UserTitleEnabled": false,
+      "UUID": "com.pedrofuentes.github-utilities.branch-network",
+      "PropertyInspectorPath": "ui/branch-network.html"
+    },
+    {
+      "Icon": "imgs/actions/pr-review-queue/icon",
+      "Name": "PR Review Queue",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/github-full-canvas.json",
+        "TriggerDescription": {
+          "Rotate": "Refresh",
+          "Push": "Open Reviews",
+          "Touch": "Refresh"
+        }
+      },
+      "States": [
+        {
+          "Image": "imgs/actions/pr-review-queue/key",
+          "ShowTitle": false
+        }
+      ],
+      "Tooltip": "Display the count of pull requests awaiting your review",
+      "UserTitleEnabled": false,
+      "UUID": "com.pedrofuentes.github-utilities.pr-review-queue",
+      "PropertyInspectorPath": "ui/pr-review-queue.html"
     }
   ],
   "Author": "Pedro Fuentes",

@@ -53,6 +53,15 @@ export interface PullRequestCounterSettings {
 	[key: string]: JsonValue;
 }
 
+/** Per-action settings for the PR Review Queue action */
+export interface PRReviewQueueSettings {
+	/** Optional repository filter in "owner/repo" format (shows all repos if empty) */
+	repo?: string;
+	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
+	refreshInterval?: number;
+	[key: string]: JsonValue;
+}
+
 /** Per-action settings for the Issue Counter action */
 export interface IssueCounterSettings {
 	/** Repository in "owner/repo" format */
@@ -83,6 +92,17 @@ export interface CommitActivitySettings {
 	timeRange?: "24h" | "7d" | "30d";
 	/** Optional branch filter */
 	branch?: string;
+	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
+	refreshInterval?: number;
+	[key: string]: JsonValue;
+}
+
+/** Per-action settings for the Branch Network action */
+export interface BranchNetworkSettings {
+	/** Repository in "owner/repo" format */
+	repo?: string;
+	/** Quarter position for multi-quarter layouts (1-4, default: 1) */
+	quarterPosition?: number;
 	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
 	refreshInterval?: number;
 	[key: string]: JsonValue;
