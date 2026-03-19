@@ -32,7 +32,8 @@ import streamDeck from "@elgato/streamdeck";
 
 import type { GlobalSettings, SecurityHealthSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
-import { fetchDependabotAlerts, type SecurityAlertSummary } from "../utils/github-api";
+import { coordinator } from "../utils/graphql-query-coordinator";
+import type { SecurityAlertSummary } from "../utils/github-api";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderKeyImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderSecurityArcStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
@@ -99,6 +100,9 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		const maxAgeSec = intervalSec;
+		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo!, fragments: ["vulnerabilityAlerts"], maxAgeSec });
+
 		this.polling.start(ev.action.id, () => this.refreshHealth(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshHealth(ev.action.id);
@@ -106,6 +110,7 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 
 	override onWillDisappear(ev: WillDisappearEvent<SecurityHealthSettings>): void {
 		this.polling.stop(ev.action.id);
+		coordinator.unsubscribe(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.lastKeyUpTime.delete(ev.action.id);
 		this.actionContexts.delete(ev.action.id);
@@ -122,7 +127,7 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 		if (now - lastUp < 400) {
 			this.lastKeyUpTime.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
-			await this.refreshHealth(ev.action.id);
+			await this.refreshHealth(ev.action.id, true);
 			return;
 		}
 
@@ -146,7 +151,7 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 	 */
 	override async onDialRotate(ev: DialRotateEvent<SecurityHealthSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshHealth(ev.action.id);
+		await this.refreshHealth(ev.action.id, true);
 	}
 
 	/**
@@ -173,7 +178,7 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 	 */
 	override async onTouchTap(ev: TouchTapEvent<SecurityHealthSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshHealth(ev.action.id);
+		await this.refreshHealth(ev.action.id, true);
 	}
 
 	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, SecurityHealthSettings>): Promise<void> {
@@ -208,6 +213,7 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 			} else if (ev.action.isDial()) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 			}
+			coordinator.unsubscribe(ev.action.id);
 			this.polling.stop(ev.action.id);
 			return;
 		}
@@ -220,12 +226,15 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		const maxAgeSec = intervalSec;
+		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo!, fragments: ["vulnerabilityAlerts"], maxAgeSec });
+
 		this.polling.restart(ev.action.id, () => this.refreshHealth(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshHealth(ev.action.id);
 	}
 
-	private async refreshHealth(actionId: string): Promise<void> {
+	private async refreshHealth(actionId: string, forceRefresh = false): Promise<void> {
 		const settings = this.actionSettings.get(actionId);
 		const gen = this.polling.incrementGeneration(actionId);
 
@@ -256,7 +265,14 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 				return;
 			}
 
-			const alerts = await fetchDependabotAlerts(parsed.owner, parsed.repo, token);
+			const result = forceRefresh
+				? await coordinator.invalidateAndFetch(actionId, token)
+				: await coordinator.fetchData(actionId, token);
+			const alerts = result.vulnerabilityAlerts;
+			if (!alerts) {
+				const errorMsg = result.errors?.vulnerabilityAlerts ?? "No data available";
+				throw new Error(errorMsg);
+			}
 
 			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
 

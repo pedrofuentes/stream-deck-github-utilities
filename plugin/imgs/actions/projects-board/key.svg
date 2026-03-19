@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144" fill="none">
+  <!-- Projects Board default key: kanban board icon -->
+  <rect x="30" y="35" width="84" height="64" rx="6" fill="none" stroke="white" stroke-width="3"/>
+  <line x1="58" y1="35" x2="58" y2="99" stroke="white" stroke-width="3"/>
+  <line x1="86" y1="35" x2="86" y2="99" stroke="white" stroke-width="3"/>
+  <rect x="37" y="44" width="14" height="16" rx="2" fill="white"/>
+  <rect x="65" y="44" width="14" height="22" rx="2" fill="white"/>
+  <rect x="93" y="44" width="14" height="10" rx="2" fill="white"/>
+  <rect x="37" y="66" width="14" height="10" rx="2" fill="white"/>
+  <rect x="65" y="72" width="14" height="10" rx="2" fill="white"/>
+</svg>

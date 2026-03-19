@@ -39,6 +39,8 @@ export const COLORS = {
 		releases: "#a371f7",
 		commits: "#f78166",
 		branches: "#58a6ff",
+		discussions: "#a371f7",
+		projects: "#3fb950",
 	} as Record<string, string>,
 	error: "#f85149",
 	workflow: {
@@ -493,6 +495,24 @@ export function renderCommitActivityImage(count: string, rangeLabel: string, rep
 }
 
 /**
+ * Renders a discussions monitor image.
+ * Layout: repo name / discussion count / label (or answered count)
+ */
+export function renderDiscussionsImage(count: string, label: string, repoName?: string): string {
+	let fontSize = 30;
+	if (count.length > 6) fontSize = 22;
+	else if (count.length > 4) fontSize = 26;
+
+	return renderKeyImage({
+		line1: repoName,
+		line2: count,
+		line3: label,
+		statusColor: "#A371F7",
+		line2FontSize: fontSize,
+	});
+}
+
+/**
  * Renders a branch comparison image.
  * Layout: repo name / ahead/behind display / branch names
  */
@@ -512,6 +532,55 @@ export function renderBranchComparisonImage(
 		line2: comparison,
 		line3: branchLabel,
 		statusColor: statusColor ?? COLORS.accent.default_branch,
+		line2FontSize: fontSize,
+	});
+}
+
+/**
+ * Renders a Projects V2 board image.
+ * Layout:
+ *   - 0 projects: "No Projects" centered
+ *   - 1 project: project title / item count / "Project"
+ *   - Multiple: project count / first project title / "Projects"
+ */
+export function renderProjectsBoardImage(projects: Array<{ title: string; totalItems: number }>): string {
+	const PROJECTS_GREEN = "#3FB950";
+
+	if (!projects || projects.length === 0) {
+		return renderKeyImage({
+			line2: "No Projects",
+			statusColor: PROJECTS_GREEN,
+			line2FontSize: 22,
+		});
+	}
+
+	if (projects.length === 1) {
+		const project = projects[0];
+		const title = project.title;
+		let fontSize = 30;
+		if (title.length > 9) fontSize = 18;
+		else if (title.length > 6) fontSize = 22;
+		else if (title.length > 4) fontSize = 26;
+
+		return renderKeyImage({
+			line1: `${project.totalItems} items`,
+			line2: title,
+			line3: "Project",
+			statusColor: PROJECTS_GREEN,
+			line2FontSize: fontSize,
+		});
+	}
+
+	const count = String(projects.length);
+	let fontSize = 30;
+	if (count.length > 6) fontSize = 22;
+	else if (count.length > 4) fontSize = 26;
+
+	return renderKeyImage({
+		line1: projects[0].title,
+		line2: count,
+		line3: "Projects",
+		statusColor: PROJECTS_GREEN,
 		line2FontSize: fontSize,
 	});
 }

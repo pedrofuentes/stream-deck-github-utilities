@@ -1,14 +1,127 @@
 /**
- * GitHub GraphQL API client for contribution calendar data.
+ * GitHub GraphQL API client.
  *
- * Uses the GitHub GraphQL API to fetch the user's contribution calendar,
- * which includes all contribution types (commits, PRs, issues, reviews)
- * across all repositories — the same data shown on the GitHub profile page.
+ * Provides a generic query executor for GitHub's GraphQL API plus
+ * specialised helpers like the contribution calendar fetcher.
  *
  * @author Pedro Fuentes <git@pedrofuent.es>
  * @copyright Pedro Pablo Fuentes Schuster
  * @license MIT
  */
+
+import type { GraphQLError, GraphQLRateLimit } from "../types";
+
+/** GitHub GraphQL API endpoint */
+export const GITHUB_GRAPHQL_ENDPOINT = "https://api.github.com/graphql";
+
+// ─── Generic Query Types ─────────────────────────────────────────────
+
+/** Result wrapper returned by {@link executeGraphQLQuery} */
+export interface GraphQLQueryResult<T> {
+	data: T;
+	rateLimit?: GraphQLRateLimit;
+}
+
+/** Structured error thrown by {@link executeGraphQLQuery} */
+export class GraphQLQueryError extends Error {
+	constructor(
+		message: string,
+		public readonly status: number,
+		public readonly graphqlErrors?: GraphQLError[],
+		public readonly rateLimit?: GraphQLRateLimit,
+	) {
+		super(message);
+		this.name = "GraphQLQueryError";
+	}
+}
+
+// ─── Generic Query Executor ──────────────────────────────────────────
+
+/**
+ * Parses rate-limit info from GitHub response headers.
+ * Returns `undefined` when the headers are absent or unparseable.
+ */
+function parseRateLimitHeaders(headers: Headers): GraphQLRateLimit | undefined {
+	const limit = headers.get("x-ratelimit-limit");
+	const remaining = headers.get("x-ratelimit-remaining");
+	const reset = headers.get("x-ratelimit-reset");
+	const used = headers.get("x-ratelimit-used");
+
+	if (!limit || !remaining || !reset) return undefined;
+
+	return {
+		limit: Number(limit),
+		remaining: Number(remaining),
+		resetAt: new Date(Number(reset) * 1000),
+		cost: used ? Number(used) : 0,
+		nodeCount: 0,
+	};
+}
+
+/**
+ * Executes an arbitrary GraphQL query against GitHub's API.
+ *
+ * @param token - GitHub PAT (Bearer auth)
+ * @param query - The GraphQL query string
+ * @param variables - Optional variables for the query
+ * @returns The parsed response data
+ * @throws {GraphQLQueryError} on HTTP errors, GraphQL errors, or rate limiting
+ */
+export async function executeGraphQLQuery<T>(
+	token: string,
+	query: string,
+	variables?: Record<string, unknown>,
+): Promise<GraphQLQueryResult<T>> {
+	const body: Record<string, unknown> = { query };
+	if (variables) {
+		body.variables = variables;
+	}
+
+	const response = await fetch(GITHUB_GRAPHQL_ENDPOINT, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${token}`,
+		},
+		body: JSON.stringify(body),
+	});
+
+	const rateLimit = parseRateLimitHeaders(response.headers);
+
+	if (!response.ok) {
+		throw new GraphQLQueryError(
+			`GraphQL request failed: ${response.status}`,
+			response.status,
+			undefined,
+			rateLimit,
+		);
+	}
+
+	const json = await response.json() as {
+		data?: T;
+		errors?: GraphQLError[];
+	};
+
+	if (json.errors && json.errors.length > 0) {
+		const isRateLimited = json.errors.some((e) => e.type === "RATE_LIMITED");
+		throw new GraphQLQueryError(
+			isRateLimited
+				? `GraphQL rate limited: ${json.errors[0].message}`
+				: `GraphQL error: ${json.errors[0].message}`,
+			isRateLimited ? 429 : 200,
+			json.errors,
+			rateLimit,
+		);
+	}
+
+	if (!json.data) {
+		throw new GraphQLQueryError("No data returned", 200, undefined, rateLimit);
+	}
+
+	return { data: json.data, rateLimit };
+}
+
+// ─── Contribution Calendar ───────────────────────────────────────────
 
 /** A single day's contribution data */
 export interface ContributionDay {
@@ -27,6 +140,12 @@ export interface ContributionCalendar {
 	weeks: ContributionWeek[];
 }
 
+/** Shape of the GraphQL response for contribution calendar queries */
+interface ContributionCalendarResponse {
+	user?: { contributionsCollection: { contributionCalendar: ContributionCalendar } };
+	viewer?: { contributionsCollection: { contributionCalendar: ContributionCalendar } };
+}
+
 /**
  * Fetches the authenticated user's contribution calendar via GraphQL.
  * Returns the profile-style contribution data (all repos, all types).
@@ -43,33 +162,19 @@ export async function fetchContributionCalendar(
 		? `query { user(login: "${username}") { contributionsCollection { contributionCalendar { totalContributions weeks { contributionDays { date contributionCount } } } } } }`
 		: `query { viewer { contributionsCollection { contributionCalendar { totalContributions weeks { contributionDays { date contributionCount } } } } } }`;
 
-	const response = await fetch("https://api.github.com/graphql", {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${token}`,
-		},
-		body: JSON.stringify({ query }),
-	});
-
-	if (!response.ok) {
-		throw new Error(`GraphQL request failed: ${response.status}`);
+	let result: GraphQLQueryResult<ContributionCalendarResponse>;
+	try {
+		result = await executeGraphQLQuery<ContributionCalendarResponse>(token, query);
+	} catch (err) {
+		if (err instanceof GraphQLQueryError) {
+			// Preserve original error message format for backward compatibility
+			throw new Error(err.message);
+		}
+		throw err;
 	}
 
-	const json = await response.json() as {
-		data?: {
-			user?: { contributionsCollection: { contributionCalendar: ContributionCalendar } };
-			viewer?: { contributionsCollection: { contributionCalendar: ContributionCalendar } };
-		};
-		errors?: Array<{ message: string }>;
-	};
-
-	if (json.errors && json.errors.length > 0) {
-		throw new Error(`GraphQL error: ${json.errors[0].message}`);
-	}
-
-	const calendar = json.data?.user?.contributionsCollection?.contributionCalendar
-		?? json.data?.viewer?.contributionsCollection?.contributionCalendar;
+	const calendar = result.data.user?.contributionsCollection?.contributionCalendar
+		?? result.data.viewer?.contributionsCollection?.contributionCalendar;
 
 	if (!calendar) {
 		throw new Error("No contribution data returned");

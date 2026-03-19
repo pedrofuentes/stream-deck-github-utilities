@@ -276,6 +276,51 @@
       "UserTitleEnabled": false,
       "UUID": "com.pedrofuentes.github-utilities.security-health",
       "PropertyInspectorPath": "ui/security-health.html"
+    },
+    {
+      "Icon": "imgs/actions/discussions-monitor/icon",
+      "Name": "Discussions Monitor",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/github-full-canvas.json",
+        "TriggerDescription": {
+          "Push": "Open Discussions",
+          "Touch": "Refresh"
+        }
+      },
+      "States": [
+        {
+          "Image": "imgs/actions/discussions-monitor/key",
+          "ShowTitle": false
+        }
+      ],
+      "Tooltip": "Display GitHub Discussions count and answered status for a repository",
+      "UserTitleEnabled": false,
+      "UUID": "com.pedrofuentes.github-utilities.discussions-monitor",
+      "PropertyInspectorPath": "ui/discussions-monitor.html"
+    },
+    {
+      "Icon": "imgs/actions/projects-board/icon",
+      "Name": "Projects Board",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/github-full-canvas.json",
+        "TriggerDescription": {
+          "Rotate": "Cycle Projects",
+          "Push": "Open Project",
+          "Touch": "Refresh"
+        }
+      },
+      "States": [
+        {
+          "Image": "imgs/actions/projects-board/key",
+          "ShowTitle": false
+        }
+      ],
+      "Tooltip": "Display GitHub Projects V2 board status and item counts",
+      "UserTitleEnabled": false,
+      "UUID": "com.pedrofuentes.github-utilities.projects-board",
+      "PropertyInspectorPath": "ui/projects-board.html"
     }
   ],
   "Author": "Pedro Fuentes",

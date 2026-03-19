@@ -26,7 +26,7 @@ import streamDeck from "@elgato/streamdeck";
 
 import type { GlobalSettings, BranchNetworkSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
-import { fetchBranchNetwork } from "../utils/github-api";
+import { coordinator } from "../utils/graphql-query-coordinator";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderBranchNetworkStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { PollingCoordinator } from "../utils/polling-coordinator";
@@ -88,12 +88,23 @@ export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> 
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+
+		if (settings.repo) {
+			coordinator.subscribe({
+				actionId: ev.action.id,
+				repo: settings.repo,
+				fragments: ["branches"],
+				maxAgeSec: intervalSec,
+			});
+		}
+
 		this.polling.start(ev.action.id, () => this.refreshNetwork(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 		await this.refreshNetwork(ev.action.id);
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<BranchNetworkSettings>): void {
 		this.polling.stop(ev.action.id);
+		coordinator.unsubscribe(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.actionContexts.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
@@ -176,12 +187,23 @@ export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> 
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 				this.polling.stop(ev.action.id);
+				coordinator.unsubscribe(ev.action.id);
 				return;
 			}
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+
+		if (settings.repo) {
+			coordinator.subscribe({
+				actionId: ev.action.id,
+				repo: settings.repo,
+				fragments: ["branches"],
+				maxAgeSec: intervalSec,
+			});
+		}
+
 		this.polling.restart(ev.action.id, () => this.refreshNetwork(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 		await this.refreshNetwork(ev.action.id);
 	}
@@ -200,29 +222,6 @@ export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> 
 			return;
 		}
 
-		// Check if another instance already has branch data for this repo
-		for (const otherAction of this.actionContexts.values()) {
-			if (otherAction.id === actionId) continue;
-			const otherSettings = this.actionSettings.get(otherAction.id);
-			if (otherSettings?.repo === settings.repo) {
-				const cached = this.branchCache.get(otherAction.id);
-				if (cached && cached.length > 0) {
-					this.branchCache.set(actionId, cached);
-					const hScroll = BranchNetworkAction.sharedScrollH.get(settings.repo!) ?? 0;
-					const vScroll = BranchNetworkAction.sharedScrollV.get(settings.repo!) ?? 0;
-					const hOff = this.getBaseOffset(actionId) + hScroll;
-					if (actionContext.isDial()) {
-						await actionContext.setFeedback({
-							canvas: renderBranchNetworkStrip(cached, hOff, vScroll),
-						});
-					}
-					this.lastUrl.set(actionId, `https://github.com/${parsed.owner}/${parsed.repo}/network`);
-					this.polling.reportSuccess(actionId);
-					return;
-				}
-			}
-		}
-
 		try {
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			const token = globalSettings.githubToken;
@@ -231,9 +230,15 @@ export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> 
 				return;
 			}
 
-			const branchInfos = await fetchBranchNetwork(parsed.owner, parsed.repo, token);
+			const result = await coordinator.fetchData(actionId, token);
 			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
-			const branchNames = branchInfos.map((b) => b.name);
+
+			if (result.errors?.branches && result.branches === undefined) {
+				throw new Error(result.errors.branches);
+			}
+
+			const branches = result.branches ?? [];
+			const branchNames = branches.map((b) => b.name);
 
 			this.branchCache.set(actionId, branchNames);
 

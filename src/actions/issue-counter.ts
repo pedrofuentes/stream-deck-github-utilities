@@ -33,7 +33,7 @@ import streamDeck from "@elgato/streamdeck";
 
 import type { GlobalSettings, IssueCounterSettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
-import { fetchIssueCount } from "../utils/github-api";
+import { coordinator } from "../utils/graphql-query-coordinator";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderIssueCountImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
@@ -101,6 +101,17 @@ export class IssueCounterAction extends SingletonAction<IssueCounterSettings> {
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+
+		if (settings.repo) {
+			coordinator.subscribe({
+				actionId: ev.action.id,
+				repo: settings.repo,
+				fragments: ["issueCount"],
+				maxAgeSec: intervalSec,
+				params: { issueState: settings.stateFilter ?? "open" },
+			});
+		}
+
 		this.polling.start(ev.action.id, () => this.refreshCount(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshCount(ev.action.id);
@@ -108,6 +119,7 @@ export class IssueCounterAction extends SingletonAction<IssueCounterSettings> {
 
 	override onWillDisappear(ev: WillDisappearEvent<IssueCounterSettings>): void {
 		this.polling.stop(ev.action.id);
+		coordinator.unsubscribe(ev.action.id);
 		this.stopMarquee(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
@@ -125,7 +137,7 @@ export class IssueCounterAction extends SingletonAction<IssueCounterSettings> {
 		if (now - lastUp < 400) {
 			this.lastKeyUpTime.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
-			await this.refreshCount(ev.action.id);
+			await this.forceRefresh(ev.action.id);
 			return;
 		}
 
@@ -233,6 +245,7 @@ export class IssueCounterAction extends SingletonAction<IssueCounterSettings> {
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
 				this.polling.stop(ev.action.id);
+				coordinator.unsubscribe(ev.action.id);
 				return;
 			}
 
@@ -246,12 +259,24 @@ export class IssueCounterAction extends SingletonAction<IssueCounterSettings> {
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 				this.polling.stop(ev.action.id);
+				coordinator.unsubscribe(ev.action.id);
 				return;
 			}
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+
+		if (settings.repo) {
+			coordinator.subscribe({
+				actionId: ev.action.id,
+				repo: settings.repo,
+				fragments: ["issueCount"],
+				maxAgeSec: intervalSec,
+				params: { issueState: settings.stateFilter ?? "open" },
+			});
+		}
+
 		this.polling.restart(ev.action.id, () => this.refreshCount(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshCount(ev.action.id);
@@ -291,7 +316,8 @@ export class IssueCounterAction extends SingletonAction<IssueCounterSettings> {
 			}
 
 			const stateFilter = settings.stateFilter ?? "open";
-			const count = await fetchIssueCount(parsed.owner, parsed.repo, token, stateFilter);
+			const result = await coordinator.fetchData(actionId, token);
+			const count = result.issueCount ?? 0;
 			const displayCount = formatCount(count);
 			const stateLabel = STATE_LABELS[stateFilter] ?? "Issues";
 
@@ -338,6 +364,26 @@ export class IssueCounterAction extends SingletonAction<IssueCounterSettings> {
 			}
 			if (isDial) await actionContext.setFeedback({ canvas: renderStripError(errorLabel) });
 		}
+	}
+
+	private async forceRefresh(actionId: string): Promise<void> {
+		const settings = this.actionSettings.get(actionId);
+		if (!settings?.repo) return;
+
+		const actionContext = this.actionContexts.get(actionId);
+		if (!actionContext) return;
+
+		try {
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			const token = globalSettings.githubToken;
+			if (!token) return;
+
+			await coordinator.invalidateAndFetch(actionId, token);
+		} catch {
+			// Errors will be handled in refreshCount's catch block on next poll
+		}
+
+		await this.refreshCount(actionId);
 	}
 
 	private getOrCreateMarquee(actionId: string): IssueMarqueeData {

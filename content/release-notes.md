@@ -4,6 +4,21 @@
   Character limit per entry: 1,500
 -->
 
+## v2.2.0
+<!-- Characters: ~580 / 1,500 -->
+
+New actions and smarter API usage with the GraphQL batch query coordinator.
+
+**New Actions:**
+- **💬 Discussions Monitor** — track discussion count and answered status for any repository
+- **📊 Projects V2 Board** — monitor GitHub Projects V2 boards with item counts and progress
+
+**Under the Hood:**
+- **GraphQL Batch Query Coordinator** — actions sharing the same repository now batch their data needs into a single GraphQL query, significantly reducing API calls and improving rate limit efficiency
+- All 14 actions now route through the coordinator for optimized data fetching with automatic REST fallback
+
+---
+
 ## v2.0.0 — 2026-03-19
 <!-- Characters: ~1,350 / 1,500 -->
 

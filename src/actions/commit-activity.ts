@@ -34,7 +34,7 @@ import streamDeck from "@elgato/streamdeck";
 
 import type { GlobalSettings, CommitActivitySettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
-import { fetchCommitActivityWeeks } from "../utils/github-api";
+import { coordinator } from "../utils/graphql-query-coordinator";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderCommitActivityImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
@@ -101,6 +101,13 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		coordinator.subscribe({
+			actionId: ev.action.id,
+			repo: settings.repo!,
+			fragments: ["commitActivity"],
+			maxAgeSec: intervalSec,
+			params: { timeRange: settings.timeRange ?? "7d" },
+		});
 		this.polling.start(ev.action.id, () => this.refreshActivity(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshActivity(ev.action.id);
@@ -114,6 +121,7 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 		this.recentSetSettings.delete(ev.action.id);
 		this.lastKeyUpTime.delete(ev.action.id);
 		this.actionContexts.delete(ev.action.id);
+		coordinator.unsubscribe(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<CommitActivitySettings>): Promise<void> {
@@ -124,7 +132,7 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 		if (now - lastUp < 400) {
 			this.lastKeyUpTime.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
-			await this.refreshActivity(ev.action.id);
+			await this.refreshActivity(ev.action.id, true);
 			return;
 		}
 
@@ -159,7 +167,7 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 		this.actionSettings.set(ev.action.id, newSettings);
 
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshActivity(ev.action.id);
+		await this.refreshActivity(ev.action.id, true);
 	}
 
 	/**
@@ -191,7 +199,7 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 	 */
 	override async onTouchTap(ev: TouchTapEvent<CommitActivitySettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshActivity(ev.action.id);
+		await this.refreshActivity(ev.action.id, true);
 	}
 
 	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, CommitActivitySettings>): Promise<void> {
@@ -231,6 +239,7 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
+				coordinator.unsubscribe(ev.action.id);
 				this.polling.stop(ev.action.id);
 				return;
 			}
@@ -244,6 +253,7 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				coordinator.unsubscribe(ev.action.id);
 				this.polling.stop(ev.action.id);
 				return;
 			}
@@ -251,12 +261,19 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		coordinator.subscribe({
+			actionId: ev.action.id,
+			repo: settings.repo!,
+			fragments: ["commitActivity"],
+			maxAgeSec: intervalSec,
+			params: { timeRange: settings.timeRange ?? "7d" },
+		});
 		this.polling.restart(ev.action.id, () => this.refreshActivity(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshActivity(ev.action.id);
 	}
 
-	private async refreshActivity(actionId: string): Promise<void> {
+	private async refreshActivity(actionId: string, force = false): Promise<void> {
 		const settings = this.actionSettings.get(actionId);
 		if (!settings?.repo) return;
 
@@ -290,7 +307,13 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 			}
 
 			const timeRange = settings.timeRange ?? "7d";
-			const weeks = await fetchCommitActivityWeeks(parsed.owner, parsed.repo, token);
+			const result = force
+				? await coordinator.invalidateAndFetch(actionId, token)
+				: await coordinator.fetchData(actionId, token);
+			const weeks = result.commitActivity;
+			if (weeks === undefined) {
+				throw new Error(result.errors?.commitActivity ?? "No commit activity data available");
+			}
 
 			let displayCount: string;
 			let dailyTrend: number[] | undefined;

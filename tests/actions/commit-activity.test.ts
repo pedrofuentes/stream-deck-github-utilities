@@ -14,12 +14,20 @@ const {
 	mockLoggerDebug,
 	mockLoggerError,
 	mockOpenUrl,
+	mockSubscribe,
+	mockUnsubscribe,
+	mockFetchData,
+	mockInvalidateAndFetch,
 } = vi.hoisted(() => ({
 	mockGetGlobalSettings: vi.fn(),
 	mockRegisterAction: vi.fn(),
 	mockLoggerDebug: vi.fn(),
 	mockLoggerError: vi.fn(),
 	mockOpenUrl: vi.fn().mockResolvedValue(undefined),
+	mockSubscribe: vi.fn(),
+	mockUnsubscribe: vi.fn(),
+	mockFetchData: vi.fn(),
+	mockInvalidateAndFetch: vi.fn(),
 }));
 
 vi.mock("@elgato/streamdeck", () => {
@@ -52,6 +60,15 @@ vi.mock("@elgato/streamdeck", () => {
 		action: () => (target: unknown) => target,
 	};
 });
+
+vi.mock("../../src/utils/graphql-query-coordinator", () => ({
+	coordinator: {
+		subscribe: mockSubscribe,
+		unsubscribe: mockUnsubscribe,
+		fetchData: mockFetchData,
+		invalidateAndFetch: mockInvalidateAndFetch,
+	},
+}));
 
 import { CommitActivityAction } from "../../src/actions/commit-activity";
 
@@ -99,36 +116,17 @@ function lastImage(mockAction: ReturnType<typeof createMockKeyAction>): string {
 	return decodeSvg(calls[calls.length - 1][0] as string);
 }
 
-/** Creates a mock commit_activity response with weekly data */
-function mockCommitActivityResponse(weeks: Array<{ total: number; days: number[] }>) {
-	return {
-		ok: true,
-		status: 200,
-		headers: new Headers({
-			"x-ratelimit-limit": "5000",
-			"x-ratelimit-remaining": "4999",
-			"x-ratelimit-reset": "9999999999",
-			"x-ratelimit-used": "1",
-		}),
-		json: () => Promise.resolve(weeks),
-		text: () => Promise.resolve(""),
-	} as unknown as Response;
+/** Set up coordinator mock for commit activity data */
+function setupCoordinatorMock(weeks: Array<{ total: number; days: number[]; week: number }> | null) {
+	const result = { commitActivity: weeks };
+	mockFetchData.mockResolvedValue(result);
+	mockInvalidateAndFetch.mockResolvedValue(result);
 }
 
-/** Creates a 202 (computing) response */
-function mockCommitActivity202() {
-	return {
-		ok: true,
-		status: 202,
-		headers: new Headers({
-			"x-ratelimit-limit": "5000",
-			"x-ratelimit-remaining": "4999",
-			"x-ratelimit-reset": "9999999999",
-			"x-ratelimit-used": "1",
-		}),
-		json: () => Promise.resolve({}),
-		text: () => Promise.resolve(""),
-	} as unknown as Response;
+/** Set up coordinator to throw an error */
+function setupCoordinatorError(message: string) {
+	mockFetchData.mockRejectedValue(new Error(message));
+	mockInvalidateAndFetch.mockRejectedValue(new Error(message));
 }
 
 // ──────────────────────────────────────────────
@@ -137,19 +135,14 @@ function mockCommitActivity202() {
 
 describe("CommitActivityAction", () => {
 	let action: CommitActivityAction;
-	let originalFetch: typeof globalThis.fetch;
 
 	beforeEach(() => {
 		action = new CommitActivityAction();
-		originalFetch = globalThis.fetch;
-		globalThis.fetch = vi.fn();
-
 		vi.clearAllMocks();
 		mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
 	});
 
 	afterEach(() => {
-		globalThis.fetch = originalFetch;
 		vi.restoreAllMocks();
 	});
 
@@ -187,7 +180,7 @@ describe("CommitActivityAction", () => {
 				week: Math.floor(Date.now() / 1000) - (51 - i) * 604800,
 			}));
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockCommitActivityResponse(weeks));
+			setupCoordinatorMock(weeks);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -206,7 +199,7 @@ describe("CommitActivityAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockCommitActivity202());
+			setupCoordinatorMock(null);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -230,7 +223,7 @@ describe("CommitActivityAction", () => {
 				days: [1, 1, 2, 2, 1, 2, 1],
 				week: Math.floor(Date.now() / 1000),
 			}));
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockCommitActivityResponse(weeks));
+			setupCoordinatorMock(weeks);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
 			action.onWillDisappear?.(createWillDisappearEvent(mockAction) as never);
@@ -257,7 +250,7 @@ describe("CommitActivityAction", () => {
 				days: [1, 1, 2, 2, 1, 2, 1],
 				week: Math.floor(Date.now() / 1000),
 			}));
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockCommitActivityResponse(weeks));
+			setupCoordinatorMock(weeks);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
@@ -289,7 +282,7 @@ describe("CommitActivityAction", () => {
 				days: [14, 14, 15, 14, 14, 15, 14],
 				week: Math.floor(Date.now() / 1000) - (51 - i) * 604800,
 			}));
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockCommitActivityResponse(weeks));
+			setupCoordinatorMock(weeks);
 
 			await action.onDidReceiveSettings?.(createDidReceiveSettingsEvent(mockAction, settings) as never);
 
@@ -313,7 +306,7 @@ describe("CommitActivityAction", () => {
 				days: [1, 1, 1, 1, 0, 1, 0],
 				week: Math.floor(Date.now() / 1000),
 			}));
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockCommitActivityResponse(weeks));
+			setupCoordinatorMock(weeks);
 
 			await action.onDidReceiveSettings?.(createDidReceiveSettingsEvent(mockAction, settings) as never);
 
@@ -360,18 +353,7 @@ describe("CommitActivityAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 404,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () => Promise.resolve({ message: "Not Found" }),
-				text: () => Promise.resolve("Not Found"),
-			} as unknown as Response);
+			setupCoordinatorError("Repository not found");
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
 

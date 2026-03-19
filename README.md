@@ -4,13 +4,13 @@ A [Stream Deck](https://www.elgato.com/stream-deck) plugin that provides utiliti
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities/releases)
-[![Tests](https://img.shields.io/badge/tests-493%20passed-brightgreen.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities)
+[![Tests](https://img.shields.io/badge/tests-1004%20passed-brightgreen.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities)
 
 ## Overview
 
-Stream Deck GitHub Utilities brings GitHub data to your fingertips. Monitor repositories, track pull requests, view issues, and more — all from your Stream Deck. Full **Stream Deck+** support with rich touch strip visualizations, dial controls, and encoder interactions across all 12 actions.
+Stream Deck GitHub Utilities brings GitHub data to your fingertips. Monitor repositories, track pull requests, view issues, and more — all from your Stream Deck. Full **Stream Deck+** support with rich touch strip visualizations, dial controls, and encoder interactions across all 14 actions.
 
-> **Note:** This project is under active development. See the [Roadmap](#roadmap) section for planned features.
+> **Note:**This project is under active development. See the [Roadmap](#roadmap) section for planned features.
 
 ## Features
 
@@ -145,9 +145,31 @@ Display Dependabot security alert summary with letter grade.
 - Color-coded: green (A/B), amber (C), red (D/F)
 - Press to open the repository's security page
 
+### 💬 Discussions Monitor
+
+Display GitHub Discussions count and answered status for a repository.
+
+- **Total discussion count** at a glance
+- **Answered vs unanswered count** — see how many discussions have accepted answers
+- Auto-refresh on a configurable interval (default 5 minutes)
+- Press to open the discussions page on GitHub
+- Double-click to force refresh
+- Requires `Discussions: Read` permission on fine-grained token
+
+### 📊 Projects V2 Board
+
+Monitor GitHub Projects V2 for a repository.
+
+- **Project count** and first project name on the button
+- **Item count** per project
+- Auto-refresh on a configurable interval (default 5 minutes)
+- Press to open the projects page on GitHub
+- Double-click to force refresh
+- Requires `Projects: Read` permission on fine-grained token
+
 ### Stream Deck+ Encoder Support
 
-All 12 actions support the Stream Deck+ encoder with rich touch strip visualizations:
+All 14 actions support the Stream Deck+ encoder with rich touch strip visualizations:
 
 | Interaction | Action |
 |-------------|--------|
@@ -186,7 +208,9 @@ Uses a GitHub Personal Access Token (PAT) stored as a global plugin setting (sha
    - **Issues** — read (required for Issue Counter)
    - **Contents** — read (required for Release Monitor, Branch Comparison)
    - **Dependabot alerts** — read (required for Security Health)
-2. Enter it once in the Property Inspector — it's shared across all buttons
+   - **Discussions** — read (required for Discussions Monitor)
+   - **Projects** — read (required for Projects V2 Board)
+2. Enter it oncein the Property Inspector — it's shared across all buttons
 3. Authenticated requests get 5,000 API calls per hour
 
 ## Requirements
@@ -275,7 +299,9 @@ npm run watch
 │   │   ├── contribution-heatmap.ts                 # Contribution Heatmap action (SD+ only)
 │   │   ├── pr-review-queue.ts                      # PR Review Queue action
 │   │   ├── fleet-monitor.ts                        # Fleet Monitor action
-│   │   └── security-health.ts                      # Security Health action
+│   │   ├── security-health.ts                      # Security Health action
+│   │   ├── discussions-monitor.ts                   # Discussions Monitor action
+│   │   └── projects-board.ts                        # Projects V2 Board action
 │   ├── utils/                                     # Shared utilities
 │   │   ├── github.ts                              # Token/repo validation helpers
 │   │   ├── github-api.ts                          # GitHub REST API client
@@ -285,11 +311,15 @@ npm run watch
 │   │   ├── polling-coordinator.ts                 # Centralized polling with error backoff
 │   │   ├── spinner-animator.ts                    # Animated loading spinner controller
 │   │   ├── github-graphql.ts                      # GraphQL API client
+│   │   ├── graphql-query-coordinator.ts           # Batched GraphQL query coordinator
+│   │   ├── graphql-query-builder.ts               # Dynamic GraphQL query composition
+│   │   ├── repo-data-cache.ts                     # Per-repo cache with field-level staleness
+│   │   ├── data-fragments.ts                      # GraphQL→REST interface extractors
 │   │   ├── touch-strip-renderer.ts                # Touch strip SVG rendering
 │   │   └── index.ts                               # Barrel exports
 │   ├── types.ts                                   # Shared type definitions
 │   └── plugin.ts                                  # Plugin entry point
-├── tests/                                         # Test files (493 tests)
+├── tests/                                         # Test files (1004 tests across 30 files)
 │   ├── actions/                                   # Action tests
 │   └── utils/                                     # Utility tests
 ├── rollup.config.mjs                              # Rollup bundler config
@@ -345,6 +375,8 @@ This produces a `.streamDeckPlugin` file in the `release/` directory.
 - [x] **Security Health** — Arc gauge combining Dependabot + Code Scanning alerts
 - [x] **Contribution Heatmap** — 52-week GitHub contribution grid spanning the full touch strip
 - [x] **Fleet Monitor** — Monitor multiple repos at a glance across 4 touch strip quarters
+- [x] **Discussions Monitor** — Display discussion count and answered ratio
+- [x] **Projects V2 Board** — Monitor GitHub Projects V2 board status and item counts
 
 ## Contributing
 

@@ -34,12 +34,10 @@ import streamDeck from "@elgato/streamdeck";
 import type { GlobalSettings, FleetMonitorSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
 import {
-	fetchWorkflowInfo,
-	fetchPullRequestCount,
-	fetchCommitActivityWeeks,
 	getWorkflowDisplayStatus,
 	getWorkflowStatusLabel,
 } from "../utils/github-api";
+import { coordinator } from "../utils/graphql-query-coordinator";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderKeyImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage, getWorkflowStatusColor } from "../utils/button-renderer";
 import { renderFleetStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
@@ -81,6 +79,16 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+
+		if (settings.repo) {
+			coordinator.subscribe({
+				actionId: ev.action.id,
+				repo: settings.repo,
+				fragments: ["prCount", "workflowRuns", "commitActivity"],
+				maxAgeSec: intervalSec,
+			});
+		}
+
 		this.polling.start(ev.action.id, () => this.refreshFleet(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshFleet(ev.action.id);
@@ -88,6 +96,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 
 	override onWillDisappear(ev: WillDisappearEvent<FleetMonitorSettings>): void {
 		this.polling.stop(ev.action.id);
+		coordinator.unsubscribe(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.lastKeyUpTime.delete(ev.action.id);
 		this.actionContexts.delete(ev.action.id);
@@ -104,7 +113,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 		if (now - lastUp < 400) {
 			this.lastKeyUpTime.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
-			await this.refreshFleet(ev.action.id);
+			await this.forceRefresh(ev.action.id);
 			return;
 		}
 
@@ -191,6 +200,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 			}
 			this.polling.stop(ev.action.id);
+			coordinator.unsubscribe(ev.action.id);
 			return;
 		}
 
@@ -202,6 +212,18 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+
+		if (settings.repo) {
+			coordinator.subscribe({
+				actionId: ev.action.id,
+				repo: settings.repo,
+				fragments: ["prCount", "workflowRuns", "commitActivity"],
+				maxAgeSec: intervalSec,
+			});
+		} else {
+			coordinator.unsubscribe(ev.action.id);
+		}
+
 		this.polling.restart(ev.action.id, () => this.refreshFleet(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshFleet(ev.action.id);
@@ -249,12 +271,11 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 				return;
 			}
 
-			// Fetch all data points in parallel
-			const [workflowInfo, prCount, commitWeeks] = await Promise.all([
-				fetchWorkflowInfo(parsed.owner, parsed.repo, token, { branch: undefined, workflowFile: undefined, environment: undefined }),
-				fetchPullRequestCount(parsed.owner, parsed.repo, token, "open").catch(() => 0),
-				fetchCommitActivityWeeks(parsed.owner, parsed.repo, token).catch(() => null),
-			]);
+			// Fetch all data points via the coordinator (batched GraphQL + REST)
+			const result = await coordinator.fetchData(actionId, token);
+			const workflowInfo = result.workflowRuns;
+			const prCount = result.prCount ?? 0;
+			const commitWeeks = result.commitActivity ?? [];
 
 			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
 
@@ -263,7 +284,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 			let statusLabel = "No Runs";
 			let statusColor = getWorkflowStatusColor("neutral");
 
-			if (workflowInfo.latestRun) {
+			if (workflowInfo?.latestRun) {
 				displayStatus = getWorkflowDisplayStatus(workflowInfo.latestRun);
 				statusLabel = getWorkflowStatusLabel(displayStatus);
 				statusColor = getWorkflowStatusColor(displayStatus);
@@ -271,7 +292,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 
 			// Extract weekly trend data for sparkline (last 8 weeks)
 			const trend: number[] = [];
-			if (commitWeeks && commitWeeks.length > 0) {
+			if (commitWeeks.length > 0) {
 				const recentWeeks = commitWeeks.slice(-8);
 				for (const week of recentWeeks) {
 					trend.push(week.total);
@@ -314,5 +335,25 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 				await actionContext.setFeedback({ canvas: renderStripError(errorLabel) });
 			}
 		}
+	}
+
+	private async forceRefresh(actionId: string): Promise<void> {
+		const settings = this.actionSettings.get(actionId);
+		if (!settings?.repo) return;
+
+		const actionContext = this.actionContexts.get(actionId);
+		if (!actionContext) return;
+
+		try {
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			const token = globalSettings.githubToken;
+			if (!token) return;
+
+			await coordinator.invalidateAndFetch(actionId, token);
+		} catch {
+			// Errors will be handled in refreshFleet's catch block on next poll
+		}
+
+		await this.refreshFleet(actionId);
 	}
 }

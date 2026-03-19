@@ -32,7 +32,7 @@ import streamDeck from "@elgato/streamdeck";
 
 import type { GlobalSettings, PRReviewQueueSettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
-import { fetchReviewRequestedPRs } from "../utils/github-api";
+import { coordinator } from "../utils/graphql-query-coordinator";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderPRCountImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderPRQueueStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
@@ -87,6 +87,9 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		const maxAgeSec = intervalSec;
+		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo ?? "", fragments: ["reviewRequestedPRs"], maxAgeSec });
+
 		this.polling.start(ev.action.id, () => this.refreshQueue(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshQueue(ev.action.id);
@@ -94,6 +97,7 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 
 	override onWillDisappear(ev: WillDisappearEvent<PRReviewQueueSettings>): void {
 		this.polling.stop(ev.action.id);
+		coordinator.unsubscribe(ev.action.id);
 		this.stopMarquee(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
@@ -112,7 +116,7 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 		if (now - lastUp < 400) {
 			this.lastKeyUpTime.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
-			await this.refreshQueue(ev.action.id);
+			await this.refreshQueue(ev.action.id, true);
 			return;
 		}
 
@@ -136,7 +140,7 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 	 */
 	override async onDialRotate(ev: DialRotateEvent<PRReviewQueueSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshQueue(ev.action.id);
+		await this.refreshQueue(ev.action.id, true);
 	}
 
 	/**
@@ -163,7 +167,7 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 	 */
 	override async onTouchTap(ev: TouchTapEvent<PRReviewQueueSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshQueue(ev.action.id);
+		await this.refreshQueue(ev.action.id, true);
 	}
 
 	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, PRReviewQueueSettings>): Promise<void> {
@@ -199,6 +203,7 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 			}
 			this.polling.stop(ev.action.id);
+			coordinator.unsubscribe(ev.action.id);
 			return;
 		}
 
@@ -210,12 +215,15 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		const maxAgeSec = intervalSec;
+		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo ?? "", fragments: ["reviewRequestedPRs"], maxAgeSec });
+
 		this.polling.restart(ev.action.id, () => this.refreshQueue(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshQueue(ev.action.id);
 	}
 
-	private async refreshQueue(actionId: string): Promise<void> {
+	private async refreshQueue(actionId: string, forceRefresh = false): Promise<void> {
 		const settings = this.actionSettings.get(actionId);
 		const gen = this.polling.incrementGeneration(actionId);
 
@@ -236,8 +244,15 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 			}
 
 			const repo = settings?.repo || undefined;
-			const result = await fetchReviewRequestedPRs(token, repo);
-			const count = result.total_count;
+			const coordinatorResult = forceRefresh
+				? await coordinator.invalidateAndFetch(actionId, token)
+				: await coordinator.fetchData(actionId, token);
+			const prData = coordinatorResult.reviewRequestedPRs;
+			if (!prData) {
+				const errorMsg = coordinatorResult.errors?.reviewRequestedPRs ?? "No data available";
+				throw new Error(errorMsg);
+			}
+			const count = prData.total_count;
 			const displayCount = formatCount(count);
 
 			if (!this.polling.isCurrentGeneration(actionId, gen)) return;

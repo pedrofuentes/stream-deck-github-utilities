@@ -14,12 +14,20 @@ const {
 	mockLoggerDebug,
 	mockLoggerError,
 	mockOpenUrl,
+	mockCoordinatorSubscribe,
+	mockCoordinatorUnsubscribe,
+	mockCoordinatorFetchData,
+	mockCoordinatorInvalidateAndFetch,
 } = vi.hoisted(() => ({
 	mockGetGlobalSettings: vi.fn(),
 	mockRegisterAction: vi.fn(),
 	mockLoggerDebug: vi.fn(),
 	mockLoggerError: vi.fn(),
 	mockOpenUrl: vi.fn().mockResolvedValue(undefined),
+	mockCoordinatorSubscribe: vi.fn(),
+	mockCoordinatorUnsubscribe: vi.fn(),
+	mockCoordinatorFetchData: vi.fn(),
+	mockCoordinatorInvalidateAndFetch: vi.fn(),
 }));
 
 vi.mock("@elgato/streamdeck", () => {
@@ -52,6 +60,15 @@ vi.mock("@elgato/streamdeck", () => {
 		action: () => (target: unknown) => target,
 	};
 });
+
+vi.mock("../../src/utils/graphql-query-coordinator", () => ({
+	coordinator: {
+		subscribe: mockCoordinatorSubscribe,
+		unsubscribe: mockCoordinatorUnsubscribe,
+		fetchData: mockCoordinatorFetchData,
+		invalidateAndFetch: mockCoordinatorInvalidateAndFetch,
+	},
+}));
 
 import { BranchNetworkAction } from "../../src/actions/branch-network";
 
@@ -106,25 +123,6 @@ function lastFeedbackCanvas(mockAction: ReturnType<typeof createMockDialAction>)
 	return lastCall.canvas;
 }
 
-/** Creates a mock branches response */
-function mockBranchesResponse(branches: Array<{ name: string; sha?: string }>) {
-	return {
-		ok: true,
-		status: 200,
-		headers: new Headers({
-			"x-ratelimit-limit": "5000",
-			"x-ratelimit-remaining": "4999",
-			"x-ratelimit-reset": "9999999999",
-			"x-ratelimit-used": "1",
-		}),
-		json: () => Promise.resolve(branches.map((b) => ({
-			name: b.name,
-			commit: { sha: b.sha ?? "abc123" },
-		}))),
-		text: () => Promise.resolve(""),
-	} as unknown as Response;
-}
-
 // ──────────────────────────────────────────────
 // Tests
 // ──────────────────────────────────────────────
@@ -134,17 +132,26 @@ function decodeSvg(dataUri: string): string {
 	return decodeURIComponent(dataUri.replace(/^data:image\/svg\+xml,/, ""));
 }
 
+/** Creates a default coordinator result with branches */
+function branchResult(branches: Array<{ name: string; commitSha?: string }>) {
+	return {
+		branches: branches.map((b) => ({
+			name: b.name,
+			commitSha: b.commitSha ?? "abc123",
+		})),
+	};
+}
+
 describe("BranchNetworkAction", () => {
 	let action: BranchNetworkAction;
-	let originalFetch: typeof globalThis.fetch;
 
 	beforeEach(() => {
 		action = new BranchNetworkAction();
-		originalFetch = globalThis.fetch;
-		globalThis.fetch = vi.fn();
 
 		vi.clearAllMocks();
 		mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
+		mockCoordinatorFetchData.mockResolvedValue({ branches: [] });
+		mockCoordinatorInvalidateAndFetch.mockResolvedValue({ branches: [] });
 
 		// Reset static shared state between tests
 		(BranchNetworkAction as any).sharedScrollH?.clear();
@@ -152,7 +159,6 @@ describe("BranchNetworkAction", () => {
 	});
 
 	afterEach(() => {
-		globalThis.fetch = originalFetch;
 		vi.restoreAllMocks();
 	});
 
@@ -183,8 +189,8 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				mockBranchesResponse([
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([
 					{ name: "main" },
 					{ name: "feature/auth" },
 					{ name: "develop" },
@@ -208,8 +214,8 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				mockBranchesResponse([{ name: "main" }]),
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([{ name: "main" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
@@ -228,8 +234,8 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				mockBranchesResponse([{ name: "main" }]),
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([{ name: "main" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
@@ -252,8 +258,8 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				mockBranchesResponse([
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([
 					{ name: "main" },
 					{ name: "feature/test" },
 				]),
@@ -285,8 +291,8 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				mockBranchesResponse([{ name: "main" }]),
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([{ name: "main" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
@@ -312,8 +318,8 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				mockBranchesResponse([{ name: "main" }]),
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([{ name: "main" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
@@ -333,8 +339,8 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				mockBranchesResponse([{ name: "main" }, { name: "develop" }]),
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([{ name: "main" }, { name: "develop" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
@@ -354,8 +360,8 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				mockBranchesResponse([{ name: "main" }, { name: "feature/new" }]),
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([{ name: "main" }, { name: "feature/new" }]),
 			);
 
 			await action.onDidReceiveSettings?.(createDidReceiveSettingsEvent(mockAction, settings) as never);
@@ -403,18 +409,7 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 404,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () => Promise.resolve({ message: "Not Found" }),
-				text: () => Promise.resolve("Not Found"),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Repository not found"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
 
@@ -430,18 +425,7 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 401,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () => Promise.resolve({ message: "Bad credentials" }),
-				text: () => Promise.resolve("Bad credentials"),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Unauthorized (401)"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
 
@@ -457,18 +441,7 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 403,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "0",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "5000",
-				}),
-				json: () => Promise.resolve({ message: "rate limit exceeded" }),
-				text: () => Promise.resolve("rate limit exceeded"),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockRejectedValue(new Error("API rate limit exceeded"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
 
@@ -521,8 +494,8 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				mockBranchesResponse([{ name: "main" }, { name: "develop" }]),
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([{ name: "main" }, { name: "develop" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
@@ -541,8 +514,8 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				mockBranchesResponse([{ name: "main" }, { name: "develop" }]),
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([{ name: "main" }, { name: "develop" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
@@ -562,8 +535,8 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				mockBranchesResponse([{ name: "main" }, { name: "develop" }]),
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([{ name: "main" }, { name: "develop" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction1, settings1) as never);
@@ -593,15 +566,15 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				mockBranchesResponse([{ name: "main" }, { name: "develop" }]),
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([{ name: "main" }, { name: "develop" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction1, settings1) as never);
 			await action.onWillAppear?.(createWillAppearEvent(mockAction2, settings2) as never);
 
-			// Only 1 API call should be made (second instance reuses cached data)
-			expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+			// Both actions fetch through coordinator (which handles caching internally)
+			expect(mockCoordinatorFetchData).toHaveBeenCalledTimes(2);
 		});
 
 		it("does not share data between different repos", async () => {
@@ -615,15 +588,15 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch)
-				.mockResolvedValueOnce(mockBranchesResponse([{ name: "main" }]))
-				.mockResolvedValueOnce(mockBranchesResponse([{ name: "main" }]));
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([{ name: "main" }]),
+			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction1, settings1) as never);
 			await action.onWillAppear?.(createWillAppearEvent(mockAction2, settings2) as never);
 
-			// Different repos = 2 API calls
-			expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+			// Different repos = 2 coordinator fetchData calls
+			expect(mockCoordinatorFetchData).toHaveBeenCalledTimes(2);
 		});
 
 		it("cleans up on disappear without affecting shared scroll", async () => {
@@ -635,8 +608,8 @@ describe("BranchNetworkAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				mockBranchesResponse([{ name: "main" }]),
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([{ name: "main" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);

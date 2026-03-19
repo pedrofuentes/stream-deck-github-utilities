@@ -1,15 +1,15 @@
 <!-- 
   Marketplace Description — Stream Deck GitHub Utilities
-  Last Updated: v2.0.0
+  Last Updated: v2.2.0
   Character Limit: 4,000
-  Current Count: ~3,950 characters
+  Current Count: ~4,000 characters
 -->
 
 # GitHub Utilities for Stream Deck
 
 **Your GitHub dashboard, one glance away.** Monitor repositories, track CI/CD pipelines, review PRs, and visualize branch networks — all from your Stream Deck and Stream Deck+.
 
-12 actions. Full Stream Deck+ encoder support. Touch strip visualizations. No browser tab required.
+14 actions. Full Stream Deck+ encoder support. Touch strip visualizations. No browser tab required.
 
 ---
 
@@ -39,7 +39,6 @@ Monitor GitHub Actions workflows and deployments in real time.
 See how many pull requests are waiting for your review.
 
 - **Urgency gradient** — blue (1 PR) → amber (3) → red (5+)
-- Works across all repos or filtered to one
 - **SD+** — hero count on the touch strip with repo context
 
 ---
@@ -49,7 +48,6 @@ See how many pull requests are waiting for your review.
 Dedicated counters for pull requests and issues — accurate numbers at a glance.
 
 - **State filter** — open, closed, or all
-- Uses GitHub's Search API to separate issues from PRs precisely
 
 ---
 
@@ -58,7 +56,6 @@ Dedicated counters for pull requests and issues — accurate numbers at a glance
 Track the latest release for any repository.
 
 - **Version tag** with relative time (e.g., "v2.3.1 — 3d ago")
-- **Pre-release support** with visual indicator
 
 ---
 
@@ -79,7 +76,6 @@ See how branches diverge with ahead/behind counts and color-coded status.
 A metro-map style git branch diagram rendered live on the touch strip.
 
 - Scroll horizontally and vertically with the dial
-- Span 2 or 4 adjacent encoder slots for a panoramic view
 
 ---
 
@@ -89,7 +85,6 @@ Your 52-week GitHub contribution grid on the touch strip — just like your prof
 
 - **Profile mode** — contributions across all repos (via GraphQL)
 - **Repo mode** — commit activity for a single repository
-- Scroll through weeks with the dial
 
 ---
 
@@ -98,7 +93,6 @@ Your 52-week GitHub contribution grid on the touch strip — just like your prof
 Dependabot alert summary with an A–F letter grade.
 
 - **Arc gauge** on the SD+ touch strip with severity breakdown
-- Grade based on critical/high/medium/low alert counts
 
 ---
 
@@ -111,9 +105,29 @@ Compact repo health dashboard — place 4 across for a fleet view.
 
 ---
 
+## 💬 Discussions Monitor
+
+Track discussions on any repository.
+
+- **Total discussions** and **answered count** at a glance
+- Auto-refresh with configurable interval
+- Press to open discussions page
+
+---
+
+## 📊 Projects V2 Board
+
+Monitor GitHub Projects V2 boards.
+
+- **Project count** and **item totals** on the button
+- Track project progress from your Stream Deck
+- Press to open project board
+
+---
+
 ## 🎛️ Stream Deck+ Everywhere
 
-Every action supports the encoder. Rotate dials to cycle data, tap the strip to refresh, push to open GitHub. Touch strip visualizations include sparklines, arc gauges, heatmaps, and atmospheric status effects.
+Every action supports the encoder. Rotate dials to cycle data, tap to refresh, push to open GitHub. Visualizations include sparklines, arc gauges, heatmaps, and more.
 
 ---
 
@@ -128,7 +142,7 @@ Every action supports the encoder. Rotate dials to cycle data, tap the strip to 
 ## 📋 Requirements
 
 - Stream Deck software 6.9+ · macOS 13+ or Windows 10+
-- GitHub Personal Access Token (fine-grained recommended) with Metadata, Actions, Deployments, Pull Requests, Issues, Contents, and Dependabot Alerts (all read)
+- GitHub Personal Access Token (fine-grained recommended) with Metadata, Actions, Deployments, Pull Requests, Issues, and Contents (all read)
 
 ---
 

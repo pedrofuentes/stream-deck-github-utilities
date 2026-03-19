@@ -14,12 +14,20 @@ const {
 	mockLoggerDebug,
 	mockLoggerError,
 	mockOpenUrl,
+	mockCoordinatorSubscribe,
+	mockCoordinatorUnsubscribe,
+	mockCoordinatorFetchData,
+	mockCoordinatorInvalidateAndFetch,
 } = vi.hoisted(() => ({
 	mockGetGlobalSettings: vi.fn(),
 	mockRegisterAction: vi.fn(),
 	mockLoggerDebug: vi.fn(),
 	mockLoggerError: vi.fn(),
 	mockOpenUrl: vi.fn().mockResolvedValue(undefined),
+	mockCoordinatorSubscribe: vi.fn(),
+	mockCoordinatorUnsubscribe: vi.fn(),
+	mockCoordinatorFetchData: vi.fn(),
+	mockCoordinatorInvalidateAndFetch: vi.fn(),
 }));
 
 vi.mock("@elgato/streamdeck", () => {
@@ -52,6 +60,15 @@ vi.mock("@elgato/streamdeck", () => {
 		action: () => (target: unknown) => target,
 	};
 });
+
+vi.mock("../../src/utils/graphql-query-coordinator", () => ({
+	coordinator: {
+		subscribe: mockCoordinatorSubscribe,
+		unsubscribe: mockCoordinatorUnsubscribe,
+		fetchData: mockCoordinatorFetchData,
+		invalidateAndFetch: mockCoordinatorInvalidateAndFetch,
+	},
+}));
 
 import { ReleaseMonitorAction } from "../../src/actions/release-monitor";
 
@@ -99,56 +116,23 @@ function lastImage(mockAction: ReturnType<typeof createMockKeyAction>): string {
 	return decodeSvg(calls[calls.length - 1][0] as string);
 }
 
-function mockReleaseResponse(release: Record<string, unknown> | null) {
-	if (release === null) {
-		// No releases
-		return {
-			ok: false,
-			status: 404,
-			headers: new Headers({
-				"x-ratelimit-limit": "5000",
-				"x-ratelimit-remaining": "4999",
-				"x-ratelimit-reset": "9999999999",
-				"x-ratelimit-used": "1",
-			}),
-			json: () => Promise.resolve({ message: "Not Found" }),
-			text: () => Promise.resolve("Not Found"),
-		} as unknown as Response;
-	}
-
-	return {
-		ok: true,
-		status: 200,
-		headers: new Headers({
-			"x-ratelimit-limit": "5000",
-			"x-ratelimit-remaining": "4999",
-			"x-ratelimit-reset": "9999999999",
-			"x-ratelimit-used": "1",
-		}),
-		json: () => Promise.resolve(release),
-		text: () => Promise.resolve(""),
-	} as unknown as Response;
-}
-
 // ──────────────────────────────────────────────
 // Tests
 // ──────────────────────────────────────────────
 
 describe("ReleaseMonitorAction", () => {
 	let action: ReleaseMonitorAction;
-	let originalFetch: typeof globalThis.fetch;
 
 	beforeEach(() => {
 		action = new ReleaseMonitorAction();
-		originalFetch = globalThis.fetch;
-		globalThis.fetch = vi.fn();
 
 		vi.clearAllMocks();
 		mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
+		mockCoordinatorFetchData.mockResolvedValue({ latestRelease: null });
+		mockCoordinatorInvalidateAndFetch.mockResolvedValue({ latestRelease: null });
 	});
 
 	afterEach(() => {
-		globalThis.fetch = originalFetch;
 		vi.restoreAllMocks();
 	});
 
@@ -179,13 +163,16 @@ describe("ReleaseMonitorAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockReleaseResponse({
-				tag_name: "v1.2.3",
-				name: "Release v1.2.3",
-				published_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-				prerelease: false,
-				html_url: "https://github.com/owner/repo/releases/tag/v1.2.3",
-			}));
+			mockCoordinatorFetchData.mockResolvedValue({
+				latestRelease: {
+					tag_name: "v1.2.3",
+					name: "Release v1.2.3",
+					published_at: new Date(Date.now() - 3600000).toISOString(),
+					prerelease: false,
+					draft: false,
+					html_url: "https://github.com/owner/repo/releases/tag/v1.2.3",
+				},
+			});
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -203,7 +190,7 @@ describe("ReleaseMonitorAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockReleaseResponse(null));
+			mockCoordinatorFetchData.mockResolvedValue({ latestRelease: null });
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -221,26 +208,16 @@ describe("ReleaseMonitorAction", () => {
 				configurable: true,
 			});
 
-			// includePreReleases=true uses /releases?per_page=1 which returns an array
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: true,
-				status: 200,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () => Promise.resolve([{
+			mockCoordinatorFetchData.mockResolvedValue({
+				latestRelease: {
 					tag_name: "v2.0.0-beta.1",
 					name: "Beta Release",
 					published_at: new Date(Date.now() - 86400000).toISOString(),
 					prerelease: true,
 					draft: false,
 					html_url: "https://github.com/owner/repo/releases/tag/v2.0.0-beta.1",
-				}]),
-				text: () => Promise.resolve(""),
-			} as unknown as Response);
+				},
+			});
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -258,12 +235,15 @@ describe("ReleaseMonitorAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockReleaseResponse({
-				tag_name: "v1.0.0",
-				published_at: new Date().toISOString(),
-				prerelease: false,
-				html_url: "https://github.com/owner/repo/releases/tag/v1.0.0",
-			}));
+			mockCoordinatorFetchData.mockResolvedValue({
+				latestRelease: {
+					tag_name: "v1.0.0",
+					published_at: new Date().toISOString(),
+					prerelease: false,
+					draft: false,
+					html_url: "https://github.com/owner/repo/releases/tag/v1.0.0",
+				},
+			});
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
 			action.onWillDisappear?.(createWillDisappearEvent(mockAction) as never);
@@ -285,12 +265,15 @@ describe("ReleaseMonitorAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockReleaseResponse({
-				tag_name: "v1.0.0",
-				published_at: new Date().toISOString(),
-				prerelease: false,
-				html_url: "https://github.com/owner/repo/releases/tag/v1.0.0",
-			}));
+			mockCoordinatorFetchData.mockResolvedValue({
+				latestRelease: {
+					tag_name: "v1.0.0",
+					published_at: new Date().toISOString(),
+					prerelease: false,
+					draft: false,
+					html_url: "https://github.com/owner/repo/releases/tag/v1.0.0",
+				},
+			});
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
@@ -327,12 +310,15 @@ describe("ReleaseMonitorAction", () => {
 			});
 			(action as any).actionContexts.set("rel-5", mockAction);
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockReleaseResponse({
-				tag_name: "v3.0.0",
-				published_at: new Date().toISOString(),
-				prerelease: false,
-				html_url: "https://github.com/owner/repo/releases/tag/v3.0.0",
-			}));
+			mockCoordinatorFetchData.mockResolvedValue({
+				latestRelease: {
+					tag_name: "v3.0.0",
+					published_at: new Date().toISOString(),
+					prerelease: false,
+					draft: false,
+					html_url: "https://github.com/owner/repo/releases/tag/v3.0.0",
+				},
+			});
 
 			await action.onDidReceiveSettings?.(createDidReceiveSettingsEvent(mockAction, settings) as never);
 
@@ -379,18 +365,7 @@ describe("ReleaseMonitorAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 401,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "0",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "5000",
-				}),
-				json: () => Promise.resolve({ message: "Bad credentials" }),
-				text: () => Promise.resolve("Bad credentials"),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Unauthorized (401)"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
 

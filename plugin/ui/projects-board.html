@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<script>
+	// Intercept WebSocket to capture sdpi-components' connection for the Settings popup
+	// and to detect datasource responses (which bypass shadow DOM issues).
+	(function() {
+		const NativeWS = window.WebSocket;
+		// Timestamp of the last setSettings we sent — used to detect echoes.
+		let _lastSendTime = 0;
+		const ECHO_WINDOW_MS = 500;
+		window.WebSocket = new Proxy(NativeWS, {
+			construct(target, args) {
+				const ws = new target(...args);
+				window._sdWebSocket = ws;
+				// Intercept outgoing send to merge _actionSettings into setSettings,
+				// preventing sdpi-components from overwriting FilterableSelect settings.
+				const _origSend = ws.send.bind(ws);
+				ws.send = function(data) {
+					try {
+						const msg = JSON.parse(data);
+						if (msg.event === "setSettings" && window._actionSettings) {
+							msg.payload = Object.assign({}, window._actionSettings, msg.payload);
+							// Inject defaults when a repo is set but refresh is missing.
+							if (msg.payload.repo && !msg.payload.refreshInterval) {
+								msg.payload.refreshInterval = 300;
+							}
+							window._actionSettings = msg.payload;
+							_lastSendTime = Date.now();
+							return _origSend(JSON.stringify(msg));
+						}
+					} catch(e) {}
+					return _origSend(data);
+				};
+				ws.addEventListener("message", function(evt) {
+					try {
+						const data = JSON.parse(evt.data);
+						if (data.event === "didReceiveGlobalSettings") {
+							window._globalSettings = data.payload?.settings || {};
+						}
+						// Keep _actionSettings in sync when plugin updates settings,
+						// but SKIP echoes from our own recent setSettings.
+						if (data.event === "didReceiveSettings") {
+							const isEcho = (Date.now() - _lastSendTime) < ECHO_WINDOW_MS;
+							if (!isEcho) {
+								window._actionSettings = data.payload?.settings || {};
+							}
+							window.dispatchEvent(new CustomEvent('sdpi-settings-loaded', {
+								detail: { settings: data.payload?.settings || {} }
+							}));
+						}
+						// Capture datasource responses from the plugin
+						if (data.event === "sendToPropertyInspector" && data.payload?.event === "getRepos") {
+							window._repoItems = data.payload.items || [];
+							window.dispatchEvent(new CustomEvent('sdpi-datasource', {
+								detail: { event: 'getRepos', items: window._repoItems }
+							}));
+							if (typeof window._onRepoData === "function") window._onRepoData();
+						}
+					} catch(e) {}
+				});
+				return ws;
+			}
+		});
+	})();
+	</script>
+	<script src="sdpi-components.js"></script>
+	<script src="filterable-select.js"></script>
+	<script>
+	// Capture the action UUID from sdpi-components' connection handshake
+	(function() {
+		const origConnect = window.connectElgatoStreamDeckSocket;
+		window.connectElgatoStreamDeckSocket = function(port, uuid, registerEvent, info, actionInfo) {
+			window._sdUuid = uuid;
+			try {
+				var ai = typeof actionInfo === 'string' ? JSON.parse(actionInfo) : actionInfo;
+				window._sdAction = ai?.action || '';
+				window._actionSettings = ai?.payload?.settings || {};
+			} catch(e) {}
+			if (origConnect) origConnect.call(this, port, uuid, registerEvent, info, actionInfo);
+			// Notify FilterableSelect instances that settings are now available
+			window.dispatchEvent(new CustomEvent('sdpi-settings-loaded', {
+				detail: { settings: window._actionSettings }
+			}));
+			// Explicitly request global settings so _globalSettings is populated
+			setTimeout(() => {
+				const ws = window._sdWebSocket;
+				if (ws && ws.readyState === WebSocket.OPEN) {
+					ws.send(JSON.stringify({ event: "getGlobalSettings", context: uuid }));
+				}
+			}, 200);
+		};
+	})();
+	</script>
+	<style>
+		body {
+			font-family: "SF Pro", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+		}
+		.sdpi-heading {
+			display: block;
+			padding: 6px 16px 3px;
+			font-size: 11px;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 0.8px;
+			color: #8b949e;
+			margin-top: 8px;
+		}
+		.sdpi-info {
+			display: block;
+			padding: 4px 16px;
+			font-size: 10px;
+			color: #8b949e;
+			line-height: 1.5;
+		}
+		.sdpi-status {
+			display: block;
+			padding: 3px 16px;
+			font-size: 10px;
+			line-height: 1.5;
+			font-weight: 500;
+			transition: color 0.3s;
+		}
+		.sdpi-status.success { color: #3fb950; }
+		.sdpi-status.error { color: #f85149; }
+		.sdpi-status.loading { color: #d29922; }
+		.sdpi-status.idle { color: #8b949e; }
+		hr {
+			border: none;
+			border-top: 1px solid #30363d;
+			margin: 10px 16px;
+		}
+		.settings-btn {
+			width: 100%;
+			background: #21262d;
+			color: #e6edf3;
+			border: 1px solid #30363d;
+			border-radius: 6px;
+			padding: 8px 12px;
+			cursor: pointer;
+			font-size: 12px;
+			font-weight: 500;
+			font-family: inherit;
+			transition: background 0.15s, border-color 0.15s;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 6px;
+		}
+		.settings-btn:hover {
+			background: #30363d;
+			border-color: #484f58;
+		}
+	</style>
+</head>
+<body>
+	<!-- Authentication (Global Setting — managed via Plugin Settings popup) -->
+	<span class="sdpi-heading">Authentication</span>
+
+	<span id="tokenStatus" class="sdpi-status idle">
+		Loading…
+	</span>
+
+	<div style="padding: 4px 16px 8px;">
+		<button id="settingsBtn" class="settings-btn">⚙️ Plugin Settings</button>
+	</div>
+
+	<hr />
+
+	<!-- Repository Configuration (Per-Action Settings) -->
+	<span class="sdpi-heading">Repository</span>
+
+	<sdpi-item label="Repository">
+		<div id="repoSelect"></div>
+	</sdpi-item>
+
+	<span id="repoStatus" class="sdpi-info">
+		Select a repository to display Projects V2 data for.
+	</span>
+
+	<hr />
+
+	<!-- Refresh Interval -->
+	<sdpi-item label="Refresh">
+		<sdpi-select setting="refreshInterval">
+			<option value="60">Every 1 minute</option>
+			<option value="120">Every 2 minutes</option>
+			<option value="300" selected>Every 5 minutes</option>
+			<option value="600">Every 10 minutes</option>
+			<option value="1800">Every 30 minutes</option>
+			<option value="3600">Every 1 hour</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<span class="sdpi-info">
+		Authenticated requests allow 5,000 API calls/hour.
+		Press the button to force a refresh anytime.
+	</span>
+
+	<script>
+		// ── Repo dropdown status updates ────────────────
+		const tokenStatus = document.getElementById("tokenStatus");
+		const repoStatus = document.getElementById("repoStatus");
+
+		// Filterable repo dropdown
+		const repoFS = new FilterableSelect({
+			container: document.getElementById('repoSelect'),
+			setting: 'repo',
+			datasource: 'getRepos',
+			placeholder: 'Choose a repository',
+			searchPlaceholder: 'Search repositories…',
+			threshold: 8,
+		});
+
+		/**
+		 * Updates tokenStatus / repoStatus based on the repo data
+		 * received via WebSocket interception (avoids shadow DOM issues).
+		 */
+		function updateStatusFromRepoData() {
+			const items = window._repoItems;
+			if (!items || items.length === 0) return;
+
+			const first = items[0];
+			const firstLabel = first.label || "";
+			const firstVal = first.value ?? "";
+
+			if (firstVal === "" && firstLabel.startsWith("⚠")) {
+				tokenStatus.className = "sdpi-status error";
+				tokenStatus.textContent = firstLabel;
+
+				if (firstLabel.includes("permission") || firstLabel.includes("Metadata")) {
+					repoStatus.innerHTML =
+						'Token needs additional permissions. ' +
+						'<a href="https://github.com/settings/tokens" target="_blank">Update token on GitHub →</a>';
+				} else if (firstLabel.includes("expired") || firstLabel.includes("Invalid") || firstLabel.includes("invalid") || firstLabel.includes("revoked")) {
+					repoStatus.textContent = "Open Plugin Settings to update your token.";
+				} else if (firstLabel.includes("Network")) {
+					repoStatus.textContent = "Could not reach GitHub. Check your internet connection and try the refresh button.";
+				} else if (firstLabel.includes("Enter a GitHub token")) {
+					tokenStatus.className = "sdpi-status idle";
+					tokenStatus.textContent = "No token configured";
+					repoStatus.textContent = "Open Plugin Settings to add your GitHub token.";
+				} else {
+					repoStatus.textContent = "Use the refresh button next to the dropdown to retry.";
+				}
+			} else if (firstVal === "" && firstLabel.includes("No repositories")) {
+				tokenStatus.textContent = "✓ Token valid — no repos found";
+				tokenStatus.className = "sdpi-status success";
+				repoStatus.innerHTML =
+					'Token works but returned no repositories. Ensure your token has the <strong>repo</strong> scope enabled (not just <strong>public_repo</strong>). ' +
+					'<a href="https://github.com/settings/tokens" target="_blank">Update token →</a>';
+			} else if (firstVal !== "") {
+				const count = items.filter(i => i.value !== "").length;
+				tokenStatus.textContent = `✓ Token valid — ${count} repositor${count === 1 ? "y" : "ies"} loaded`;
+				tokenStatus.className = "sdpi-status success";
+				repoStatus.textContent = "Select a repository to display Projects V2 data for.";
+			}
+		}
+
+		// React to repo data arriving via the WebSocket interceptor
+		window._onRepoData = function() {
+			updateStatusFromRepoData();
+		};
+
+		// Open the Plugin Settings popup for token management
+		document.getElementById("settingsBtn").addEventListener("click", () => {
+			const token = (window._globalSettings && window._globalSettings.githubToken) || "";
+			window.open("setup.html#" + encodeURIComponent(token), "GitHub Utilities Settings", "width=480,height=520");
+		});
+
+		// Expose save function for the setup popup to call
+		window._saveToken = function(token) {
+			const ws = window._sdWebSocket;
+			const uuid = window._sdUuid;
+			if (!ws || ws.readyState !== WebSocket.OPEN || !uuid) return false;
+
+			const settings = Object.assign({}, window._globalSettings || {}, { githubToken: token });
+			ws.send(JSON.stringify({
+				event: "setGlobalSettings",
+				context: uuid,
+				payload: settings
+			}));
+			window._globalSettings = settings;
+
+			// Update status and refresh dropdown
+			if (token) {
+				tokenStatus.textContent = "Token updated — loading repositories…";
+				tokenStatus.className = "sdpi-status loading";
+				repoFS.refresh();
+			} else {
+				tokenStatus.textContent = "No token configured";
+				tokenStatus.className = "sdpi-status idle";
+			}
+			return true;
+		};
+
+		// Initial status check once repo data is available
+		setTimeout(() => updateStatusFromRepoData(), 2000);
+	</script>
+</body>
+</html>

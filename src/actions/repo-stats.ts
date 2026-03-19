@@ -34,7 +34,8 @@ import streamDeck from "@elgato/streamdeck";
 
 import type { GlobalSettings, RepoStatsSettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
-import { fetchRepoStats, fetchOpenPullRequestCount, getStatDisplay, getStatUrl, STAT_TYPES, type StatType } from "../utils/github-api";
+import { getStatDisplay, getStatUrl, STAT_TYPES, type StatType } from "../utils/github-api";
+import { coordinator } from "../utils/graphql-query-coordinator";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderStatImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
@@ -123,8 +124,16 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
 		}
 
-		// Start polling (creates state for generation counter)
+		// Subscribe to coordinator for data fetching
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		coordinator.subscribe({
+			actionId: ev.action.id,
+			repo: settings.repo!,
+			fragments: ["repoMetadata", "prCount"],
+			maxAgeSec: intervalSec,
+		});
+
+		// Start polling (creates state for generation counter)
 		this.polling.start(ev.action.id, () => this.refreshStats(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		// Initial fetch
@@ -135,6 +144,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	 * Called when the action is no longer visible. Cleans up the timer.
 	 */
 	override onWillDisappear(ev: WillDisappearEvent<RepoStatsSettings>): void {
+		coordinator.unsubscribe(ev.action.id);
 		this.polling.stop(ev.action.id);
 		this.stopMarquee(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
@@ -167,7 +177,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 		if (now - lastUp < 400) {
 			this.lastKeyUpTime.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
-			await this.refreshStats(ev.action.id);
+			await this.refreshStats(ev.action.id, true);
 			return;
 		}
 
@@ -340,6 +350,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 		if (ev.action.isKey()) {
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			if (!settings.repo || !globalSettings.githubToken) {
+				coordinator.unsubscribe(ev.action.id);
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
 				this.polling.stop(ev.action.id);
@@ -354,6 +365,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			if (!settings.repo || !globalSettings.githubToken) {
+				coordinator.unsubscribe(ev.action.id);
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 				this.polling.stop(ev.action.id);
 				return;
@@ -361,8 +373,17 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
 		}
 
-		// Restart timer with potentially new interval (creates fresh state for generation counter)
+		// Re-subscribe with updated settings
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		coordinator.unsubscribe(ev.action.id);
+		coordinator.subscribe({
+			actionId: ev.action.id,
+			repo: settings.repo!,
+			fragments: ["repoMetadata", "prCount"],
+			maxAgeSec: intervalSec,
+		});
+
+		// Restart timer with potentially new interval (creates fresh state for generation counter)
 		this.polling.restart(ev.action.id, () => this.refreshStats(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		// Re-fetch with new settings
@@ -372,7 +393,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	/**
 	 * Fetches repo stats and updates the button display.
 	 */
-	private async refreshStats(actionId: string): Promise<void> {
+	private async refreshStats(actionId: string, forceRefresh = false): Promise<void> {
 		const settings = this.actionSettings.get(actionId);
 		if (!settings?.repo) {
 			return;
@@ -413,16 +434,18 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 				return;
 			}
 
-			// Fetch data from GitHub
-			const stats = await fetchRepoStats(parsed.owner, parsed.repo, token);
+			// Fetch data via coordinator (GraphQL with REST fallback)
+			const result = forceRefresh
+				? await coordinator.invalidateAndFetch(actionId, token)
+				: await coordinator.fetchData(actionId, token);
+			const stats = result.repoMetadata;
+			if (!stats) {
+				const errorMsg = result.errors?.repoMetadata ?? "Failed to fetch data";
+				throw new Error(errorMsg);
+			}
 
 			// Determine which stat to show
 			const statType: StatType = settings.statType ?? "stars";
-
-			// If user selected pull_requests, fetch the PR count separately
-			if (statType === "pull_requests") {
-				stats.open_pull_request_count = await fetchOpenPullRequestCount(parsed.owner, parsed.repo, token);
-			}
 
 			const displayValue = getStatDisplay(stats, statType, formatCount);
 

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20">
+  <!-- Discussions Monitor icon: speech bubble -->
+  <path d="M3 4C3 3.45 3.45 3 4 3H16C16.55 3 17 3.45 17 4V12C17 12.55 16.55 13 16 13H7L4 16V13H4C3.45 13 3 12.55 3 12V4Z" fill="none" stroke="white" stroke-width="1.3" stroke-linejoin="round"/>
+  <line x1="6.5" y1="7" x2="13.5" y2="7" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="6.5" y1="10" x2="11" y2="10" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+</svg>

@@ -64,6 +64,8 @@ const STAT_LABELS: Record<string, string> = {
 	releases: "⏷ RELEASES",
 	commits: "⊙ COMMITS",
 	branches: "⑂ BRANCHES",
+	discussions: "💬 DISCUSSIONS",
+	projects: "📊 PROJECTS",
 };
 
 // ── SVG Helpers ────────────────────────────────────────────────────────────

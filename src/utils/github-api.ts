@@ -101,6 +101,8 @@ function buildHeaders(token?: string): Record<string, string> {
 /**
  * Fetches repository statistics from the GitHub API.
  *
+ * @deprecated Use coordinator.fetchData() with "repoMetadata" fragment instead.
+ *
  * @param owner - Repository owner (user or organization)
  * @param repo - Repository name
  * @param token - Optional GitHub personal access token for authenticated requests
@@ -299,6 +301,8 @@ export function getStatUrl(owner: string, repo: string, statType: StatType): str
  * Fetches the count of open pull requests for a repository.
  * Uses the GitHub Search API with `type:pr` for reliable counting.
  *
+ * @deprecated Use coordinator.fetchData() with "prCount" fragment instead.
+ *
  * @param owner - Repository owner
  * @param repo - Repository name
  * @param token - GitHub personal access token
@@ -326,6 +330,8 @@ export async function fetchOpenPullRequestCount(
 /**
  * Fetches pull request count for a repository with a given state filter.
  * Uses the GitHub Search API with `type:pr` for reliable counting.
+ *
+ * @deprecated Use coordinator.fetchData() with "prCount" fragment instead.
  *
  * @param owner - Repository owner
  * @param repo - Repository name
@@ -359,6 +365,8 @@ export async function fetchPullRequestCount(
 /**
  * Fetches PRs that are requesting the authenticated user's review.
  * Uses the Search API with the review-requested qualifier.
+ *
+ * @deprecated Use coordinator.fetchData() with "reviewRequestedPRs" fragment instead.
  *
  * @param token - GitHub personal access token
  * @param repo - Optional "owner/repo" filter (shows all repos if omitted)
@@ -434,6 +442,8 @@ export async function fetchReviewRequestedPRs(
  * For "closed" or "all", uses the GitHub Search API with `type:issue` qualifier
  * which returns an exact count excluding PRs.
  *
+ * @deprecated Use coordinator.fetchData() with "issueCount" fragment instead.
+ *
  * @param owner - Repository owner
  * @param repo - Repository name
  * @param token - GitHub personal access token
@@ -489,6 +499,8 @@ export interface ReleaseInfo {
 
 /**
  * Fetches the latest release for a repository.
+ *
+ * @deprecated Use coordinator.fetchData() with "latestRelease" fragment instead.
  *
  * @param owner - Repository owner
  * @param repo - Repository name
@@ -621,6 +633,8 @@ export interface CommitActivityWeek {
  * Fetches commit activity (weekly commit counts) for a repository.
  * Uses the stats/commit_activity endpoint which returns the last 52 weeks.
  *
+ * @deprecated Use coordinator.fetchData() with "commitActivity" fragment instead.
+ *
  * @param owner - Repository owner
  * @param repo - Repository name
  * @param token - GitHub personal access token
@@ -692,6 +706,8 @@ export async function fetchCommitActivity(
  * Returns the full 52-week history with daily breakdowns, suitable for
  * rendering contribution heatmaps.
  *
+ * @deprecated Use coordinator.fetchData() with "commitActivity" fragment instead.
+ *
  * @param owner - Repository owner
  * @param repo - Repository name
  * @param token - GitHub personal access token
@@ -741,6 +757,8 @@ export interface BranchComparison {
 /**
  * Fetches branch comparison (ahead/behind counts) between two branches.
  *
+ * @deprecated Use coordinator.fetchData() with "branches" fragment instead.
+ *
  * @param owner - Repository owner
  * @param repo - Repository name
  * @param base - Base branch (e.g. "main")
@@ -787,6 +805,8 @@ export interface BranchInfo {
 /**
  * Fetches branch info for network visualization.
  * Returns the list of branches with their latest commit SHA.
+ *
+ * @deprecated Use coordinator.fetchData() with "branches" fragment instead.
  *
  * @param owner - Repository owner
  * @param repo - Repository name
@@ -891,6 +911,8 @@ export interface WorkflowInfo {
 /**
  * Fetches the latest workflow runs for a repository.
  *
+ * @deprecated Use coordinator.fetchData() with workflow-specific queries instead.
+ *
  * @param owner - Repository owner
  * @param repo - Repository name
  * @param token - GitHub PAT (required for Actions read permission)
@@ -950,6 +972,8 @@ export async function fetchLatestWorkflowRun(
 
 /**
  * Fetches the latest deployment status for a repository.
+ *
+ * @deprecated Use coordinator.fetchData() with deployment-specific queries instead.
  *
  * @param owner - Repository owner
  * @param repo - Repository name
@@ -1022,6 +1046,8 @@ export async function fetchLatestDeploymentStatus(
 
 /**
  * Fetches combined workflow run + deployment info for a repository.
+ *
+ * @deprecated Use coordinator.fetchData() with workflow-specific queries instead.
  */
 export async function fetchWorkflowInfo(
 	owner: string,
@@ -1209,6 +1235,8 @@ export interface SecurityAlertSummary {
 /**
  * Fetches open Dependabot alerts and summarizes by severity.
  * Requires `Dependabot alerts: Read` permission.
+ *
+ * @deprecated Use coordinator.fetchData() with "securityAlerts" fragment instead.
  *
  * @param owner - Repository owner
  * @param repo - Repository name

@@ -20,6 +20,8 @@ import { ContributionHeatmapAction } from "./actions/contribution-heatmap";
 import { PRReviewQueueAction } from "./actions/pr-review-queue";
 import { FleetMonitorAction } from "./actions/fleet-monitor";
 import { SecurityHealthAction } from "./actions/security-health";
+import { DiscussionsMonitorAction } from "./actions/discussions-monitor";
+import { ProjectsBoardAction } from "./actions/projects-board";
 
 // Configure the logger
 streamDeck.logger.setLevel("debug");
@@ -37,6 +39,8 @@ streamDeck.actions.registerAction(new ContributionHeatmapAction());
 streamDeck.actions.registerAction(new PRReviewQueueAction());
 streamDeck.actions.registerAction(new FleetMonitorAction());
 streamDeck.actions.registerAction(new SecurityHealthAction());
+streamDeck.actions.registerAction(new DiscussionsMonitorAction());
+streamDeck.actions.registerAction(new ProjectsBoardAction());
 
 // Connect to the Stream Deck
 streamDeck.connect();

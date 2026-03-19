@@ -29,6 +29,27 @@ const {
 	mockOpenUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
+const {
+	mockCoordinatorSubscribe,
+	mockCoordinatorUnsubscribe,
+	mockCoordinatorFetchData,
+	mockCoordinatorInvalidateAndFetch,
+} = vi.hoisted(() => ({
+	mockCoordinatorSubscribe: vi.fn(),
+	mockCoordinatorUnsubscribe: vi.fn(),
+	mockCoordinatorFetchData: vi.fn(),
+	mockCoordinatorInvalidateAndFetch: vi.fn(),
+}));
+
+vi.mock("../../src/utils/graphql-query-coordinator", () => ({
+	coordinator: {
+		subscribe: mockCoordinatorSubscribe,
+		unsubscribe: mockCoordinatorUnsubscribe,
+		fetchData: mockCoordinatorFetchData,
+		invalidateAndFetch: mockCoordinatorInvalidateAndFetch,
+	},
+}));
+
 vi.mock("@elgato/streamdeck", () => {
 	class MockSingletonAction {
 		manifestId: string | undefined;
@@ -163,44 +184,21 @@ function lastImage(mockAction: ReturnType<typeof createMockKeyAction>): string {
 	return decodeSvg(calls[calls.length - 1][0] as string);
 }
 
-function mockFetchDependabotResponse(alerts: Array<{ severity: string }>) {
-	return {
-		ok: true,
-		status: 200,
-		headers: new Headers({
-			"x-ratelimit-limit": "5000",
-			"x-ratelimit-remaining": "4999",
-			"x-ratelimit-reset": "9999999999",
-			"x-ratelimit-used": "1",
-		}),
-		json: () => Promise.resolve(
-			alerts.map((a) => ({
-				security_advisory: { severity: a.severity },
-			}))
-		),
-		text: () => Promise.resolve(""),
-	} as unknown as Response;
-}
-
 // ──────────────────────────────────────────────
 // Tests
 // ──────────────────────────────────────────────
 
 describe("SecurityHealthAction", () => {
 	let action: SecurityHealthAction;
-	let originalFetch: typeof globalThis.fetch;
 
 	beforeEach(() => {
 		action = new SecurityHealthAction();
-		originalFetch = globalThis.fetch;
-		globalThis.fetch = vi.fn();
 
 		vi.clearAllMocks();
 		mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
 	});
 
 	afterEach(() => {
-		globalThis.fetch = originalFetch;
 		vi.restoreAllMocks();
 	});
 
@@ -237,7 +235,9 @@ describe("SecurityHealthAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([]));
+			mockCoordinatorFetchData.mockResolvedValue({
+				vulnerabilityAlerts: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+			});
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -257,10 +257,9 @@ describe("SecurityHealthAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([
-				{ severity: "low" },
-				{ severity: "medium" },
-			]));
+			mockCoordinatorFetchData.mockResolvedValue({
+				vulnerabilityAlerts: { critical: 0, high: 0, medium: 1, low: 1, total: 2 },
+			});
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -280,10 +279,9 @@ describe("SecurityHealthAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([
-				{ severity: "critical" },
-				{ severity: "low" },
-			]));
+			mockCoordinatorFetchData.mockResolvedValue({
+				vulnerabilityAlerts: { critical: 1, high: 0, medium: 0, low: 1, total: 2 },
+			});
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -303,9 +301,9 @@ describe("SecurityHealthAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([
-				{ severity: "low" },
-			]));
+			mockCoordinatorFetchData.mockResolvedValue({
+				vulnerabilityAlerts: { critical: 0, high: 0, medium: 0, low: 1, total: 1 },
+			});
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -336,10 +334,9 @@ describe("SecurityHealthAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([
-				{ severity: "high" },
-				{ severity: "medium" },
-			]));
+			mockCoordinatorFetchData.mockResolvedValue({
+				vulnerabilityAlerts: { critical: 0, high: 1, medium: 1, low: 0, total: 2 },
+			});
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -363,7 +360,9 @@ describe("SecurityHealthAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([]));
+			mockCoordinatorFetchData.mockResolvedValue({
+				vulnerabilityAlerts: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+			});
 
 			const appearEv = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(appearEv as never);
@@ -372,7 +371,7 @@ describe("SecurityHealthAction", () => {
 			action.onWillDisappear?.(disappearEv as never);
 
 			// No crash, timer cleaned up
-			expect(true).toBe(true);
+			expect(mockCoordinatorUnsubscribe).toHaveBeenCalledWith("sh-d-1");
 		});
 
 		it("handles disappear without prior appear", () => {
@@ -394,7 +393,9 @@ describe("SecurityHealthAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([]));
+			mockCoordinatorFetchData.mockResolvedValue({
+				vulnerabilityAlerts: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+			});
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
 			const ev = createKeyDownEvent(mockAction, settings);
@@ -424,7 +425,9 @@ describe("SecurityHealthAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([]));
+			mockCoordinatorFetchData.mockResolvedValue({
+				vulnerabilityAlerts: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+			});
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
 			const ev = createDialDownEvent(mockAction, settings);
@@ -454,12 +457,14 @@ describe("SecurityHealthAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([]));
+			mockCoordinatorFetchData.mockResolvedValue({
+				vulnerabilityAlerts: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+			});
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([
-				{ severity: "high" },
-			]));
+			mockCoordinatorInvalidateAndFetch.mockResolvedValue({
+				vulnerabilityAlerts: { critical: 0, high: 1, medium: 0, low: 0, total: 1 },
+			});
 
 			const ev = createDialRotateEvent(mockAction, settings);
 			await action.onDialRotate?.(ev as never);
@@ -480,14 +485,14 @@ describe("SecurityHealthAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([]));
+			mockCoordinatorFetchData.mockResolvedValue({
+				vulnerabilityAlerts: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+			});
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([
-				{ severity: "critical" },
-				{ severity: "critical" },
-				{ severity: "critical" },
-			]));
+			mockCoordinatorInvalidateAndFetch.mockResolvedValue({
+				vulnerabilityAlerts: { critical: 3, high: 0, medium: 0, low: 0, total: 3 },
+			});
 
 			const ev = createTouchTapEvent(mockAction, settings);
 			await action.onTouchTap?.(ev as never);
@@ -509,11 +514,9 @@ describe("SecurityHealthAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchDependabotResponse([
-				{ severity: "medium" },
-				{ severity: "medium" },
-				{ severity: "low" },
-			]));
+			mockCoordinatorFetchData.mockResolvedValue({
+				vulnerabilityAlerts: { critical: 0, high: 0, medium: 2, low: 1, total: 3 },
+			});
 
 			const ev = createDidReceiveSettingsEvent(mockAction, settings);
 			await action.onDidReceiveSettings?.(ev as never);
@@ -587,18 +590,7 @@ describe("SecurityHealthAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 401,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "0",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "5000",
-				}),
-				json: () => Promise.resolve({ message: "Bad credentials" }),
-				text: () => Promise.resolve("Bad credentials"),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Bad credentials (401)"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -615,18 +607,7 @@ describe("SecurityHealthAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 403,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "0",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "5000",
-				}),
-				json: () => Promise.resolve({ message: "rate limit exceeded" }),
-				text: () => Promise.resolve("rate limit exceeded"),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockRejectedValue(new Error("API rate limit exceeded"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -643,18 +624,7 @@ describe("SecurityHealthAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 401,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "0",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "5000",
-				}),
-				json: () => Promise.resolve({ message: "Bad credentials" }),
-				text: () => Promise.resolve("Bad credentials"),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Bad credentials (401)"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -672,18 +642,7 @@ describe("SecurityHealthAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 404,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () => Promise.resolve({ message: "Not Found" }),
-				text: () => Promise.resolve("Not Found"),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Repository not found"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -698,7 +657,8 @@ describe("SecurityHealthAction", () => {
 		it("handles PI data requests for getRepos", async () => {
 			const mockAction = createMockKeyAction("sh-pi-1", { repo: "owner/repo" });
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
+			const originalFetch = globalThis.fetch;
+			globalThis.fetch = vi.fn().mockResolvedValue({
 				ok: true,
 				status: 200,
 				headers: new Headers({
@@ -711,10 +671,14 @@ describe("SecurityHealthAction", () => {
 				text: () => Promise.resolve(""),
 			} as unknown as Response);
 
-			const ev = createSendToPluginEvent(mockAction, { event: "getRepos" });
+			try {
+				const ev = createSendToPluginEvent(mockAction, { event: "getRepos" });
 
-			// Should not throw
-			await action.onSendToPlugin?.(ev as never);
+				// Should not throw
+				await action.onSendToPlugin?.(ev as never);
+			} finally {
+				globalThis.fetch = originalFetch;
+			}
 		});
 
 		it("ignores events without event property", async () => {

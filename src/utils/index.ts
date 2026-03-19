@@ -79,6 +79,7 @@ export {
 	renderUnconfiguredImage,
 	renderPRCountImage,
 	renderIssueCountImage,
+	renderDiscussionsImage,
 	renderReleaseImage,
 	renderCommitActivityImage,
 	renderBranchComparisonImage,
@@ -103,10 +104,38 @@ export {
 export {
 	fetchContributionCalendar,
 	calendarToWeeklyData,
+	executeGraphQLQuery,
+	GraphQLQueryError,
+	GITHUB_GRAPHQL_ENDPOINT,
+	type GraphQLQueryResult,
 	type ContributionCalendar,
 	type ContributionDay,
 	type ContributionWeek,
 } from "./github-graphql";
+export {
+	coordinator,
+	GraphQLQueryCoordinator,
+} from "./graphql-query-coordinator";
+export {
+	buildRepoQuery,
+	buildSearchQuery,
+	isGraphQLFragment,
+	GRAPHQL_FRAGMENTS,
+} from "./graphql-query-builder";
+export {
+	extractRepoMetadata,
+	extractPRCount,
+	extractIssueCount,
+	extractLatestRelease,
+	extractBranches,
+	extractSecurityAlerts,
+	extractReviewRequestedPRs,
+	extractDiscussions,
+	extractProjectsV2,
+} from "./data-fragments";
+export {
+	RepoDataCache,
+} from "./repo-data-cache";
 export {
 	renderStatStrip,
 	renderWorkflowStrip,

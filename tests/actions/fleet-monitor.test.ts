@@ -1,8 +1,9 @@
 /**
  * Tests for the FleetMonitorAction (src/actions/fleet-monitor.ts).
  *
- * Mocks the @elgato/streamdeck module and the fetch API to test
- * the action's lifecycle, settings handling, encoder support, and error states.
+ * Mocks the @elgato/streamdeck module and the GraphQL Query Coordinator
+ * to test the action's lifecycle, settings handling, encoder support,
+ * and error states.
  *
  * @author Pedro Fuentes <git@pedrofuent.es>
  * @copyright Pedro Pablo Fuentes Schuster
@@ -59,6 +60,31 @@ vi.mock("@elgato/streamdeck", () => {
 		action: () => (target: unknown) => target,
 	};
 });
+
+// ──────────────────────────────────────────────
+// Mock the GraphQL Query Coordinator
+// ──────────────────────────────────────────────
+
+const {
+	mockSubscribe,
+	mockUnsubscribe,
+	mockFetchData,
+	mockInvalidateAndFetch,
+} = vi.hoisted(() => ({
+	mockSubscribe: vi.fn(),
+	mockUnsubscribe: vi.fn(),
+	mockFetchData: vi.fn(),
+	mockInvalidateAndFetch: vi.fn(),
+}));
+
+vi.mock("../../src/utils/graphql-query-coordinator", () => ({
+	coordinator: {
+		subscribe: mockSubscribe,
+		unsubscribe: mockUnsubscribe,
+		fetchData: mockFetchData,
+		invalidateAndFetch: mockInvalidateAndFetch,
+	},
+}));
 
 import { FleetMonitorAction } from "../../src/actions/fleet-monitor";
 
@@ -163,88 +189,6 @@ function lastImage(mockAction: ReturnType<typeof createMockKeyAction>): string {
 	return decodeSvg(calls[calls.length - 1][0] as string);
 }
 
-/** Mock a successful workflow run response */
-function mockWorkflowRunResponse(status: string, conclusion: string | null) {
-	return {
-		ok: true,
-		status: 200,
-		headers: new Headers({
-			"x-ratelimit-limit": "5000",
-			"x-ratelimit-remaining": "4999",
-			"x-ratelimit-reset": "9999999999",
-			"x-ratelimit-used": "1",
-		}),
-		json: () => Promise.resolve({
-			total_count: 1,
-			workflow_runs: [{
-				id: 123,
-				name: "CI",
-				status,
-				conclusion,
-				head_branch: "main",
-				created_at: "2024-01-01T00:00:00Z",
-				updated_at: "2024-01-01T00:05:00Z",
-				run_started_at: "2024-01-01T00:00:00Z",
-				html_url: "https://github.com/owner/repo/actions/runs/123",
-				path: ".github/workflows/ci.yml",
-			}],
-		}),
-		text: () => Promise.resolve(""),
-	} as unknown as Response;
-}
-
-/** Mock a PR count search response */
-function mockPRCountResponse(count: number) {
-	return {
-		ok: true,
-		status: 200,
-		headers: new Headers({
-			"x-ratelimit-limit": "30",
-			"x-ratelimit-remaining": "29",
-			"x-ratelimit-reset": "9999999999",
-			"x-ratelimit-used": "1",
-		}),
-		json: () => Promise.resolve({
-			total_count: count,
-			incomplete_results: false,
-			items: [],
-		}),
-		text: () => Promise.resolve(""),
-	} as unknown as Response;
-}
-
-/** Mock a commit activity weeks response */
-function mockCommitActivityResponse(weeks: Array<{ total: number; week: number; days: number[] }>) {
-	return {
-		ok: true,
-		status: 200,
-		headers: new Headers({
-			"x-ratelimit-limit": "5000",
-			"x-ratelimit-remaining": "4999",
-			"x-ratelimit-reset": "9999999999",
-			"x-ratelimit-used": "1",
-		}),
-		json: () => Promise.resolve(weeks),
-		text: () => Promise.resolve(""),
-	} as unknown as Response;
-}
-
-/** Mock a deployment status response (empty — no deployments) */
-function mockEmptyDeploymentResponse() {
-	return {
-		ok: true,
-		status: 200,
-		headers: new Headers({
-			"x-ratelimit-limit": "5000",
-			"x-ratelimit-remaining": "4999",
-			"x-ratelimit-reset": "9999999999",
-			"x-ratelimit-used": "1",
-		}),
-		json: () => Promise.resolve([]),
-		text: () => Promise.resolve(""),
-	} as unknown as Response;
-}
-
 /** Standard commit weeks for testing */
 const SAMPLE_WEEKS = [
 	{ total: 5, week: 1704067200, days: [0, 1, 1, 1, 1, 1, 0] },
@@ -253,43 +197,35 @@ const SAMPLE_WEEKS = [
 	{ total: 15, week: 1705881600, days: [2, 3, 2, 3, 2, 2, 1] },
 ];
 
+/** Standard successful coordinator result */
+function makeCoordinatorResult(overrides: Record<string, unknown> = {}) {
+	return {
+		prCount: 3,
+		workflowRuns: {
+			latestRun: {
+				id: 123,
+				name: "CI",
+				status: "completed",
+				conclusion: "success",
+				head_branch: "main",
+				created_at: "2024-01-01T00:00:00Z",
+				updated_at: "2024-01-01T00:05:00Z",
+				run_started_at: "2024-01-01T00:00:00Z",
+				html_url: "https://github.com/owner/repo/actions/runs/123",
+				path: ".github/workflows/ci.yml",
+			},
+			deployment: null,
+		},
+		commitActivity: SAMPLE_WEEKS,
+		...overrides,
+	};
+}
+
 /**
- * Sets up fetch mock to handle the 3 parallel API calls:
- * 1. Workflow runs (+ deployment status)
- * 2. PR count search
- * 3. Commit activity weeks
+ * Sets up the coordinator mock with a standard successful result.
  */
-function setupFleetFetchMock(options: {
-	workflowStatus?: string;
-	workflowConclusion?: string | null;
-	prCount?: number;
-	commitWeeks?: Array<{ total: number; week: number; days: number[] }>;
-} = {}): void {
-	const {
-		workflowStatus = "completed",
-		workflowConclusion = "success",
-		prCount = 3,
-		commitWeeks = SAMPLE_WEEKS,
-	} = options;
-
-	vi.mocked(globalThis.fetch).mockImplementation((input: string | URL | Request) => {
-		const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-
-		if (url.includes("/actions/runs")) {
-			return Promise.resolve(mockWorkflowRunResponse(workflowStatus, workflowConclusion));
-		}
-		if (url.includes("/deployments")) {
-			return Promise.resolve(mockEmptyDeploymentResponse());
-		}
-		if (url.includes("/search/issues")) {
-			return Promise.resolve(mockPRCountResponse(prCount));
-		}
-		if (url.includes("/stats/commit_activity")) {
-			return Promise.resolve(mockCommitActivityResponse(commitWeeks));
-		}
-
-		return Promise.resolve(mockPRCountResponse(0));
-	});
+function setupCoordinatorMock(overrides: Record<string, unknown> = {}): void {
+	mockFetchData.mockResolvedValue(makeCoordinatorResult(overrides));
 }
 
 // ──────────────────────────────────────────────
@@ -298,19 +234,16 @@ function setupFleetFetchMock(options: {
 
 describe("FleetMonitorAction", () => {
 	let action: FleetMonitorAction;
-	let originalFetch: typeof globalThis.fetch;
 
 	beforeEach(() => {
 		action = new FleetMonitorAction();
-		originalFetch = globalThis.fetch;
-		globalThis.fetch = vi.fn();
 
 		vi.clearAllMocks();
 		mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
+		setupCoordinatorMock();
 	});
 
 	afterEach(() => {
-		globalThis.fetch = originalFetch;
 		vi.restoreAllMocks();
 	});
 
@@ -353,11 +286,18 @@ describe("FleetMonitorAction", () => {
 				configurable: true,
 			});
 
-			setupFleetFetchMock({ prCount: 7, workflowConclusion: "success" });
+			setupCoordinatorMock({ prCount: 7 });
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
 
+			expect(mockSubscribe).toHaveBeenCalledWith({
+				actionId: "fm-3",
+				repo: "owner/myrepo",
+				fragments: ["prCount", "workflowRuns", "commitActivity"],
+				maxAgeSec: 300,
+			});
+			expect(mockFetchData).toHaveBeenCalledWith("fm-3", "ghp_test123");
 			expect(mockAction.setImage).toHaveBeenCalled();
 			const svg = lastImage(mockAction);
 			expect(svg).toContain("myrepo");
@@ -374,7 +314,7 @@ describe("FleetMonitorAction", () => {
 				configurable: true,
 			});
 
-			setupFleetFetchMock({ prCount: 4 });
+			setupCoordinatorMock({ prCount: 4 });
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -406,7 +346,24 @@ describe("FleetMonitorAction", () => {
 				configurable: true,
 			});
 
-			setupFleetFetchMock({ workflowConclusion: "failure", prCount: 1 });
+			setupCoordinatorMock({
+				workflowRuns: {
+					latestRun: {
+						id: 123,
+						name: "CI",
+						status: "completed",
+						conclusion: "failure",
+						head_branch: "main",
+						created_at: "2024-01-01T00:00:00Z",
+						updated_at: "2024-01-01T00:05:00Z",
+						run_started_at: "2024-01-01T00:00:00Z",
+						html_url: "https://github.com/owner/repo/actions/runs/123",
+						path: ".github/workflows/ci.yml",
+					},
+					deployment: null,
+				},
+				prCount: 1,
+			});
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -424,32 +381,10 @@ describe("FleetMonitorAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockImplementation((input: string | URL | Request) => {
-				const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-				if (url.includes("/actions/runs")) {
-					return Promise.resolve({
-						ok: true,
-						status: 200,
-						headers: new Headers({
-							"x-ratelimit-limit": "5000",
-							"x-ratelimit-remaining": "4999",
-							"x-ratelimit-reset": "9999999999",
-							"x-ratelimit-used": "1",
-						}),
-						json: () => Promise.resolve({ total_count: 0, workflow_runs: [] }),
-						text: () => Promise.resolve(""),
-					} as unknown as Response);
-				}
-				if (url.includes("/deployments")) {
-					return Promise.resolve(mockEmptyDeploymentResponse());
-				}
-				if (url.includes("/search/issues")) {
-					return Promise.resolve(mockPRCountResponse(0));
-				}
-				if (url.includes("/stats/commit_activity")) {
-					return Promise.resolve(mockCommitActivityResponse([]));
-				}
-				return Promise.resolve(mockPRCountResponse(0));
+			setupCoordinatorMock({
+				workflowRuns: { latestRun: null, deployment: null },
+				prCount: 0,
+				commitActivity: [],
 			});
 
 			const ev = createWillAppearEvent(mockAction, settings);
@@ -472,16 +407,13 @@ describe("FleetMonitorAction", () => {
 				configurable: true,
 			});
 
-			setupFleetFetchMock();
-
 			const appearEv = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(appearEv as never);
 
 			const disappearEv = createWillDisappearEvent(mockAction);
 			action.onWillDisappear?.(disappearEv as never);
 
-			// No crash, polling cleaned up
-			expect(true).toBe(true);
+			expect(mockUnsubscribe).toHaveBeenCalledWith("fm-d-1");
 		});
 
 		it("handles disappear without prior appear", () => {
@@ -489,6 +421,8 @@ describe("FleetMonitorAction", () => {
 			const ev = createWillDisappearEvent(mockAction);
 
 			action.onWillDisappear?.(ev as never);
+
+			expect(mockUnsubscribe).toHaveBeenCalledWith("fm-never-appeared");
 		});
 	});
 
@@ -517,7 +451,6 @@ describe("FleetMonitorAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			setupFleetFetchMock();
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
 			const ev = createKeyDownEvent(mockAction, settings);
@@ -552,7 +485,6 @@ describe("FleetMonitorAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			setupFleetFetchMock();
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
 			const ev = createDialDownEvent(mockAction, settings);
@@ -573,10 +505,9 @@ describe("FleetMonitorAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			setupFleetFetchMock({ prCount: 2 });
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
-			setupFleetFetchMock({ prCount: 9 });
+			setupCoordinatorMock({ prCount: 9 });
 
 			const ev = createDialRotateEvent(mockAction, settings);
 			await action.onDialRotate?.(ev as never);
@@ -597,10 +528,9 @@ describe("FleetMonitorAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			setupFleetFetchMock({ prCount: 1 });
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
-			setupFleetFetchMock({ prCount: 6 });
+			setupCoordinatorMock({ prCount: 6 });
 
 			const ev = createTouchTapEvent(mockAction, settings);
 			await action.onTouchTap?.(ev as never);
@@ -622,11 +552,33 @@ describe("FleetMonitorAction", () => {
 				configurable: true,
 			});
 
-			setupFleetFetchMock({ prCount: 11, workflowConclusion: "failure" });
+			setupCoordinatorMock({
+				prCount: 11,
+				workflowRuns: {
+					latestRun: {
+						id: 123,
+						name: "CI",
+						status: "completed",
+						conclusion: "failure",
+						head_branch: "main",
+						created_at: "2024-01-01T00:00:00Z",
+						updated_at: "2024-01-01T00:05:00Z",
+						run_started_at: "2024-01-01T00:00:00Z",
+						html_url: "https://github.com/owner/repo/actions/runs/123",
+						path: ".github/workflows/ci.yml",
+					},
+					deployment: null,
+				},
+			});
 
 			const ev = createDidReceiveSettingsEvent(mockAction, settings);
 			await action.onDidReceiveSettings?.(ev as never);
 
+			expect(mockSubscribe).toHaveBeenCalledWith(expect.objectContaining({
+				actionId: "fm-s-1",
+				repo: "owner/repo",
+				fragments: ["prCount", "workflowRuns", "commitActivity"],
+			}));
 			expect(mockAction.setImage).toHaveBeenCalled();
 			const svg = lastImage(mockAction);
 			expect(svg).toContain("Failed");
@@ -646,6 +598,7 @@ describe("FleetMonitorAction", () => {
 			const ev = createDidReceiveSettingsEvent(mockAction, settings);
 			await action.onDidReceiveSettings?.(ev as never);
 
+			expect(mockUnsubscribe).toHaveBeenCalledWith("fm-s-2");
 			expect(mockAction.setImage).toHaveBeenCalled();
 			expect(lastImage(mockAction)).toContain("Setup");
 		});
@@ -663,6 +616,7 @@ describe("FleetMonitorAction", () => {
 			const ev = createDidReceiveSettingsEvent(mockAction, settings);
 			await action.onDidReceiveSettings?.(ev as never);
 
+			expect(mockUnsubscribe).toHaveBeenCalledWith("fm-s-3");
 			expect(mockAction.setFeedback).toHaveBeenCalled();
 			const feedbackCall = mockAction.setFeedback.mock.calls[0][0] as { canvas: string };
 			expect(decodeSvg(feedbackCall.canvas)).toContain("Setup Required");
@@ -672,7 +626,7 @@ describe("FleetMonitorAction", () => {
 	// ── Error handling ──────────────────────────
 
 	describe("error handling", () => {
-		it("shows auth error when API returns 401", async () => {
+		it("shows auth error when coordinator throws 401", async () => {
 			const mockAction = createMockKeyAction("fm-err-1");
 			const settings = { repo: "owner/repo" };
 
@@ -681,18 +635,7 @@ describe("FleetMonitorAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 401,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "0",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "5000",
-				}),
-				json: () => Promise.resolve({ message: "Bad credentials" }),
-				text: () => Promise.resolve("Bad credentials"),
-			} as unknown as Response);
+			mockFetchData.mockRejectedValue(new Error("Bad credentials (401)"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -709,18 +652,7 @@ describe("FleetMonitorAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 403,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "0",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "5000",
-				}),
-				json: () => Promise.resolve({ message: "rate limit exceeded" }),
-				text: () => Promise.resolve("rate limit exceeded"),
-			} as unknown as Response);
+			mockFetchData.mockRejectedValue(new Error("rate limit exceeded"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -728,7 +660,7 @@ describe("FleetMonitorAction", () => {
 			expect(lastImage(mockAction)).toContain("Rate Limited");
 		});
 
-		it("shows error on dial when API fails", async () => {
+		it("shows error on dial when coordinator fails", async () => {
 			const mockAction = createMockDialAction("fm-err-3");
 			const settings = { repo: "owner/repo" };
 
@@ -737,18 +669,7 @@ describe("FleetMonitorAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 401,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "0",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "5000",
-				}),
-				json: () => Promise.resolve({ message: "Bad credentials" }),
-				text: () => Promise.resolve("Bad credentials"),
-			} as unknown as Response);
+			mockFetchData.mockRejectedValue(new Error("Bad credentials (401)"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -773,7 +694,7 @@ describe("FleetMonitorAction", () => {
 			expect(lastImage(mockAction)).toContain("Invalid Repo");
 		});
 
-		it("handles partial API failures gracefully (PR count fails)", async () => {
+		it("handles partial data gracefully (no PR count or commit data)", async () => {
 			const mockAction = createMockKeyAction("fm-err-5");
 			const settings = { repo: "owner/repo" };
 
@@ -782,27 +703,33 @@ describe("FleetMonitorAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockImplementation((input: string | URL | Request) => {
-				const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-				if (url.includes("/actions/runs")) {
-					return Promise.resolve(mockWorkflowRunResponse("completed", "success"));
-				}
-				if (url.includes("/deployments")) {
-					return Promise.resolve(mockEmptyDeploymentResponse());
-				}
-				if (url.includes("/search/issues")) {
-					return Promise.reject(new Error("network error"));
-				}
-				if (url.includes("/stats/commit_activity")) {
-					return Promise.reject(new Error("network error"));
-				}
-				return Promise.resolve(mockPRCountResponse(0));
+			// Coordinator returns result without prCount or commitActivity
+			mockFetchData.mockResolvedValue({
+				workflowRuns: {
+					latestRun: {
+						id: 123,
+						name: "CI",
+						status: "completed",
+						conclusion: "success",
+						head_branch: "main",
+						created_at: "2024-01-01T00:00:00Z",
+						updated_at: "2024-01-01T00:05:00Z",
+						run_started_at: "2024-01-01T00:00:00Z",
+						html_url: "https://github.com/owner/repo/actions/runs/123",
+						path: ".github/workflows/ci.yml",
+					},
+					deployment: null,
+				},
+				errors: {
+					prCount: "No data available",
+					commitActivity: "No data available",
+				},
 			});
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
 
-			// Should still display — PR count falls back to 0, commit activity to null
+			// Should still display — prCount falls back to 0, commitActivity to []
 			expect(mockAction.setImage).toHaveBeenCalled();
 			const svg = lastImage(mockAction);
 			expect(svg).toContain("Success");
@@ -816,7 +743,8 @@ describe("FleetMonitorAction", () => {
 		it("handles PI data requests for getRepos", async () => {
 			const mockAction = createMockKeyAction("fm-pi-1", { repo: "owner/repo" });
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
+			// PI data provider still uses fetch directly for repo lists
+			globalThis.fetch = vi.fn().mockResolvedValue({
 				ok: true,
 				status: 200,
 				headers: new Headers({

@@ -29,6 +29,27 @@ const {
 	mockOpenUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
+const {
+	mockCoordinatorSubscribe,
+	mockCoordinatorUnsubscribe,
+	mockCoordinatorFetchData,
+	mockCoordinatorInvalidateAndFetch,
+} = vi.hoisted(() => ({
+	mockCoordinatorSubscribe: vi.fn(),
+	mockCoordinatorUnsubscribe: vi.fn(),
+	mockCoordinatorFetchData: vi.fn(),
+	mockCoordinatorInvalidateAndFetch: vi.fn(),
+}));
+
+vi.mock("../../src/utils/graphql-query-coordinator", () => ({
+	coordinator: {
+		subscribe: mockCoordinatorSubscribe,
+		unsubscribe: mockCoordinatorUnsubscribe,
+		fetchData: mockCoordinatorFetchData,
+		invalidateAndFetch: mockCoordinatorInvalidateAndFetch,
+	},
+}));
+
 vi.mock("@elgato/streamdeck", () => {
 	class MockSingletonAction {
 		manifestId: string | undefined;
@@ -163,30 +184,19 @@ function lastImage(mockAction: ReturnType<typeof createMockKeyAction>): string {
 	return decodeSvg(calls[calls.length - 1][0] as string);
 }
 
-function mockFetchReviewResponse(totalCount: number, items?: Array<Record<string, unknown>>) {
-	const defaultItems = Array.from({ length: Math.min(totalCount, 10) }, (_, i) => ({
-		number: i + 1,
-		title: `PR ${i + 1}`,
-		user: { login: "testuser" },
-		html_url: `https://github.com/owner/repo/pull/${i + 1}`,
-		created_at: "2024-01-01T00:00:00Z",
-	}));
+function mockCoordinatorResponse(totalCount: number) {
 	return {
-		ok: true,
-		status: 200,
-		headers: new Headers({
-			"x-ratelimit-limit": "30",
-			"x-ratelimit-remaining": "29",
-			"x-ratelimit-reset": "9999999999",
-			"x-ratelimit-used": "1",
-		}),
-		json: () => Promise.resolve({
+		reviewRequestedPRs: {
 			total_count: totalCount,
-			incomplete_results: false,
-			items: items ?? defaultItems,
-		}),
-		text: () => Promise.resolve(""),
-	} as unknown as Response;
+			items: Array.from({ length: Math.min(totalCount, 10) }, (_, i) => ({
+				number: i + 1,
+				title: `PR ${i + 1}`,
+				user: { login: "testuser" },
+				html_url: `https://github.com/owner/repo/pull/${i + 1}`,
+				created_at: "2024-01-01T00:00:00Z",
+			})),
+		},
+	};
 }
 
 // ──────────────────────────────────────────────
@@ -195,19 +205,15 @@ function mockFetchReviewResponse(totalCount: number, items?: Array<Record<string
 
 describe("PRReviewQueueAction", () => {
 	let action: PRReviewQueueAction;
-	let originalFetch: typeof globalThis.fetch;
 
 	beforeEach(() => {
 		action = new PRReviewQueueAction();
-		originalFetch = globalThis.fetch;
-		globalThis.fetch = vi.fn();
 
 		vi.clearAllMocks();
 		mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
 	});
 
 	afterEach(() => {
-		globalThis.fetch = originalFetch;
 		vi.restoreAllMocks();
 	});
 
@@ -234,7 +240,7 @@ describe("PRReviewQueueAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(5));
+			mockCoordinatorFetchData.mockResolvedValue(mockCoordinatorResponse(5));
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -255,7 +261,7 @@ describe("PRReviewQueueAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(2));
+			mockCoordinatorFetchData.mockResolvedValue(mockCoordinatorResponse(2));
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -276,7 +282,7 @@ describe("PRReviewQueueAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(0, []));
+			mockCoordinatorFetchData.mockResolvedValue(mockCoordinatorResponse(0));
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -308,7 +314,7 @@ describe("PRReviewQueueAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(3));
+			mockCoordinatorFetchData.mockResolvedValue(mockCoordinatorResponse(3));
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -332,7 +338,7 @@ describe("PRReviewQueueAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(1));
+			mockCoordinatorFetchData.mockResolvedValue(mockCoordinatorResponse(1));
 
 			const appearEv = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(appearEv as never);
@@ -362,7 +368,7 @@ describe("PRReviewQueueAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(1));
+			mockCoordinatorFetchData.mockResolvedValue(mockCoordinatorResponse(1));
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, {}) as never);
 
 			const ev = createKeyDownEvent(mockAction, {});
@@ -379,7 +385,7 @@ describe("PRReviewQueueAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(1));
+			mockCoordinatorFetchData.mockResolvedValue(mockCoordinatorResponse(1));
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
 			const ev = createKeyDownEvent(mockAction, settings);
@@ -401,7 +407,7 @@ describe("PRReviewQueueAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(1));
+			mockCoordinatorFetchData.mockResolvedValue(mockCoordinatorResponse(1));
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, {}) as never);
 
 			const ev = createDialDownEvent(mockAction);
@@ -418,7 +424,7 @@ describe("PRReviewQueueAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(1));
+			mockCoordinatorFetchData.mockResolvedValue(mockCoordinatorResponse(1));
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
 			const ev = createDialDownEvent(mockAction, settings);
@@ -440,10 +446,10 @@ describe("PRReviewQueueAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(2));
+			mockCoordinatorFetchData.mockResolvedValue(mockCoordinatorResponse(2));
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, {}) as never);
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(7));
+			mockCoordinatorInvalidateAndFetch.mockResolvedValue(mockCoordinatorResponse(7));
 
 			const ev = createDialRotateEvent(mockAction);
 			await action.onDialRotate?.(ev as never);
@@ -463,10 +469,10 @@ describe("PRReviewQueueAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(1));
+			mockCoordinatorFetchData.mockResolvedValue(mockCoordinatorResponse(1));
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, {}) as never);
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(4));
+			mockCoordinatorInvalidateAndFetch.mockResolvedValue(mockCoordinatorResponse(4));
 
 			const ev = createTouchTapEvent(mockAction);
 			await action.onTouchTap?.(ev as never);
@@ -488,7 +494,7 @@ describe("PRReviewQueueAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchReviewResponse(8));
+			mockCoordinatorFetchData.mockResolvedValue(mockCoordinatorResponse(8));
 
 			const ev = createDidReceiveSettingsEvent(mockAction, settings);
 			await action.onDidReceiveSettings?.(ev as never);
@@ -546,18 +552,7 @@ describe("PRReviewQueueAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 401,
-				headers: new Headers({
-					"x-ratelimit-limit": "30",
-					"x-ratelimit-remaining": "0",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "30",
-				}),
-				json: () => Promise.resolve({ message: "Bad credentials" }),
-				text: () => Promise.resolve("Bad credentials"),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Bad credentials (401)"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -574,18 +569,7 @@ describe("PRReviewQueueAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 403,
-				headers: new Headers({
-					"x-ratelimit-limit": "30",
-					"x-ratelimit-remaining": "0",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "30",
-				}),
-				json: () => Promise.resolve({ message: "rate limit exceeded" }),
-				text: () => Promise.resolve("rate limit exceeded"),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockRejectedValue(new Error("API rate limit exceeded"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -602,18 +586,7 @@ describe("PRReviewQueueAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 401,
-				headers: new Headers({
-					"x-ratelimit-limit": "30",
-					"x-ratelimit-remaining": "0",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "30",
-				}),
-				json: () => Promise.resolve({ message: "Bad credentials" }),
-				text: () => Promise.resolve("Bad credentials"),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Bad credentials (401)"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -627,9 +600,8 @@ describe("PRReviewQueueAction", () => {
 
 	describe("onSendToPlugin", () => {
 		it("handles PI data requests for getRepos", async () => {
-			const mockAction = createMockKeyAction("prq-pi-1", { repo: "owner/repo" });
-
-			vi.mocked(globalThis.fetch).mockResolvedValue({
+			const originalFetch = globalThis.fetch;
+			globalThis.fetch = vi.fn().mockResolvedValue({
 				ok: true,
 				status: 200,
 				headers: new Headers({
@@ -642,10 +614,15 @@ describe("PRReviewQueueAction", () => {
 				text: () => Promise.resolve(""),
 			} as unknown as Response);
 
-			const ev = createSendToPluginEvent(mockAction, { event: "getRepos" });
+			try {
+				const mockAction = createMockKeyAction("prq-pi-1", { repo: "owner/repo" });
+				const ev = createSendToPluginEvent(mockAction, { event: "getRepos" });
 
-			// Should not throw
-			await action.onSendToPlugin?.(ev as never);
+				// Should not throw
+				await action.onSendToPlugin?.(ev as never);
+			} finally {
+				globalThis.fetch = originalFetch;
+			}
 		});
 
 		it("ignores events without event property", async () => {

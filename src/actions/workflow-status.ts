@@ -35,13 +35,13 @@ import streamDeck from "@elgato/streamdeck";
 import type { GlobalSettings, WorkflowStatusSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
 import {
-	fetchWorkflowInfo,
 	triggerWorkflowDispatch,
 	getWorkflowDisplayStatus,
 	getWorkflowStatusLabel,
 	formatRunDuration,
 	type DeploymentState,
 } from "../utils/github-api";
+import { coordinator } from "../utils/graphql-query-coordinator";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import {
 	renderWorkflowImage,
@@ -134,6 +134,17 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		coordinator.subscribe({
+			actionId: ev.action.id,
+			repo: settings.repo!,
+			fragments: ["workflowRuns"],
+			maxAgeSec: intervalSec,
+			params: {
+				branch: settings.branch,
+				workflowFile: settings.workflowFile,
+				environment: settings.environment,
+			},
+		});
 		this.polling.start(ev.action.id, () => this.refreshStatus(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshStatus(ev.action.id);
@@ -152,6 +163,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		this.lastRunId.delete(ev.action.id);
 		this.lastKeyUpTime.delete(ev.action.id);
 		this.actionContexts.delete(ev.action.id);
+		coordinator.unsubscribe(ev.action.id);
 	}
 
 	/**
@@ -165,7 +177,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		if (now - lastUp < 400) {
 			this.lastKeyUpTime.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
-			await this.refreshStatus(ev.action.id);
+			await this.refreshStatus(ev.action.id, true);
 			return;
 		}
 
@@ -197,7 +209,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	 */
 	override async onDialRotate(ev: DialRotateEvent<WorkflowStatusSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshStatus(ev.action.id);
+		await this.refreshStatus(ev.action.id, true);
 	}
 
 	/**
@@ -223,7 +235,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		}
 		// Regular tap → refresh
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshStatus(ev.action.id);
+		await this.refreshStatus(ev.action.id, true);
 	}
 
 	/**
@@ -263,6 +275,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
+				coordinator.unsubscribe(ev.action.id);
 				this.polling.stop(ev.action.id);
 				return;
 			}
@@ -276,6 +289,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
+				coordinator.unsubscribe(ev.action.id);
 				this.polling.stop(ev.action.id);
 				return;
 			}
@@ -283,6 +297,17 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+		coordinator.subscribe({
+			actionId: ev.action.id,
+			repo: settings.repo!,
+			fragments: ["workflowRuns"],
+			maxAgeSec: intervalSec,
+			params: {
+				branch: settings.branch,
+				workflowFile: settings.workflowFile,
+				environment: settings.environment,
+			},
+		});
 		this.polling.restart(ev.action.id, () => this.refreshStatus(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshStatus(ev.action.id);
@@ -291,7 +316,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	/**
 	 * Fetches workflow/deployment status and updates the button display.
 	 */
-	private async refreshStatus(actionId: string): Promise<void> {
+	private async refreshStatus(actionId: string, force = false): Promise<void> {
 		const settings = this.actionSettings.get(actionId);
 		if (!settings?.repo) {
 			return;
@@ -330,11 +355,13 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 				return;
 			}
 
-			const info = await fetchWorkflowInfo(parsed.owner, parsed.repo, token, {
-				branch: settings.branch,
-				workflowFile: settings.workflowFile,
-				environment: settings.environment,
-			});
+			const result = force
+				? await coordinator.invalidateAndFetch(actionId, token)
+				: await coordinator.fetchData(actionId, token);
+			const info = result.workflowRuns;
+			if (!info) {
+				throw new Error(result.errors?.workflowRuns ?? "No workflow data available");
+			}
 
 			// Discard stale result if a newer refresh has started
 			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
@@ -488,7 +515,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			// Refresh after a short delay to show the new run
 			setTimeout(() => {
 				this.polling.resetBackoff(actionId);
-				this.refreshStatus(actionId).catch(() => { /* ignore */ });
+				this.refreshStatus(actionId, true).catch(() => { /* ignore */ });
 			}, 3000);
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : "Unknown error";

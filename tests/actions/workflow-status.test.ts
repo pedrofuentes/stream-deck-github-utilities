@@ -1,9 +1,10 @@
 /**
  * Tests for the WorkflowStatusAction (src/actions/workflow-status.ts).
  *
- * Mocks the @elgato/streamdeck module and the fetch API to test
+ * Mocks the @elgato/streamdeck module and the graphql-query-coordinator to test
  * the action's lifecycle, settings handling, deploying vs run states,
- * and error states. The action uses setImage() for SVG key images.
+ * and error states. Dispatch tests still mock fetch directly.
+ * The action uses setImage() for SVG key images.
  *
  * @author Pedro Fuentes <git@pedrofuent.es>
  * @copyright Pedro Pablo Fuentes Schuster
@@ -23,6 +24,10 @@ const {
 	mockLoggerDebug,
 	mockLoggerError,
 	mockOpenUrl,
+	mockSubscribe,
+	mockUnsubscribe,
+	mockFetchData,
+	mockInvalidateAndFetch,
 } = vi.hoisted(() => ({
 	mockGetGlobalSettings: vi.fn(),
 	mockSetGlobalSettings: vi.fn(),
@@ -30,6 +35,10 @@ const {
 	mockLoggerDebug: vi.fn(),
 	mockLoggerError: vi.fn(),
 	mockOpenUrl: vi.fn().mockResolvedValue(undefined),
+	mockSubscribe: vi.fn(),
+	mockUnsubscribe: vi.fn(),
+	mockFetchData: vi.fn(),
+	mockInvalidateAndFetch: vi.fn(),
 }));
 
 vi.mock("@elgato/streamdeck", () => {
@@ -63,6 +72,15 @@ vi.mock("@elgato/streamdeck", () => {
 		action: () => (target: unknown) => target,
 	};
 });
+
+vi.mock("../../src/utils/graphql-query-coordinator", () => ({
+	coordinator: {
+		subscribe: mockSubscribe,
+		unsubscribe: mockUnsubscribe,
+		fetchData: mockFetchData,
+		invalidateAndFetch: mockInvalidateAndFetch,
+	},
+}));
 
 import { WorkflowStatusAction } from "../../src/actions/workflow-status";
 
@@ -203,6 +221,22 @@ function setupErrorFetchMock(status: number, message: string) {
 	} as unknown as Response);
 }
 
+/** Set up coordinator mock for workflow data */
+function setupCoordinatorMock(
+	latestRun: Record<string, unknown> | null = makeRunData(),
+	deployment: Record<string, unknown> | null = null,
+) {
+	const result = { workflowRuns: { latestRun, deployment } };
+	mockFetchData.mockResolvedValue(result);
+	mockInvalidateAndFetch.mockResolvedValue(result);
+}
+
+/** Set up coordinator to throw an error */
+function setupCoordinatorError(message: string) {
+	mockFetchData.mockRejectedValue(new Error(message));
+	mockInvalidateAndFetch.mockRejectedValue(new Error(message));
+}
+
 /** Decode SVG from a data URI */
 function decodeSvg(dataUri: string): string {
 	return decodeURIComponent(dataUri.replace(/^data:image\/svg\+xml,/, ""));
@@ -289,7 +323,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupFetchMock([makeRunData()]);
+			setupCoordinatorMock();
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -307,7 +341,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupFetchMock([makeRunData({ status: "completed", conclusion: "success" })]);
+			setupCoordinatorMock(makeRunData({ status: "completed", conclusion: "success" }));
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -324,7 +358,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupFetchMock([makeRunData({ status: "completed", conclusion: "failure" })]);
+			setupCoordinatorMock(makeRunData({ status: "completed", conclusion: "failure" }));
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -341,7 +375,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupFetchMock([makeRunData({ status: "in_progress", conclusion: null })]);
+			setupCoordinatorMock(makeRunData({ status: "in_progress", conclusion: null }));
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -358,7 +392,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupFetchMock([]);
+			setupCoordinatorMock(null, null);
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -375,11 +409,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupFetchMock(
-				[makeRunData()],
-				[{ id: 1, environment: "production", sha: "abc123" }],
-				[{ id: 1, state: "in_progress", description: "Deploying...", environment: "production", created_at: "2024-01-01T00:00:00Z" }],
-			);
+			setupCoordinatorMock(makeRunData(), { environment: "production", state: "in_progress", description: "Deploying...", log_url: null });
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -398,11 +428,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupFetchMock(
-				[makeRunData({ status: "completed", conclusion: "success" })],
-				[{ id: 1, environment: "production", sha: "abc123" }],
-				[{ id: 1, state: "success", description: "Deployed", environment: "production", created_at: "2024-01-01T00:00:00Z" }],
-			);
+			setupCoordinatorMock(makeRunData({ status: "completed", conclusion: "success" }), { environment: "production", state: "success", description: "Deployed", log_url: null });
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -424,7 +450,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupFetchMock([makeRunData()]);
+			setupCoordinatorMock();
 
 			const appearEv = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(appearEv as never);
@@ -466,7 +492,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupFetchMock([makeRunData({ html_url: "https://github.com/owner/repo/actions/runs/12345" })]);
+			setupCoordinatorMock(makeRunData({ html_url: "https://github.com/owner/repo/actions/runs/12345" }));
 
 			// Set up by appearing first (this populates lastUrl)
 			const appearEv = createWillAppearEvent(mockAction, settings);
@@ -510,7 +536,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupFetchMock([]);
+			setupCoordinatorMock(null, null);
 
 			const appearEv = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(appearEv as never);
@@ -557,16 +583,17 @@ describe("WorkflowStatusAction", () => {
 			});
 			(action as any).actionContexts.set("wf-14", mockAction);
 
-			setupFetchMock([makeRunData({ name: "Deploy" })]);
+			setupCoordinatorMock(makeRunData({ name: "Deploy" }));
 
 			const ev = createDidReceiveSettingsEvent(mockAction, {
 				repo: "new-owner/new-repo",
 			});
 			await action.onDidReceiveSettings?.(ev as never);
 
-			expect(globalThis.fetch).toHaveBeenCalled();
-			const fetchUrl = vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
-			expect(fetchUrl).toContain("new-owner");
+			expect(mockFetchData).toHaveBeenCalled();
+			expect(mockSubscribe).toHaveBeenCalledWith(
+				expect.objectContaining({ repo: "new-owner/new-repo" }),
+			);
 		});
 
 		it("passes workflow file and branch filters", async () => {
@@ -578,7 +605,7 @@ describe("WorkflowStatusAction", () => {
 			});
 			(action as any).actionContexts.set("wf-15", mockAction);
 
-			setupFetchMock([makeRunData()]);
+			setupCoordinatorMock();
 
 			const ev = createDidReceiveSettingsEvent(mockAction, {
 				repo: "owner/repo",
@@ -587,10 +614,14 @@ describe("WorkflowStatusAction", () => {
 			});
 			await action.onDidReceiveSettings?.(ev as never);
 
-			expect(globalThis.fetch).toHaveBeenCalled();
-			// The workflow file is used in the URL path
-			const firstFetchUrl = vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
-			expect(firstFetchUrl).toContain("ci.yml");
+			expect(mockSubscribe).toHaveBeenCalledWith(
+				expect.objectContaining({
+					params: expect.objectContaining({
+						workflowFile: "ci.yml",
+						branch: "develop",
+					}),
+				}),
+			);
 		});
 	});
 
@@ -606,7 +637,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupErrorFetchMock(404, "Not Found");
+			setupCoordinatorError("Repository not found");
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -623,7 +654,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupErrorFetchMock(401, "Bad credentials");
+			setupCoordinatorError("Bad credentials 401");
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -644,7 +675,7 @@ describe("WorkflowStatusAction", () => {
 			await action.onWillAppear?.(ev as never);
 
 			expect(lastImage(mockAction)).toContain("Invalid");
-			expect(globalThis.fetch).not.toHaveBeenCalled();
+			expect(mockFetchData).not.toHaveBeenCalled();
 		});
 
 		it("shows 'Rate Limited' when API returns 403 with rate limit", async () => {
@@ -656,19 +687,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			// Must use remaining=0 so handleApiError triggers the rate limit path
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 403,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "0",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "5000",
-				}),
-				json: () => Promise.resolve({ message: "API rate limit exceeded" }),
-				text: () => Promise.resolve(JSON.stringify({ message: "API rate limit exceeded" })),
-			} as unknown as Response);
+			setupCoordinatorError("API rate limit exceeded");
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -693,7 +712,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupFetchMock();
+			setupCoordinatorMock();
 
 			// First appear to set settings
 			const appearEv = createWillAppearEvent(mockAction, settings);
@@ -717,7 +736,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			// Set up fetch to handle both workflow runs and the dispatch call
+			setupCoordinatorMock();
 			const fetchMock = vi.mocked(globalThis.fetch);
 			fetchMock.mockImplementation((url: string | URL | Request) => {
 				const urlStr = typeof url === "string" ? url : url.toString();
@@ -760,7 +779,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupFetchMock();
+			setupCoordinatorMock();
 
 			const appearEv = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(appearEv as never);
@@ -787,6 +806,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
+			setupCoordinatorMock();
 			const fetchMock = vi.mocked(globalThis.fetch);
 			fetchMock.mockImplementation((url: string | URL | Request) => {
 				const urlStr = typeof url === "string" ? url : url.toString();
@@ -820,7 +840,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
-			setupFetchMock();
+			setupCoordinatorMock();
 
 			// Appear with valid token to register settings
 			const appearEv = createWillAppearEvent(mockAction, settings);
@@ -849,6 +869,7 @@ describe("WorkflowStatusAction", () => {
 				configurable: true,
 			});
 
+			setupCoordinatorMock();
 			const fetchMock = vi.mocked(globalThis.fetch);
 			fetchMock.mockImplementation((url: string | URL | Request) => {
 				const urlStr = typeof url === "string" ? url : url.toString();

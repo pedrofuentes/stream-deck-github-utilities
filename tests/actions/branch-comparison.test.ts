@@ -14,12 +14,20 @@ const {
 	mockLoggerDebug,
 	mockLoggerError,
 	mockOpenUrl,
+	mockSubscribe,
+	mockUnsubscribe,
+	mockFetchData,
+	mockInvalidateAndFetch,
 } = vi.hoisted(() => ({
 	mockGetGlobalSettings: vi.fn(),
 	mockRegisterAction: vi.fn(),
 	mockLoggerDebug: vi.fn(),
 	mockLoggerError: vi.fn(),
 	mockOpenUrl: vi.fn().mockResolvedValue(undefined),
+	mockSubscribe: vi.fn(),
+	mockUnsubscribe: vi.fn(),
+	mockFetchData: vi.fn(),
+	mockInvalidateAndFetch: vi.fn(),
 }));
 
 vi.mock("@elgato/streamdeck", () => {
@@ -52,6 +60,15 @@ vi.mock("@elgato/streamdeck", () => {
 		action: () => (target: unknown) => target,
 	};
 });
+
+vi.mock("../../src/utils/graphql-query-coordinator", () => ({
+	coordinator: {
+		subscribe: mockSubscribe,
+		unsubscribe: mockUnsubscribe,
+		fetchData: mockFetchData,
+		invalidateAndFetch: mockInvalidateAndFetch,
+	},
+}));
 
 import { BranchComparisonAction } from "../../src/actions/branch-comparison";
 
@@ -99,19 +116,17 @@ function lastImage(mockAction: ReturnType<typeof createMockKeyAction>): string {
 	return decodeSvg(calls[calls.length - 1][0] as string);
 }
 
-function mockComparisonResponse(data: { ahead_by: number; behind_by: number; status: string; html_url: string }) {
-	return {
-		ok: true,
-		status: 200,
-		headers: new Headers({
-			"x-ratelimit-limit": "5000",
-			"x-ratelimit-remaining": "4999",
-			"x-ratelimit-reset": "9999999999",
-			"x-ratelimit-used": "1",
-		}),
-		json: () => Promise.resolve(data),
-		text: () => Promise.resolve(""),
-	} as unknown as Response;
+/** Set up coordinator mock for branch comparison data */
+function setupCoordinatorMock(data: { ahead_by: number; behind_by: number; status: string; html_url: string }) {
+	const result = { branchComparison: data };
+	mockFetchData.mockResolvedValue(result);
+	mockInvalidateAndFetch.mockResolvedValue(result);
+}
+
+/** Set up coordinator to throw an error */
+function setupCoordinatorError(message: string) {
+	mockFetchData.mockRejectedValue(new Error(message));
+	mockInvalidateAndFetch.mockRejectedValue(new Error(message));
 }
 
 // ──────────────────────────────────────────────
@@ -120,19 +135,14 @@ function mockComparisonResponse(data: { ahead_by: number; behind_by: number; sta
 
 describe("BranchComparisonAction", () => {
 	let action: BranchComparisonAction;
-	let originalFetch: typeof globalThis.fetch;
 
 	beforeEach(() => {
 		action = new BranchComparisonAction();
-		originalFetch = globalThis.fetch;
-		globalThis.fetch = vi.fn();
-
 		vi.clearAllMocks();
 		mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
 	});
 
 	afterEach(() => {
-		globalThis.fetch = originalFetch;
 		vi.restoreAllMocks();
 	});
 
@@ -190,12 +200,12 @@ describe("BranchComparisonAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockComparisonResponse({
+			setupCoordinatorMock({
 				ahead_by: 5,
 				behind_by: 2,
 				status: "diverged",
 				html_url: "https://github.com/owner/repo/compare/main...feature-x",
-			}));
+			});
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -218,12 +228,12 @@ describe("BranchComparisonAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockComparisonResponse({
+			setupCoordinatorMock({
 				ahead_by: 0,
 				behind_by: 0,
 				status: "identical",
 				html_url: "https://github.com/owner/repo/compare/main...main-copy",
-			}));
+			});
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -244,12 +254,12 @@ describe("BranchComparisonAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockComparisonResponse({
+			setupCoordinatorMock({
 				ahead_by: 3,
 				behind_by: 0,
 				status: "ahead",
 				html_url: "https://github.com/owner/repo/compare/main...feature",
-			}));
+			});
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -273,12 +283,12 @@ describe("BranchComparisonAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockComparisonResponse({
+			setupCoordinatorMock({
 				ahead_by: 1,
 				behind_by: 0,
 				status: "ahead",
 				html_url: "https://github.com/owner/repo/compare/main...develop",
-			}));
+			});
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 			action.onWillDisappear?.(createWillDisappearEvent(mockAction) as never);
@@ -304,12 +314,12 @@ describe("BranchComparisonAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockComparisonResponse({
+			setupCoordinatorMock({
 				ahead_by: 2,
 				behind_by: 1,
 				status: "diverged",
 				html_url: "https://github.com/owner/repo/compare/main...develop",
-			}));
+			});
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
@@ -355,12 +365,12 @@ describe("BranchComparisonAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockComparisonResponse({
+			setupCoordinatorMock({
 				ahead_by: 10,
 				behind_by: 3,
 				status: "diverged",
 				html_url: "https://github.com/owner/repo/compare/main...staging",
-			}));
+			});
 
 			await action.onDidReceiveSettings?.(createDidReceiveSettingsEvent(mockAction, settings) as never);
 
@@ -431,18 +441,7 @@ describe("BranchComparisonAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 404,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () => Promise.resolve({ message: "Not Found" }),
-				text: () => Promise.resolve("Not Found"),
-			} as unknown as Response);
+			setupCoordinatorError("Repository not found");
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
@@ -462,18 +461,7 @@ describe("BranchComparisonAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 401,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () => Promise.resolve({ message: "Bad credentials" }),
-				text: () => Promise.resolve("Unauthorized"),
-			} as unknown as Response);
+			setupCoordinatorError("Bad credentials 401");
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 

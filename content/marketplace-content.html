@@ -180,7 +180,7 @@
 
     <p><strong>Your GitHub dashboard, one glance away.</strong> Monitor repositories, track CI/CD pipelines, review PRs, and visualize branch networks — all from your Stream Deck and Stream Deck+.</p>
 
-    <p>12 actions. Full Stream Deck+ encoder support. Touch strip visualizations. No browser tab required.</p>
+    <p>14 actions. Full Stream Deck+ encoder support. Touch strip visualizations. No browser tab required.</p>
 
     <hr>
 
@@ -209,7 +209,6 @@
     <p>See how many pull requests are waiting for your review.</p>
     <ul>
       <li><strong>Urgency gradient</strong> — blue (1 PR) → amber (3) → red (5+)</li>
-      <li>Works across all repos or filtered to one</li>
       <li><strong>SD+</strong> — hero count on the touch strip with repo context</li>
     </ul>
 
@@ -219,7 +218,6 @@
     <p>Dedicated counters for pull requests and issues — accurate numbers at a glance.</p>
     <ul>
       <li><strong>State filter</strong> — open, closed, or all</li>
-      <li>Uses GitHub's Search API to separate issues from PRs precisely</li>
     </ul>
 
     <hr>
@@ -228,7 +226,6 @@
     <p>Track the latest release for any repository.</p>
     <ul>
       <li><strong>Version tag</strong> with relative time (e.g., "v2.3.1 — 3d ago")</li>
-      <li><strong>Pre-release support</strong> with visual indicator</li>
     </ul>
 
     <hr>
@@ -247,7 +244,6 @@
     <p>A metro-map style git branch diagram rendered live on the touch strip.</p>
     <ul>
       <li>Scroll horizontally and vertically with the dial</li>
-      <li>Span 2 or 4 adjacent encoder slots for a panoramic view</li>
     </ul>
 
     <hr>
@@ -257,7 +253,6 @@
     <ul>
       <li><strong>Profile mode</strong> — contributions across all repos (via GraphQL)</li>
       <li><strong>Repo mode</strong> — commit activity for a single repository</li>
-      <li>Scroll through weeks with the dial</li>
     </ul>
 
     <hr>
@@ -266,7 +261,6 @@
     <p>Dependabot alert summary with an A–F letter grade.</p>
     <ul>
       <li><strong>Arc gauge</strong> on the SD+ touch strip with severity breakdown</li>
-      <li>Grade based on critical/high/medium/low alert counts</li>
     </ul>
 
     <hr>
@@ -280,8 +274,28 @@
 
     <hr>
 
+    <h2>💬 Discussions Monitor</h2>
+    <p>Track discussions on any repository.</p>
+    <ul>
+      <li><strong>Total discussions</strong> and <strong>answered count</strong> at a glance</li>
+      <li>Auto-refresh with configurable interval</li>
+      <li>Press to open discussions page</li>
+    </ul>
+
+    <hr>
+
+    <h2>📊 Projects V2 Board</h2>
+    <p>Monitor GitHub Projects V2 boards.</p>
+    <ul>
+      <li><strong>Project count</strong> and <strong>item totals</strong> on the button</li>
+      <li>Track project progress from your Stream Deck</li>
+      <li>Press to open project board</li>
+    </ul>
+
+    <hr>
+
     <h2>🎛️ Stream Deck+ Everywhere</h2>
-    <p>Every action supports the encoder. Rotate dials to cycle data, tap the strip to refresh, push to open GitHub. Touch strip visualizations include sparklines, arc gauges, heatmaps, and atmospheric status effects.</p>
+    <p>Every action supports the encoder. Rotate dials to cycle data, tap to refresh, push to open GitHub. Visualizations include sparklines, arc gauges, heatmaps, and more.</p>
 
     <hr>
 
@@ -297,7 +311,7 @@
     <h2>📋 Requirements</h2>
     <ul>
       <li>Stream Deck software 6.9+ · macOS 13+ or Windows 10+</li>
-      <li>GitHub Personal Access Token (fine-grained recommended) with Metadata, Actions, Deployments, Pull Requests, Issues, Contents, and Dependabot Alerts (all read)</li>
+      <li>GitHub Personal Access Token (fine-grained recommended) with Metadata, Actions, Deployments, Pull Requests, Issues, and Contents (all read)</li>
     </ul>
 
     <hr>
@@ -319,7 +333,8 @@
   </div>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="rn-200">v2.0.0</button>
+    <button class="tab-btn active" data-tab="rn-220">v2.2.0</button>
+    <button class="tab-btn" data-tab="rn-200">v2.0.0</button>
     <button class="tab-btn" data-tab="rn-150">v1.5.0</button>
     <button class="tab-btn" data-tab="rn-140">v1.4.0</button>
     <button class="tab-btn" data-tab="rn-134">v1.3.4</button>
@@ -334,8 +349,26 @@
 
   <div class="tab-content-wrapper">
 
+    <!-- v2.2.0 -->
+    <div class="tab-panel active" id="rn-220">
+      <div class="content-box rn-box">
+        <h2>v2.2.0</h2>
+        <p>New actions and smarter API usage with the GraphQL batch query coordinator.</p>
+        <h3>New Actions</h3>
+        <ul>
+          <li><strong>💬 Discussions Monitor</strong> — track discussion count and answered status for any repository</li>
+          <li><strong>📊 Projects V2 Board</strong> — monitor GitHub Projects V2 boards with item counts and progress</li>
+        </ul>
+        <h3>Under the Hood</h3>
+        <ul>
+          <li><strong>GraphQL Batch Query Coordinator</strong> — actions sharing the same repository now batch their data needs into a single GraphQL query, significantly reducing API calls and improving rate limit efficiency</li>
+          <li>All 14 actions now route through the coordinator for optimized data fetching with automatic REST fallback</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- v2.0.0 -->
-    <div class="tab-panel active" id="rn-200">
+    <div class="tab-panel" id="rn-200">
       <div class="content-box rn-box">
         <h2>v2.0.0 — 2026-03-19</h2>
         <p>The biggest release yet — Stream Deck+ support and 5 brand-new actions.</p>

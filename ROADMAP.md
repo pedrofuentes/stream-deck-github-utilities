@@ -2,7 +2,7 @@
 
 > **Version**: v2.0.0 (current)
 > **Last Updated**: March 2026
-> **Status**: Active — Phases 1–5 complete; 12 actions shipped with full Stream Deck+ support
+> **Status**: Active — Phases 1–5 complete, v2.1.0–v2.2.0 shipped; 14 actions with full Stream Deck+ support and GraphQL batch query coordinator
 
 ---
 
@@ -45,6 +45,8 @@
 | **PR Review Queue** | Displays count of PRs awaiting your review with urgency gradient | `GET /search/issues?q=review-requested:@me+type:pr+is:open` |
 | **Fleet Monitor** | Compact multi-metric repo dashboard (workflow + PRs + sparkline) | `GET /repos/{owner}/{repo}/actions/runs`, `GET /search/issues`, `GET /repos/{owner}/{repo}/stats/commit_activity` |
 | **Security Health** | Dependabot alert summary with A–F grade and arc gauge | `GET /repos/{owner}/{repo}/dependabot/alerts` |
+| **Discussions Monitor** | Displays discussion count and answered status for a repository | GraphQL `repository.discussions` |
+| **Projects V2 Board** | Shows project board status, item counts, and progress | GraphQL `repository.projectsV2` |
 
 ### Existing Infrastructure
 
@@ -60,10 +62,15 @@
 - WebSocket echo suppression for PI ↔ plugin settings sync
 - Touch strip renderer (`touch-strip-renderer.ts`) with sparklines, arc gauges, heatmaps, metro-maps
 - GraphQL API client (`github-graphql.ts`) for contribution calendar
+- GraphQL batch query coordinator (`graphql-query-coordinator.ts`) with per-repo caching and REST fallback
+- Dynamic GraphQL query builder (`graphql-query-builder.ts`) with 9 composable data fragments
+- Per-repository data cache (`repo-data-cache.ts`) with field-level staleness tracking
+- Data fragment extractors (`data-fragments.ts`) bridging GraphQL responses to existing REST interfaces
+- Generic GraphQL query executor (`github-graphql.ts`) with structured error handling
 - Custom encoder layout (`layouts/github-full-canvas.json`) — 200×100 full-canvas pixmap
 - Multi-quarter contiguous rendering with shared scroll coordination
 - Double-click detection for instant refresh
-- 12 actions across all 16 test files
+- 14 actions across 30 test files
 
 ---
 
@@ -393,8 +400,8 @@ The plugin now supports GitHub's GraphQL API alongside REST. GraphQL enables ric
 
 ### Migration Strategy
 - Phase 1 (done): Contribution calendar via GraphQL ✅
-- Phase 2: Batch query coordinator for repo data (stats + PRs + workflows in one call)
-- Phase 3: New GraphQL-only actions (Discussions, Projects V2)
+- Phase 2 (done): Batch query coordinator for repo data (stats + PRs + workflows in one call) ✅
+- Phase 3 (done): New GraphQL-only actions (Discussions, Projects V2) ✅
 - Phase 4: Full REST → GraphQL migration for all repo-scoped data
 
 ---
@@ -445,6 +452,9 @@ Approved multi-quarter layouts for Stream Deck+ touch strip. Each layout documen
 | Fleet Monitor | Medium | Medium | **P2** | 5 | — |
 | Bundled Profiles | Small | Low | **P3** | 6 | — |
 | Multi-Repo Workflow Grid | Large | Low | **P3** | 6 | — |
+| ~~GraphQL Batch Query Coordinator~~ | Large | High | ~~P0~~ | — | ✅ v2.1.0 |
+| ~~Discussions Monitor~~ | Medium | Medium | ~~P1~~ | — | ✅ v2.2.0 |
+| ~~Projects V2 Board~~ | Medium | Medium | ~~P1~~ | — | ✅ v2.2.0 |
 
 ---
 
@@ -458,8 +468,10 @@ Approved multi-quarter layouts for Stream Deck+ touch strip. Each layout documen
 6. **v1.7.0**: Encoder for all remaining actions + PR Review Queue + Git Branch Network + Workflow Dispatch
 7. **v1.8.0**: Security Health gauge + Contribution Heatmap + Fleet Monitor
 8. **v2.0.0**: Bundled Profiles, ecosystem expansion
-9. **v2.1.0**: GraphQL batched query coordinator — reduce API calls across all actions sharing the same repo
-10. **v2.2.0**: New GraphQL actions — Discussions Monitor, Projects V2 Board
+9. ~~**v2.1.0**: GraphQL batched query coordinator — reduce API calls across all actions sharing the same repo~~ ✅ **Done**
+10. ~~**v2.2.0**: New GraphQL actions — Discussions Monitor, Projects V2 Board~~ ✅ **Done**
+11. **v2.3.0**: Discussions Monitor enhancements — category filtering (PI dropdown of available categories), state filter (open/closed/all), dial rotate to cycle through categories, short press to cycle display (count → latest topic → answered ratio). Projects V2 Board enhancements — filter by open/closed projects via PI dropdown.
+12. **v2.4.0+**: Sponsorship Tracker, enhanced Review Requests with full PR data, full REST → GraphQL migration
 
 ---
 
@@ -505,6 +517,8 @@ Summary of which permissions each action/feature requires with a **fine-grained 
 | Actions | Write | Workflow Dispatch (Phase 4) — optional, graceful degradation if not granted |
 | Dependabot alerts | Read | Security Health (Phase 5) |
 | Code scanning alerts | Read | Security Health (Phase 5) — optional, graceful degradation if not granted |
+| Discussions | Read | Discussions Monitor |
+| Projects | Read | Projects V2 Board |
 
 ### GraphQL API
 The GraphQL API uses the same personal access token as REST. No additional permissions needed for public data. For private contribution data in the Contribution Heatmap "All contributions" mode, the token needs access to the user's private repositories.
@@ -513,7 +527,6 @@ The GraphQL API uses the same personal access token as REST. No additional permi
 | Feature | Reason |
 |---------|--------|
 | Notifications | `GET /notifications` is not available for fine-grained PATs |
-| Discussions | GitHub Discussions API uses GraphQL, not REST |
 
 ---
 

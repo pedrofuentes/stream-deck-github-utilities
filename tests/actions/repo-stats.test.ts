@@ -23,6 +23,10 @@ const {
 	mockLoggerDebug,
 	mockLoggerError,
 	mockOpenUrl,
+	mockCoordinatorSubscribe,
+	mockCoordinatorUnsubscribe,
+	mockCoordinatorFetchData,
+	mockCoordinatorInvalidateAndFetch,
 } = vi.hoisted(() => ({
 	mockGetGlobalSettings: vi.fn(),
 	mockSetGlobalSettings: vi.fn(),
@@ -30,6 +34,10 @@ const {
 	mockLoggerDebug: vi.fn(),
 	mockLoggerError: vi.fn(),
 	mockOpenUrl: vi.fn().mockResolvedValue(undefined),
+	mockCoordinatorSubscribe: vi.fn(),
+	mockCoordinatorUnsubscribe: vi.fn(),
+	mockCoordinatorFetchData: vi.fn(),
+	mockCoordinatorInvalidateAndFetch: vi.fn(),
 }));
 
 vi.mock("@elgato/streamdeck", () => {
@@ -66,8 +74,17 @@ vi.mock("@elgato/streamdeck", () => {
 	};
 });
 
+vi.mock("../../src/utils/graphql-query-coordinator", () => ({
+	coordinator: {
+		subscribe: mockCoordinatorSubscribe,
+		unsubscribe: mockCoordinatorUnsubscribe,
+		fetchData: mockCoordinatorFetchData,
+		invalidateAndFetch: mockCoordinatorInvalidateAndFetch,
+		isSubscribed: vi.fn().mockReturnValue(true),
+	},
+}));
+
 import { RepoStatsAction } from "../../src/actions/repo-stats";
-import * as githubApi from "../../src/utils/github-api";
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -134,6 +151,27 @@ function lastImage(mockAction: ReturnType<typeof createMockKeyAction>): string {
 	return decodeSvg(calls[calls.length - 1][0] as string);
 }
 
+/** Creates a CoordinatorResult with repoMetadata for mock coordinator responses */
+function makeCoordinatorResult(overrides: Record<string, unknown> = {}) {
+	return {
+		repoMetadata: {
+			stargazers_count: 100,
+			open_issues_count: 42,
+			forks_count: 20,
+			watchers_count: 50,
+			full_name: "owner/repo",
+			description: null,
+			visibility: "public",
+			html_url: "https://github.com/owner/repo",
+			language: "TypeScript",
+			size: 1024,
+			license: "MIT",
+			default_branch: "main",
+			...overrides,
+		},
+	};
+}
+
 // ──────────────────────────────────────────────
 // Tests
 // ──────────────────────────────────────────────
@@ -151,6 +189,10 @@ describe("RepoStatsAction", () => {
 
 		// Default: global settings with token (set AFTER clearAllMocks)
 		mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
+
+		// Default: coordinator returns empty result (tests override as needed)
+		mockCoordinatorFetchData.mockResolvedValue({});
+		mockCoordinatorInvalidateAndFetch.mockResolvedValue({});
 	});
 
 	afterEach(() => {
@@ -203,30 +245,15 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 			});
 
-			// Mock fetch for github API
-			const mockResponse = {
-				ok: true,
-				status: 200,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () =>
-					Promise.resolve({
-						stargazers_count: 200000,
-						open_issues_count: 1000,
-						forks_count: 40000,
-						watchers_count: 200000,
-						full_name: "facebook/react",
-						description: "A JS library",
-						visibility: "public",
-						html_url: "https://github.com/facebook/react",
-					}),
-				text: () => Promise.resolve(""),
-			};
-			vi.mocked(globalThis.fetch).mockResolvedValue(mockResponse as unknown as Response);
+			// Mock coordinator to return repo stats
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult({
+				stargazers_count: 200000,
+				open_issues_count: 1000,
+				forks_count: 40000,
+				watchers_count: 200000,
+				full_name: "facebook/react",
+				description: "A JS library",
+			}));
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -250,28 +277,10 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: true,
-				status: 200,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () =>
-					Promise.resolve({
-						stargazers_count: 100,
-						open_issues_count: 10,
-						forks_count: 20,
-						watchers_count: 50,
-						full_name: "facebook/react",
-						description: null,
-						visibility: "public",
-						html_url: "https://github.com/facebook/react",
-					}),
-				text: () => Promise.resolve(""),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult({
+				full_name: "facebook/react",
+				description: null,
+			}));
 
 			const appearEv = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(appearEv as never);
@@ -333,28 +342,7 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: true,
-				status: 200,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () =>
-					Promise.resolve({
-						stargazers_count: 100,
-						open_issues_count: 42,
-						forks_count: 20,
-						watchers_count: 50,
-						full_name: "owner/repo",
-						description: null,
-						visibility: "public",
-						html_url: "https://github.com/owner/repo",
-					}),
-				text: () => Promise.resolve(""),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
 
 			const now = 1000;
 			vi.spyOn(Date, "now").mockReturnValue(now);
@@ -379,28 +367,7 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: true,
-				status: 200,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () =>
-					Promise.resolve({
-						stargazers_count: 100,
-						open_issues_count: 42,
-						forks_count: 20,
-						watchers_count: 50,
-						full_name: "owner/repo",
-						description: null,
-						visibility: "public",
-						html_url: "https://github.com/owner/repo",
-					}),
-				text: () => Promise.resolve(""),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
 
 			const now = 2000;
 			vi.spyOn(Date, "now").mockReturnValue(now);
@@ -423,28 +390,7 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: true,
-				status: 200,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () =>
-					Promise.resolve({
-						stargazers_count: 100,
-						open_issues_count: 42,
-						forks_count: 20,
-						watchers_count: 50,
-						full_name: "owner/repo",
-						description: null,
-						visibility: "public",
-						html_url: "https://github.com/owner/repo",
-					}),
-				text: () => Promise.resolve(""),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
 
 			const now = 3000;
 			vi.spyOn(Date, "now").mockReturnValue(now);
@@ -468,35 +414,14 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: true,
-				status: 200,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () =>
-					Promise.resolve({
-						stargazers_count: 100,
-						open_issues_count: 42,
-						forks_count: 20,
-						watchers_count: 50,
-						full_name: "owner/repo",
-						description: null,
-						visibility: "public",
-						html_url: "https://github.com/owner/repo",
-					}),
-				text: () => Promise.resolve(""),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
 
 			// Appear first so the action is known
 			const appearEv = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(appearEv as never);
 
 			mockAction.setImage.mockClear();
-			vi.mocked(globalThis.fetch).mockClear();
+			mockCoordinatorFetchData.mockClear();
 
 			const now = 4000;
 			vi.spyOn(Date, "now").mockReturnValue(now);
@@ -506,8 +431,8 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 150);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
 
-			// Should have triggered a fetch for the new stat
-			expect(globalThis.fetch).toHaveBeenCalled();
+			// Should have triggered a coordinator fetch for the new stat
+			expect(mockCoordinatorFetchData).toHaveBeenCalled();
 			// Should have updated the image with new stat display
 			expect(mockAction.setImage).toHaveBeenCalled();
 		});
@@ -522,28 +447,7 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: true,
-				status: 200,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () =>
-					Promise.resolve({
-						stargazers_count: 100,
-						open_issues_count: 42,
-						forks_count: 20,
-						watchers_count: 50,
-						full_name: "owner/repo",
-						description: null,
-						visibility: "public",
-						html_url: "https://github.com/owner/repo",
-					}),
-				text: () => Promise.resolve(""),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
 
 			// Appear to populate lastUrl
 			const appearEv = createWillAppearEvent(mockAction, settings);
@@ -571,28 +475,7 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: true,
-				status: 200,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () =>
-					Promise.resolve({
-						stargazers_count: 100,
-						open_issues_count: 42,
-						forks_count: 20,
-						watchers_count: 50,
-						full_name: "owner/repo",
-						description: null,
-						visibility: "public",
-						html_url: "https://github.com/owner/repo",
-					}),
-				text: () => Promise.resolve(""),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
 
 			const appearEv = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(appearEv as never);
@@ -663,28 +546,7 @@ describe("RepoStatsAction", () => {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: true,
-				status: 200,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () =>
-					Promise.resolve({
-						stargazers_count: 100,
-						open_issues_count: 42,
-						forks_count: 20,
-						watchers_count: 50,
-						full_name: "owner/repo",
-						description: null,
-						visibility: "public",
-						html_url: "https://github.com/owner/repo",
-					}),
-				text: () => Promise.resolve(""),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
 
 			const now = 10000;
 			vi.spyOn(Date, "now").mockReturnValue(now);
@@ -734,28 +596,13 @@ describe("RepoStatsAction", () => {
 			});
 			(action as any).actionContexts.set("action-7", mockAction);
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: true,
-				status: 200,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () =>
-					Promise.resolve({
-						stargazers_count: 500,
-						open_issues_count: 10,
-						forks_count: 50,
-						watchers_count: 100,
-						full_name: "new-owner/new-repo",
-						description: null,
-						visibility: "public",
-						html_url: "https://github.com/new-owner/new-repo",
-					}),
-				text: () => Promise.resolve(""),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult({
+				stargazers_count: 500,
+				open_issues_count: 10,
+				forks_count: 50,
+				watchers_count: 100,
+				full_name: "new-owner/new-repo",
+			}));
 
 			const ev = createDidReceiveSettingsEvent(mockAction, {
 				repo: "new-owner/new-repo",
@@ -763,10 +610,11 @@ describe("RepoStatsAction", () => {
 			});
 			await action.onDidReceiveSettings?.(ev as never);
 
-			// Should have fetched data for the new repo
-			expect(globalThis.fetch).toHaveBeenCalled();
-			const fetchUrl = vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
-			expect(fetchUrl).toContain("new-owner");
+			// Should have re-subscribed and fetched data for the new repo
+			expect(mockCoordinatorFetchData).toHaveBeenCalled();
+			expect(mockCoordinatorSubscribe).toHaveBeenCalledWith(
+				expect.objectContaining({ repo: "new-owner/new-repo" }),
+			);
 		});
 	});
 
@@ -782,18 +630,10 @@ describe("RepoStatsAction", () => {
 				configurable: true,
 			});
 
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: false,
-				status: 404,
-				headers: new Headers({
-					"x-ratelimit-limit": "60",
-					"x-ratelimit-remaining": "59",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () => Promise.resolve({ message: "Not Found" }),
-				text: () => Promise.resolve('{"message":"Not Found"}'),
-			} as unknown as Response);
+			// Coordinator returns error result (no repoMetadata)
+			mockCoordinatorFetchData.mockResolvedValue({
+				errors: { repoMetadata: "Repository not found" },
+			});
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
@@ -814,39 +654,19 @@ describe("RepoStatsAction", () => {
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
 
-			// Should show "Invalid" error without making API call
+			// Should show "Invalid" error without calling coordinator
 			expect(lastImage(mockAction)).toContain("Invalid");
-			expect(globalThis.fetch).not.toHaveBeenCalled();
+			expect(mockCoordinatorFetchData).not.toHaveBeenCalled();
 		});
 	});
 
 	// ── Multi-button cycling (issue #1) ─────────
 
 	describe("multi-button cycling (issue #1)", () => {
-		/** Reusable mock GitHub API response */
+		/** Reusable mock coordinator response */
 		function mockFetchSuccess(): void {
-			vi.mocked(globalThis.fetch).mockResolvedValue({
-				ok: true,
-				status: 200,
-				headers: new Headers({
-					"x-ratelimit-limit": "5000",
-					"x-ratelimit-remaining": "4999",
-					"x-ratelimit-reset": "9999999999",
-					"x-ratelimit-used": "1",
-				}),
-				json: () =>
-					Promise.resolve({
-						stargazers_count: 100,
-						open_issues_count: 42,
-						forks_count: 20,
-						watchers_count: 50,
-						full_name: "owner/repo",
-						description: null,
-						visibility: "public",
-						html_url: "https://github.com/owner/repo",
-					}),
-				text: () => Promise.resolve(""),
-			} as unknown as Response);
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
+			mockCoordinatorInvalidateAndFetch.mockResolvedValue(makeCoordinatorResult());
 		}
 
 		it("second button cycles independently from the first", async () => {
@@ -982,14 +802,14 @@ describe("RepoStatsAction", () => {
 
 			// Track setImage calls AFTER the cycle
 			mockAction1.setImage.mockClear();
-			vi.mocked(globalThis.fetch).mockClear();
+			mockCoordinatorFetchData.mockClear();
 
 			// Simulate the SD echoing didReceiveSettings after setSettings
 			const drsEv = createDidReceiveSettingsEvent(mockAction1, { repo: "owner/repo", statType: "issues" });
 			await action.onDidReceiveSettings?.(drsEv as never);
 
 			// Should NOT have shown loading or re-fetched
-			expect(globalThis.fetch).not.toHaveBeenCalled();
+			expect(mockCoordinatorFetchData).not.toHaveBeenCalled();
 			// onDidReceiveSettings should have returned early (no setImage calls)
 			expect(mockAction1.setImage).not.toHaveBeenCalled();
 		});
@@ -1006,7 +826,7 @@ describe("RepoStatsAction", () => {
 			await action.onWillAppear?.(createWillAppearEvent(mockAction1, settings) as never);
 
 			mockAction1.setImage.mockClear();
-			vi.mocked(globalThis.fetch).mockClear();
+			mockCoordinatorFetchData.mockClear();
 			mockFetchSuccess();
 
 			// Simulate the PI changing settings (no prior setSettings from plugin)
@@ -1017,7 +837,7 @@ describe("RepoStatsAction", () => {
 			await action.onDidReceiveSettings?.(drsEv as never);
 
 			// Should have shown loading and re-fetched
-			expect(globalThis.fetch).toHaveBeenCalled();
+			expect(mockCoordinatorFetchData).toHaveBeenCalled();
 			expect(mockAction1.setImage).toHaveBeenCalled();
 		});
 
@@ -1055,6 +875,174 @@ describe("RepoStatsAction", () => {
 
 			// Button A should NOT have had setImage called by the cycling
 			expect(mockActionA.setImage).not.toHaveBeenCalled();
+		});
+	});
+
+	// ── Coordinator integration ────────────────────
+
+	describe("coordinator integration", () => {
+		it("subscribes to coordinator in onWillAppear with correct params", async () => {
+			const mockAction = createMockKeyAction("coord-sub-1");
+			const settings = { repo: "owner/repo", statType: "stars", refreshInterval: 120 };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
+
+			const ev = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(ev as never);
+
+			expect(mockCoordinatorSubscribe).toHaveBeenCalledWith({
+				actionId: "coord-sub-1",
+				repo: "owner/repo",
+				fragments: ["repoMetadata", "prCount"],
+				maxAgeSec: 120,
+			});
+		});
+
+		it("uses default refresh interval when not set", async () => {
+			const mockAction = createMockKeyAction("coord-sub-2");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
+
+			const ev = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(ev as never);
+
+			expect(mockCoordinatorSubscribe).toHaveBeenCalledWith(
+				expect.objectContaining({ maxAgeSec: 300 }),
+			);
+		});
+
+		it("does not subscribe when repo is missing", async () => {
+			const mockAction = createMockKeyAction("coord-sub-3");
+			const ev = createWillAppearEvent(mockAction, {});
+
+			await action.onWillAppear?.(ev as never);
+
+			expect(mockCoordinatorSubscribe).not.toHaveBeenCalled();
+		});
+
+		it("unsubscribes from coordinator in onWillDisappear", async () => {
+			const mockAction = createMockKeyAction("coord-unsub-1");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			mockCoordinatorUnsubscribe.mockClear();
+
+			action.onWillDisappear?.(createWillDisappearEvent(mockAction) as never);
+
+			expect(mockCoordinatorUnsubscribe).toHaveBeenCalledWith("coord-unsub-1");
+		});
+
+		it("re-subscribes on settings change via Property Inspector", async () => {
+			const mockAction = createMockKeyAction("coord-resub-1");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			(action as any).actionContexts.set("coord-resub-1", mockAction);
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
+
+			// Initial appear
+			const settings = { repo: "owner/repo", statType: "stars" };
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			mockCoordinatorSubscribe.mockClear();
+			mockCoordinatorUnsubscribe.mockClear();
+
+			// PI changes repo
+			const drsEv = createDidReceiveSettingsEvent(mockAction, {
+				repo: "owner/new-repo",
+				statType: "forks",
+			});
+			await action.onDidReceiveSettings?.(drsEv as never);
+
+			// Should unsubscribe old and subscribe with new repo
+			expect(mockCoordinatorUnsubscribe).toHaveBeenCalledWith("coord-resub-1");
+			expect(mockCoordinatorSubscribe).toHaveBeenCalledWith(
+				expect.objectContaining({ repo: "owner/new-repo" }),
+			);
+		});
+
+		it("unsubscribes when settings are cleared in onDidReceiveSettings", async () => {
+			const mockAction = createMockKeyAction("coord-unsub-drs");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			(action as any).actionContexts.set("coord-unsub-drs", mockAction);
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
+
+			// Initial appear
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo", statType: "stars" }) as never);
+			mockCoordinatorUnsubscribe.mockClear();
+
+			// PI clears repo
+			await action.onDidReceiveSettings?.(createDidReceiveSettingsEvent(mockAction, {}) as never);
+
+			expect(mockCoordinatorUnsubscribe).toHaveBeenCalledWith("coord-unsub-drs");
+		});
+
+		it("uses invalidateAndFetch on double-click", async () => {
+			const mockAction = createMockKeyAction("coord-dblclick-1");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
+			mockCoordinatorInvalidateAndFetch.mockResolvedValue(makeCoordinatorResult());
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			mockCoordinatorFetchData.mockClear();
+			mockCoordinatorInvalidateAndFetch.mockClear();
+
+			// Simulate double-click (two key-ups within 400ms)
+			const now = 100000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+			vi.spyOn(Date, "now").mockReturnValue(now + 50);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			// Second click within 400ms
+			vi.spyOn(Date, "now").mockReturnValue(now + 200);
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+			vi.spyOn(Date, "now").mockReturnValue(now + 250);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			// Should have used invalidateAndFetch for the force refresh
+			expect(mockCoordinatorInvalidateAndFetch).toHaveBeenCalled();
+		});
+
+		it("calls fetchData on normal poll tick", async () => {
+			const mockAction = createMockKeyAction("coord-fetch-1");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			// fetchData should have been called during initial refresh
+			expect(mockCoordinatorFetchData).toHaveBeenCalled();
 		});
 	});
 });

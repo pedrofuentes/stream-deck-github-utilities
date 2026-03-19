@@ -94,7 +94,9 @@ npm run test:coverage   # With coverage report
 
 ### Adding a New Action
 
-Follow these steps and refer to the existing **Repo Stats** and **Workflow Status** actions as references:
+Follow these steps and refer to the existing **Repo Stats** and **Workflow Status** actions as references.
+
+> **Note:** All actions now use the GraphQL Query Coordinator for data fetching. New actions should integrate with the coordinator rather than making direct REST API calls. The coordinator batches queries across actions sharing the same repository, reducing API calls and improving cache efficiency.
 
 1. **Define settings** in `src/types.ts` — must include `[key: string]: JsonValue` index signature
 2. **Create action class** in `src/actions/your-action.ts`:
@@ -102,13 +104,21 @@ Follow these steps and refer to the existing **Repo Stats** and **Workflow Statu
    - Extend `SingletonAction<YourSettings>`
    - Handle `onWillAppear`, `onWillDisappear`, `onKeyDown`, `onDidReceiveSettings`
    - For polling: use `Map<string, Timer>` keyed by `ev.action.id`
-3. **Register** in `src/plugin.ts`
-4. **Add manifest entry** in `plugin/manifest.json`
-5. **Create Property Inspector** in `plugin/ui/` using `sdpi-components.js`
-6. **Create icons** in `plugin/imgs/actions/your-action/` (icon.svg 20x20, key.svg 144x144)
-7. **Use button renderer** from `src/utils/button-renderer.ts` for button SVGs
-8. **Write tests** in `tests/actions/your-action.test.ts` — mock SDK with `vi.hoisted()` + `vi.mock()`
-9. **Update README** features section and roadmap
+3. **Integrate with GraphQL Coordinator** (for actions that query GitHub data):
+   - Import `coordinator` from `src/utils/graphql-query-coordinator`
+   - Subscribe in `onWillAppear` with the data fragments your action needs
+   - Unsubscribe in `onWillDisappear`
+   - Fetch data via `coordinator.fetchData()` instead of direct REST API calls
+   - For force-refresh (double-click), use `coordinator.invalidateAndFetch()`
+   - Define new data fragments in `src/utils/data-fragments.ts` if your action needs new data
+   - See `src/actions/discussions-monitor.ts` or `src/actions/projects-board.ts` for examples
+4. **Register** in `src/plugin.ts`
+5. **Add manifest entry** in `plugin/manifest.json`
+6. **Create Property Inspector** in `plugin/ui/` using `sdpi-components.js`
+7. **Create icons** in `plugin/imgs/actions/your-action/` (icon.svg 20x20, key.svg 144x144)
+8. **Use button renderer** from `src/utils/button-renderer.ts` for button SVGs
+9. **Write tests** in `tests/actions/your-action.test.ts` — mock SDK with `vi.hoisted()` + `vi.mock()`
+10. **Update README** features section and roadmap
 
 ### Adding Utility Functions
 
@@ -116,6 +126,21 @@ Follow these steps and refer to the existing **Repo Stats** and **Workflow Statu
 2. Export it from `src/utils/index.ts`
 3. Write tests covering all code paths and edge cases
 4. Document the function with JSDoc comments
+
+### Architecture: GraphQL Query Coordinator
+
+The plugin uses a **GraphQL Query Coordinator** layer between actions and the GitHub API. Instead of each action making independent REST/GraphQL calls, all 14 actions subscribe to the coordinator with the data fragments they need. The coordinator:
+
+- **Batches queries** — combines fragments from multiple actions into a single GraphQL request per repository
+- **Caches per-repo** — `repo-data-cache.ts` tracks field-level staleness so only stale fields are re-fetched
+- **Builds queries dynamically** — `graphql-query-builder.ts` composes the minimal GraphQL query for requested fields
+- **Extracts typed data** — `data-fragments.ts` maps GraphQL responses back to the interfaces each action expects
+
+Key files:
+- `src/utils/graphql-query-coordinator.ts` — singleton coordinator (subscribe, fetch, invalidate)
+- `src/utils/graphql-query-builder.ts` — dynamic query composition
+- `src/utils/repo-data-cache.ts` — per-repo cache with field-level TTL
+- `src/utils/data-fragments.ts` — GraphQL→REST interface extractors
 
 ## Pull Request Process
 

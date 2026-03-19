@@ -1,5 +1,5 @@
 /**
- * Tests for the PRCounterAction (src/actions/pr-counter.ts).
+ * Tests for the ProjectsBoardAction (src/actions/projects-board.ts).
  *
  * Mocks the @elgato/streamdeck module and the GraphQL Query Coordinator
  * to test the action's lifecycle, settings handling, and error states.
@@ -78,7 +78,7 @@ vi.mock("../../src/utils/graphql-query-coordinator", () => ({
 	coordinator: mockCoordinator,
 }));
 
-import { PRCounterAction } from "../../src/actions/pr-counter";
+import { ProjectsBoardAction } from "../../src/actions/projects-board";
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -87,7 +87,7 @@ import { PRCounterAction } from "../../src/actions/pr-counter";
 function createMockKeyAction(id: string, settings: Record<string, unknown> = {}) {
 	return {
 		id,
-		manifestId: "com.pedrofuentes.github-utilities.pr-counter",
+		manifestId: "com.pedrofuentes.github-utilities.projects-board",
 		isKey: () => true,
 		isDial: () => false,
 		setImage: vi.fn().mockResolvedValue(undefined),
@@ -147,19 +147,27 @@ function lastImage(mockAction: ReturnType<typeof createMockKeyAction>): string {
 // Tests
 // ──────────────────────────────────────────────
 
-describe("PRCounterAction", () => {
-	let action: PRCounterAction;
+describe("ProjectsBoardAction", () => {
+	let action: ProjectsBoardAction;
 	let originalFetch: typeof globalThis.fetch;
 
 	beforeEach(() => {
-		action = new PRCounterAction();
+		action = new ProjectsBoardAction();
 		originalFetch = globalThis.fetch;
 		globalThis.fetch = vi.fn();
 
 		vi.clearAllMocks();
 		mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
-		mockCoordinator.fetchData.mockResolvedValue({ prCount: 0 });
-		mockCoordinator.invalidateAndFetch.mockResolvedValue({ prCount: 0 });
+		mockCoordinator.fetchData.mockResolvedValue({
+			projectsV2: {
+				projects: [],
+			},
+		});
+		mockCoordinator.invalidateAndFetch.mockResolvedValue({
+			projectsV2: {
+				projects: [],
+			},
+		});
 		mockCoordinator.isSubscribed.mockReturnValue(true);
 	});
 
@@ -172,7 +180,7 @@ describe("PRCounterAction", () => {
 
 	describe("onWillAppear", () => {
 		it("shows unconfigured state when repo is not set", async () => {
-			const mockAction = createMockKeyAction("pr-1");
+			const mockAction = createMockKeyAction("proj-1");
 			const ev = createWillAppearEvent(mockAction, {});
 
 			await action.onWillAppear?.(ev as never);
@@ -183,7 +191,7 @@ describe("PRCounterAction", () => {
 
 		it("shows unconfigured state when token is not set", async () => {
 			mockGetGlobalSettings.mockResolvedValue({});
-			const mockAction = createMockKeyAction("pr-1b");
+			const mockAction = createMockKeyAction("proj-1b");
 			const settings = { repo: "owner/repo" };
 			const ev = createWillAppearEvent(mockAction, settings);
 
@@ -193,71 +201,8 @@ describe("PRCounterAction", () => {
 			expect(lastImage(mockAction)).toContain("Setup");
 		});
 
-		it("fetches and displays PR count when configured", async () => {
-			const mockAction = createMockKeyAction("pr-2");
-			const settings = { repo: "owner/repo", stateFilter: "open" };
-
-			Object.defineProperty(action, "actions", {
-				get: () => [mockAction],
-				configurable: true,
-			});
-
-			mockCoordinator.fetchData.mockResolvedValue({ prCount: 42 });
-
-			const ev = createWillAppearEvent(mockAction, settings);
-			await action.onWillAppear?.(ev as never);
-
-			expect(mockAction.setImage).toHaveBeenCalled();
-			const svg = lastImage(mockAction);
-			expect(svg).toContain("42");
-			expect(svg).toContain("Open PRs");
-		});
-
-		it("displays closed PR count when stateFilter is closed", async () => {
-			const mockAction = createMockKeyAction("pr-2b");
-			const settings = { repo: "owner/repo", stateFilter: "closed" };
-
-			Object.defineProperty(action, "actions", {
-				get: () => [mockAction],
-				configurable: true,
-			});
-
-			mockCoordinator.fetchData.mockResolvedValue({ prCount: 10 });
-
-			const ev = createWillAppearEvent(mockAction, settings);
-			await action.onWillAppear?.(ev as never);
-
-			expect(mockAction.setImage).toHaveBeenCalled();
-			const svg = lastImage(mockAction);
-			expect(svg).toContain("10");
-			expect(svg).toContain("Closed PRs");
-		});
-
-		it("subscribes to coordinator with correct params", async () => {
-			const mockAction = createMockKeyAction("pr-sub-1");
-			const settings = { repo: "owner/repo", stateFilter: "closed", refreshInterval: 120 };
-
-			Object.defineProperty(action, "actions", {
-				get: () => [mockAction],
-				configurable: true,
-			});
-
-			mockCoordinator.fetchData.mockResolvedValue({ prCount: 5 });
-
-			const ev = createWillAppearEvent(mockAction, settings);
-			await action.onWillAppear?.(ev as never);
-
-			expect(mockCoordinator.subscribe).toHaveBeenCalledWith({
-				actionId: "pr-sub-1",
-				repo: "owner/repo",
-				fragments: ["prCount"],
-				maxAgeSec: 120,
-				params: { prState: "closed" },
-			});
-		});
-
-		it("defaults prState param to open when stateFilter is not set", async () => {
-			const mockAction = createMockKeyAction("pr-sub-2");
+		it("shows loading spinner before data arrives", async () => {
+			const mockAction = createMockKeyAction("proj-loading");
 			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
@@ -265,20 +210,72 @@ describe("PRCounterAction", () => {
 				configurable: true,
 			});
 
-			mockCoordinator.fetchData.mockResolvedValue({ prCount: 3 });
+			mockCoordinator.fetchData.mockResolvedValue({
+				projectsV2: { projects: [] },
+			});
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			// The first setImage call should be the animated spinner (before fetch completes)
+			const firstCall = mockAction.setImage.mock.calls[0];
+			expect(firstCall).toBeDefined();
+			const svg = decodeSvg(firstCall[0] as string);
+			expect(svg).toContain("animateTransform");
+		});
+
+		it("fetches and displays project data when configured", async () => {
+			const mockAction = createMockKeyAction("proj-2");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({
+				projectsV2: {
+					projects: [
+						{ title: "Sprint 1", shortDescription: "Q1 work", closed: false, number: 1, url: "https://github.com/orgs/owner/projects/1", totalItems: 15 },
+					],
+				},
+			});
 
 			const ev = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(ev as never);
 
-			expect(mockCoordinator.subscribe).toHaveBeenCalledWith(
-				expect.objectContaining({
-					params: { prState: "open" },
-				}),
-			);
+			expect(mockAction.setImage).toHaveBeenCalled();
+			const svg = lastImage(mockAction);
+			expect(svg).toContain("Sprint 1");
+			expect(svg).toContain("15 items");
+			expect(svg).toContain("Project");
+		});
+
+		it("subscribes to coordinator with correct params", async () => {
+			const mockAction = createMockKeyAction("proj-sub-1");
+			const settings = { repo: "owner/repo", refreshInterval: 120 };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({
+				projectsV2: { projects: [] },
+			});
+
+			const ev = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(ev as never);
+
+			expect(mockCoordinator.subscribe).toHaveBeenCalledWith({
+				actionId: "proj-sub-1",
+				repo: "owner/repo",
+				fragments: ["projectsV2"],
+				maxAgeSec: 120,
+			});
 		});
 
 		it("does not subscribe when repo is not set", async () => {
-			const mockAction = createMockKeyAction("pr-sub-3");
+			const mockAction = createMockKeyAction("proj-sub-2");
 			const ev = createWillAppearEvent(mockAction, {});
 
 			await action.onWillAppear?.(ev as never);
@@ -291,15 +288,17 @@ describe("PRCounterAction", () => {
 
 	describe("onWillDisappear", () => {
 		it("cleans up timer and unsubscribes on disappear", async () => {
-			const mockAction = createMockKeyAction("pr-3");
-			const settings = { repo: "owner/repo", stateFilter: "open" };
+			const mockAction = createMockKeyAction("proj-3");
+			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
 				configurable: true,
 			});
 
-			mockCoordinator.fetchData.mockResolvedValue({ prCount: 5 });
+			mockCoordinator.fetchData.mockResolvedValue({
+				projectsV2: { projects: [{ title: "Test", shortDescription: "", closed: false, number: 1, url: "", totalItems: 5 }] },
+			});
 
 			const appearEv = createWillAppearEvent(mockAction, settings);
 			await action.onWillAppear?.(appearEv as never);
@@ -307,46 +306,77 @@ describe("PRCounterAction", () => {
 			const disappearEv = createWillDisappearEvent(mockAction);
 			action.onWillDisappear?.(disappearEv as never);
 
-			expect(mockCoordinator.unsubscribe).toHaveBeenCalledWith("pr-3");
+			expect(mockCoordinator.unsubscribe).toHaveBeenCalledWith("proj-3");
 		});
 
 		it("handles disappear without prior appear", () => {
-			const mockAction = createMockKeyAction("pr-never-appeared");
+			const mockAction = createMockKeyAction("proj-never-appeared");
 			const ev = createWillDisappearEvent(mockAction);
 
 			action.onWillDisappear?.(ev as never);
-			expect(mockCoordinator.unsubscribe).toHaveBeenCalledWith("pr-never-appeared");
+			expect(mockCoordinator.unsubscribe).toHaveBeenCalledWith("proj-never-appeared");
 		});
 	});
 
 	// ── onKeyDown ───────────────────────────────
 
 	describe("onKeyDown", () => {
-		it("opens PR page on GitHub when repo is configured", async () => {
-			const mockAction = createMockKeyAction("pr-4");
+		it("opens projects page on GitHub when repo is configured", async () => {
+			const mockAction = createMockKeyAction("proj-4");
 			const settings = { repo: "facebook/react" };
 
-			// First appear to cache settings
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			mockCoordinator.fetchData.mockResolvedValue({ prCount: 5 });
+
+			mockCoordinator.fetchData.mockResolvedValue({
+				projectsV2: { projects: [] },
+			});
+
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
 			const ev = createKeyDownEvent(mockAction, settings);
 			await action.onKeyDown?.(ev as never);
 
-			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/facebook/react/pulls");
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/facebook/react/projects");
 		});
 
 		it("does nothing when repo is not configured", async () => {
-			const mockAction = createMockKeyAction("pr-4b");
+			const mockAction = createMockKeyAction("proj-4b");
 			const ev = createKeyDownEvent(mockAction, {});
 
 			await action.onKeyDown?.(ev as never);
 
 			expect(mockOpenUrl).not.toHaveBeenCalled();
+		});
+
+		it("force refreshes on double-click", async () => {
+			const mockAction = createMockKeyAction("proj-dbl");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({
+				projectsV2: { projects: [] },
+			});
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({
+				projectsV2: { projects: [] },
+			});
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			// Simulate double-click (two key-down events within 400ms)
+			const ev1 = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev1 as never);
+
+			const ev2 = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev2 as never);
+
+			expect(mockCoordinator.invalidateAndFetch).toHaveBeenCalled();
 		});
 	});
 
@@ -354,47 +384,31 @@ describe("PRCounterAction", () => {
 
 	describe("onDidReceiveSettings", () => {
 		it("refreshes data when settings change", async () => {
-			const mockAction = createMockKeyAction("pr-5");
-			const settings = { repo: "owner/repo", stateFilter: "open" };
-
-			Object.defineProperty(action, "actions", {
-				get: () => [mockAction],
-				configurable: true,
-			});
-			(action as any).actionContexts.set("pr-5", mockAction);
-
-			mockCoordinator.fetchData.mockResolvedValue({ prCount: 15 });
-
-			const ev = createDidReceiveSettingsEvent(mockAction, settings);
-			await action.onDidReceiveSettings?.(ev as never);
-
-			expect(mockAction.setImage).toHaveBeenCalled();
-			const svg = lastImage(mockAction);
-			expect(svg).toContain("15");
-		});
-
-		it("defaults stateFilter to open when not set", async () => {
-			const mockAction = createMockKeyAction("pr-5b");
+			const mockAction = createMockKeyAction("proj-5");
 			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			(action as any).actionContexts.set("pr-5b", mockAction);
+			(action as any).actionContexts.set("proj-5", mockAction);
 
-			mockCoordinator.fetchData.mockResolvedValue({ prCount: 3 });
+			mockCoordinator.fetchData.mockResolvedValue({
+				projectsV2: {
+					projects: [{ title: "My Project", shortDescription: "", closed: false, number: 1, url: "", totalItems: 8 }],
+				},
+			});
 
 			const ev = createDidReceiveSettingsEvent(mockAction, settings);
 			await action.onDidReceiveSettings?.(ev as never);
 
 			expect(mockAction.setImage).toHaveBeenCalled();
 			const svg = lastImage(mockAction);
-			expect(svg).toContain("Open PRs");
+			expect(svg).toContain("My Project");
 		});
 
 		it("shows unconfigured when repo is cleared", async () => {
-			const mockAction = createMockKeyAction("pr-5c");
+			const mockAction = createMockKeyAction("proj-5c");
 			const settings = {};
 
 			Object.defineProperty(action, "actions", {
@@ -410,31 +424,32 @@ describe("PRCounterAction", () => {
 		});
 
 		it("re-subscribes to coordinator on settings change", async () => {
-			const mockAction = createMockKeyAction("pr-sub-change");
-			const settings = { repo: "owner/new-repo", stateFilter: "all", refreshInterval: 60 };
+			const mockAction = createMockKeyAction("proj-sub-change");
+			const settings = { repo: "owner/new-repo", refreshInterval: 60 };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
 				configurable: true,
 			});
-			(action as any).actionContexts.set("pr-sub-change", mockAction);
+			(action as any).actionContexts.set("proj-sub-change", mockAction);
 
-			mockCoordinator.fetchData.mockResolvedValue({ prCount: 7 });
+			mockCoordinator.fetchData.mockResolvedValue({
+				projectsV2: { projects: [] },
+			});
 
 			const ev = createDidReceiveSettingsEvent(mockAction, settings);
 			await action.onDidReceiveSettings?.(ev as never);
 
 			expect(mockCoordinator.subscribe).toHaveBeenCalledWith({
-				actionId: "pr-sub-change",
+				actionId: "proj-sub-change",
 				repo: "owner/new-repo",
-				fragments: ["prCount"],
+				fragments: ["projectsV2"],
 				maxAgeSec: 60,
-				params: { prState: "all" },
 			});
 		});
 
 		it("unsubscribes when repo is cleared", async () => {
-			const mockAction = createMockKeyAction("pr-sub-clear");
+			const mockAction = createMockKeyAction("proj-sub-clear");
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
@@ -444,7 +459,103 @@ describe("PRCounterAction", () => {
 			const ev = createDidReceiveSettingsEvent(mockAction, {});
 			await action.onDidReceiveSettings?.(ev as never);
 
-			expect(mockCoordinator.unsubscribe).toHaveBeenCalledWith("pr-sub-clear");
+			expect(mockCoordinator.unsubscribe).toHaveBeenCalledWith("proj-sub-clear");
+		});
+	});
+
+	// ── Data display scenarios ──────────────────
+
+	describe("data display", () => {
+		it("handles zero projects", async () => {
+			const mockAction = createMockKeyAction("proj-zero");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({
+				projectsV2: { projects: [] },
+			});
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			const svg = lastImage(mockAction);
+			expect(svg).toContain("No Projects");
+		});
+
+		it("handles single project with item count", async () => {
+			const mockAction = createMockKeyAction("proj-single");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({
+				projectsV2: {
+					projects: [
+						{ title: "Roadmap", shortDescription: "Product roadmap", closed: false, number: 1, url: "https://github.com/orgs/owner/projects/1", totalItems: 42 },
+					],
+				},
+			});
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			const svg = lastImage(mockAction);
+			expect(svg).toContain("Roadmap");
+			expect(svg).toContain("42 items");
+			expect(svg).toContain("Project");
+		});
+
+		it("handles multiple projects", async () => {
+			const mockAction = createMockKeyAction("proj-multi");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({
+				projectsV2: {
+					projects: [
+						{ title: "Sprint 1", shortDescription: "", closed: false, number: 1, url: "", totalItems: 10 },
+						{ title: "Sprint 2", shortDescription: "", closed: false, number: 2, url: "", totalItems: 5 },
+						{ title: "Backlog", shortDescription: "", closed: false, number: 3, url: "", totalItems: 20 },
+					],
+				},
+			});
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			const svg = lastImage(mockAction);
+			expect(svg).toContain("3");
+			expect(svg).toContain("Sprint 1");
+			expect(svg).toContain("Projects");
+		});
+
+		it("handles missing projectsV2 data gracefully", async () => {
+			const mockAction = createMockKeyAction("proj-missing");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({});
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			const svg = lastImage(mockAction);
+			expect(svg).toContain("No Projects");
 		});
 	});
 
@@ -452,8 +563,8 @@ describe("PRCounterAction", () => {
 
 	describe("error handling", () => {
 		it("shows error image when coordinator throws not found", async () => {
-			const mockAction = createMockKeyAction("pr-err-1");
-			const settings = { repo: "owner/nonexistent", stateFilter: "open" };
+			const mockAction = createMockKeyAction("proj-err-1");
+			const settings = { repo: "owner/nonexistent" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
@@ -469,8 +580,8 @@ describe("PRCounterAction", () => {
 		});
 
 		it("shows auth error when token is invalid", async () => {
-			const mockAction = createMockKeyAction("pr-err-2");
-			const settings = { repo: "owner/repo", stateFilter: "open" };
+			const mockAction = createMockKeyAction("proj-err-2");
+			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
@@ -486,8 +597,8 @@ describe("PRCounterAction", () => {
 		});
 
 		it("shows error for invalid repo format", async () => {
-			const mockAction = createMockKeyAction("pr-err-3");
-			const settings = { repo: "invalid-repo-name", stateFilter: "open" };
+			const mockAction = createMockKeyAction("proj-err-3");
+			const settings = { repo: "invalid-repo-name" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
@@ -500,22 +611,21 @@ describe("PRCounterAction", () => {
 			expect(lastImage(mockAction)).toContain("Invalid");
 		});
 
-		it("defaults to zero when coordinator returns no prCount", async () => {
-			const mockAction = createMockKeyAction("pr-err-4");
-			const settings = { repo: "owner/repo", stateFilter: "open" };
+		it("shows rate limited error", async () => {
+			const mockAction = createMockKeyAction("proj-err-4");
+			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
 				configurable: true,
 			});
 
-			mockCoordinator.fetchData.mockResolvedValue({});
+			mockCoordinator.fetchData.mockRejectedValue(new Error("API rate limit exceeded"));
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
 			expect(mockAction.setImage).toHaveBeenCalled();
-			const svg = lastImage(mockAction);
-			expect(svg).toContain("0");
+			expect(lastImage(mockAction)).toContain("Rate Limited");
 		});
 	});
 
@@ -523,9 +633,8 @@ describe("PRCounterAction", () => {
 
 	describe("onSendToPlugin", () => {
 		it("handles PI data requests for getRepos", async () => {
-			const mockAction = createMockKeyAction("pr-pi-1", { repo: "owner/repo" });
+			const mockAction = createMockKeyAction("proj-pi-1", { repo: "owner/repo" });
 
-			// Mock fetch for repo list
 			vi.mocked(globalThis.fetch).mockResolvedValue({
 				ok: true,
 				status: 200,
@@ -541,12 +650,11 @@ describe("PRCounterAction", () => {
 
 			const ev = createSendToPluginEvent(mockAction, { event: "getRepos" });
 
-			// Should not throw
 			await action.onSendToPlugin?.(ev as never);
 		});
 
 		it("ignores events without event property", async () => {
-			const mockAction = createMockKeyAction("pr-pi-2");
+			const mockAction = createMockKeyAction("proj-pi-2");
 			const ev = createSendToPluginEvent(mockAction, { something: "else" });
 
 			await action.onSendToPlugin?.(ev as never);

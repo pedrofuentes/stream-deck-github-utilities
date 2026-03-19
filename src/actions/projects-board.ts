@@ -1,13 +1,13 @@
 /**
- * Release Monitor Action — displays the latest release version for a GitHub repository.
+ * Projects Board Action — displays GitHub Projects V2 data for a repository.
  *
- * Shows: version tag, release name, and relative time since publication.
+ * Shows: project count and first project name on the button.
  * Features:
  *   - Auto-refreshes on a configurable interval (default: 5 minutes)
- *   - Press to open the release page on GitHub
- *   - Optional pre-release inclusion
+ *   - Press to open the projects page on GitHub
+ *   - Double-click to force refresh
  *   - SVG key images with accent-bar design
- *   - Marquee scrolling for long text
+ *   - Marquee scrolling for long project names
  *
  * @author Pedro Fuentes <git@pedrofuent.es>
  * @copyright Pedro Pablo Fuentes Schuster
@@ -32,46 +32,40 @@ import type {
 } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
 
-import type { GlobalSettings, ReleaseMonitorSettings } from "../types";
-import { parseRepoIdentifier } from "../utils/github";
-import { formatRelativeTime } from "../utils/github-api";
+import type { GlobalSettings, ProjectsBoardSettings, ProjectsV2Data } from "../types";
+import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { coordinator } from "../utils/graphql-query-coordinator";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
-import { renderReleaseImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
+import { renderProjectsBoardImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
 import { PollingCoordinator } from "../utils/polling-coordinator";
 import type { JsonValue } from "@elgato/utils";
 
-const DEFAULT_REFRESH_INTERVAL = 300;
-const MIN_REFRESH_INTERVAL = 30;
+const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
+const MIN_REFRESH_INTERVAL = 30; // 30 seconds minimum
 const MARQUEE_INTERVAL_MS = 500;
 const LINE1_MAX_VISIBLE = 14;
-const LINE2_MAX_VISIBLE = 16;
 
 /** Cached render data and marquee state per action instance. */
-interface ReleaseMarqueeData {
+interface ProjectsMarqueeData {
 	line1: MarqueeController;
-	line2: MarqueeController;
 	timer: ReturnType<typeof setInterval> | null;
-	repoName: string;
-	tagName: string;
-	detail: string;
+	projects: ProjectsV2Data["projects"];
 }
 
-@action({ UUID: "com.pedrofuentes.github-utilities.release-monitor" })
-export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings> {
+@action({ UUID: "com.pedrofuentes.github-utilities.projects-board" })
+export class ProjectsBoardAction extends SingletonAction<ProjectsBoardSettings> {
 	private polling = new PollingCoordinator();
-	private actionSettings = new Map<string, ReleaseMonitorSettings>();
-	private lastUrl = new Map<string, string>();
-	private marqueeData = new Map<string, ReleaseMarqueeData>();
+	private actionSettings = new Map<string, ProjectsBoardSettings>();
+	private marqueeData = new Map<string, ProjectsMarqueeData>();
 	private recentSetSettings = new Set<string>();
 	private lastKeyUpTime = new Map<string, number>();
 
 	/** Cached action contexts for O(1) lookup */
-	private actionContexts = new Map<string, Action<ReleaseMonitorSettings>>();
+	private actionContexts = new Map<string, Action<ProjectsBoardSettings>>();
 
-	override async onWillAppear(ev: WillAppearEvent<ReleaseMonitorSettings>): Promise<void> {
+	override async onWillAppear(ev: WillAppearEvent<ProjectsBoardSettings>): Promise<void> {
 		this.actionContexts.set(ev.action.id, ev.action);
 		const settings = ev.payload.settings;
 		this.actionSettings.set(ev.action.id, settings);
@@ -84,7 +78,7 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 				return;
 			}
 
-			await ev.action.setImage(renderAnimatedSpinner());
+			await ev.action.setImage(renderAnimatedSpinner("#3FB950"));
 			await ev.action.setTitle("");
 		}
 
@@ -104,30 +98,28 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 			coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: settings.repo,
-				fragments: ["latestRelease"],
+				fragments: ["projectsV2"],
 				maxAgeSec: intervalSec,
-				params: { includePreReleases: settings.includePreReleases ?? false },
 			});
 		}
 
-		this.polling.start(ev.action.id, () => this.refreshRelease(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
+		this.polling.start(ev.action.id, () => this.refreshData(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
-		await this.refreshRelease(ev.action.id);
+		await this.refreshData(ev.action.id);
 	}
 
-	override onWillDisappear(ev: WillDisappearEvent<ReleaseMonitorSettings>): void {
+	override onWillDisappear(ev: WillDisappearEvent<ProjectsBoardSettings>): void {
 		this.polling.stop(ev.action.id);
 		coordinator.unsubscribe(ev.action.id);
 		this.stopMarquee(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
-		this.lastUrl.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
 		this.recentSetSettings.delete(ev.action.id);
 		this.lastKeyUpTime.delete(ev.action.id);
 		this.actionContexts.delete(ev.action.id);
 	}
 
-	override async onKeyDown(ev: KeyDownEvent<ReleaseMonitorSettings>): Promise<void> {
+	override async onKeyDown(ev: KeyDownEvent<ProjectsBoardSettings>): Promise<void> {
 		// Double-click detection → force refresh
 		const now = Date.now();
 		const lastUp = this.lastKeyUpTime.get(ev.action.id) ?? 0;
@@ -135,7 +127,7 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 		if (now - lastUp < 400) {
 			this.lastKeyUpTime.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
-			await this.refreshRelease(ev.action.id, true);
+			await this.forceRefresh(ev.action.id);
 			return;
 		}
 
@@ -144,83 +136,42 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 		const repo = cached?.repo ?? settings.repo;
 		if (!repo) return;
 
-		const url = this.lastUrl.get(ev.action.id);
-		if (url) {
-			await streamDeck.system.openUrl(url);
-		} else {
-			const parsed = parseRepoIdentifier(repo);
-			if (parsed) {
-				await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/releases`);
-			}
+		const parsed = parseRepoIdentifier(repo);
+		if (parsed) {
+			await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/projects`);
 		}
 	}
 
-	/**
-	 * Called when the user rotates the dial (Stream Deck+).
-	 * Toggles includePreReleases setting.
-	 */
-	override async onDialRotate(ev: DialRotateEvent<ReleaseMonitorSettings>): Promise<void> {
-		const cached = this.actionSettings.get(ev.action.id);
-		const settings = cached ?? ev.payload.settings;
-		const current = settings.includePreReleases === true;
-
-		const newSettings: ReleaseMonitorSettings = { ...settings, includePreReleases: !current };
-		this.recentSetSettings.add(ev.action.id);
-		await ev.action.setSettings(newSettings);
-		this.actionSettings.set(ev.action.id, newSettings);
-
-		if (newSettings.repo) {
-			coordinator.subscribe({
-				actionId: ev.action.id,
-				repo: newSettings.repo,
-				fragments: ["latestRelease"],
-				maxAgeSec: newSettings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL,
-				params: { includePreReleases: !current },
-			});
-		}
-
-		this.polling.resetBackoff(ev.action.id);
-		await this.refreshRelease(ev.action.id, true);
-	}
-
-	/**
-	 * Called when the user presses the dial (Stream Deck+).
-	 * Opens the release page on GitHub.
-	 */
-	override async onDialDown(ev: DialDownEvent<ReleaseMonitorSettings>): Promise<void> {
+	/** Opens the projects page on dial press (Stream Deck+). */
+	override async onDialDown(ev: DialDownEvent<ProjectsBoardSettings>): Promise<void> {
 		const cached = this.actionSettings.get(ev.action.id);
 		const settings = cached ?? ev.payload.settings;
 		const repo = settings.repo;
 		if (!repo) return;
 
-		const url = this.lastUrl.get(ev.action.id);
-		if (url) {
-			await streamDeck.system.openUrl(url);
-		} else {
-			const parsed = parseRepoIdentifier(repo);
-			if (parsed) {
-				await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/releases`);
-			}
+		const parsed = parseRepoIdentifier(repo);
+		if (parsed) {
+			await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/projects`);
 		}
 	}
 
-	/**
-	 * Called when the user releases the dial (Stream Deck+).
-	 */
-	override async onDialUp(_ev: DialUpEvent<ReleaseMonitorSettings>): Promise<void> {
+	override async onDialUp(_ev: DialUpEvent<ProjectsBoardSettings>): Promise<void> {
 		// No action needed on release
 	}
 
-	/**
-	 * Called when the user taps the touch strip (Stream Deck+).
-	 * Forces a data refresh.
-	 */
-	override async onTouchTap(ev: TouchTapEvent<ReleaseMonitorSettings>): Promise<void> {
+	/** Forces a data refresh on dial rotate (Stream Deck+). */
+	override async onDialRotate(ev: DialRotateEvent<ProjectsBoardSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshRelease(ev.action.id, true);
+		await this.refreshData(ev.action.id);
 	}
 
-	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, ReleaseMonitorSettings>): Promise<void> {
+	/** Forces a data refresh on touch strip tap (Stream Deck+). */
+	override async onTouchTap(ev: TouchTapEvent<ProjectsBoardSettings>): Promise<void> {
+		this.polling.resetBackoff(ev.action.id);
+		await this.refreshData(ev.action.id);
+	}
+
+	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, ProjectsBoardSettings>): Promise<void> {
 		try {
 			const data = ev.payload as PIDataRequest;
 			const event = data?.event;
@@ -228,11 +179,11 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 			await handlePIDataRequest(event, () => ev.action.getSettings());
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : "Unknown error";
-			streamDeck.logger.error(`ReleaseMonitor onSendToPlugin error: ${message}`);
+			streamDeck.logger.error(`ProjectsBoard onSendToPlugin error: ${message}`);
 		}
 	}
 
-	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<ReleaseMonitorSettings>): Promise<void> {
+	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<ProjectsBoardSettings>): Promise<void> {
 		const incoming = ev.payload.settings;
 
 		if (this.recentSetSettings.delete(ev.action.id)) {
@@ -241,9 +192,9 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 		}
 
 		const cached = this.actionSettings.get(ev.action.id);
-		const settings: ReleaseMonitorSettings = { ...cached, ...incoming };
+		const settings: ProjectsBoardSettings = { ...cached, ...incoming };
 
-		if (settings.repo && settings.refreshInterval === undefined) {
+		if (settings.repo && !settings.refreshInterval) {
 			settings.refreshInterval = 300;
 		}
 
@@ -259,7 +210,7 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 				return;
 			}
 
-			await ev.action.setImage(renderAnimatedSpinner());
+			await ev.action.setImage(renderAnimatedSpinner("#3FB950"));
 			await ev.action.setTitle("");
 		}
 
@@ -281,18 +232,17 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 			coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: settings.repo,
-				fragments: ["latestRelease"],
+				fragments: ["projectsV2"],
 				maxAgeSec: intervalSec,
-				params: { includePreReleases: settings.includePreReleases ?? false },
 			});
 		}
 
-		this.polling.restart(ev.action.id, () => this.refreshRelease(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
+		this.polling.restart(ev.action.id, () => this.refreshData(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
-		await this.refreshRelease(ev.action.id);
+		await this.refreshData(ev.action.id);
 	}
 
-	private async refreshRelease(actionId: string, force = false): Promise<void> {
+	private async refreshData(actionId: string): Promise<void> {
 		const settings = this.actionSettings.get(actionId);
 		if (!settings?.repo) return;
 
@@ -325,56 +275,40 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 				return;
 			}
 
-			const result = force
-				? await coordinator.invalidateAndFetch(actionId, token)
-				: await coordinator.fetchData(actionId, token);
+			const result = await coordinator.fetchData(actionId, token);
+			const projectsData = result.projectsV2;
 
 			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
 
-			if (result.errors?.latestRelease && result.latestRelease === undefined) {
-				throw new Error(result.errors.latestRelease);
-			}
-
-			const release = result.latestRelease ?? null;
-
-			if (!release) {
-				if (actionContext.isKey()) {
-					await actionContext.setImage(renderReleaseImage("None", "No Releases", parsed.repo));
-					await actionContext.setTitle("");
-				}
-				if (isDial) await actionContext.setFeedback({ canvas: renderStatStrip("None", "releases", undefined, parsed.repo) });
-				this.lastUrl.set(actionId, `https://github.com/${parsed.owner}/${parsed.repo}/releases`);
-				return;
-			}
-
-			const tag = release.tag_name || "unknown";
-			let detail = formatRelativeTime(release.published_at);
-			if (release.prerelease) {
-				detail = detail ? `Pre · ${detail}` : "Pre-release";
-			}
+			const projects = projectsData?.projects ?? [];
 
 			const md = this.getOrCreateMarquee(actionId);
-			md.line1.setText(parsed.repo);
-			md.line2.setText(tag);
-			md.repoName = parsed.repo;
-			md.tagName = tag;
-			md.detail = detail;
+			md.projects = projects;
+
+			// Set marquee text for the line that might scroll
+			if (projects.length === 1) {
+				md.line1.setText(`${projects[0].totalItems} items`);
+			} else if (projects.length > 1) {
+				md.line1.setText(projects[0].title);
+			} else {
+				md.line1.setText("");
+			}
 
 			await this.renderWithMarquee(actionId);
 			this.updateMarqueeTimer(actionId);
 
 			if (isDial) {
+				const displayCount = formatCount(projects.length);
 				await actionContext.setFeedback({
-					canvas: renderStatStrip(tag, "releases", undefined, parsed.repo, settings.includePreReleases ? "pre" : undefined),
+					canvas: renderStatStrip(displayCount, "projects", undefined, parsed.repo, "projects"),
 				});
 			}
 
 			this.polling.reportSuccess(actionId);
-			this.lastUrl.set(actionId, release.html_url || `https://github.com/${parsed.owner}/${parsed.repo}/releases`);
-			streamDeck.logger.debug(`Release updated: ${settings.repo} tag=${tag}`);
+			streamDeck.logger.debug(`Projects updated: ${settings.repo} count=${projects.length}`);
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : "Unknown error";
-			streamDeck.logger.error(`Failed to fetch release for ${settings.repo}: ${message}`);
+			streamDeck.logger.error(`Failed to fetch projects for ${settings.repo}: ${message}`);
 			this.stopMarquee(actionId);
 
 			let errorLabel = "Error";
@@ -392,16 +326,33 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 		}
 	}
 
-	private getOrCreateMarquee(actionId: string): ReleaseMarqueeData {
+	private async forceRefresh(actionId: string): Promise<void> {
+		const settings = this.actionSettings.get(actionId);
+		if (!settings?.repo) return;
+
+		const actionContext = this.actionContexts.get(actionId);
+		if (!actionContext) return;
+
+		try {
+			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+			const token = globalSettings.githubToken;
+			if (!token) return;
+
+			await coordinator.invalidateAndFetch(actionId, token);
+		} catch {
+			// Errors will be handled in refreshData's catch block on next poll
+		}
+
+		await this.refreshData(actionId);
+	}
+
+	private getOrCreateMarquee(actionId: string): ProjectsMarqueeData {
 		let md = this.marqueeData.get(actionId);
 		if (!md) {
 			md = {
 				line1: new MarqueeController(LINE1_MAX_VISIBLE),
-				line2: new MarqueeController(LINE2_MAX_VISIBLE),
 				timer: null,
-				repoName: "",
-				tagName: "",
-				detail: "",
+				projects: [],
 			};
 			this.marqueeData.set(actionId, md);
 		}
@@ -413,14 +364,7 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 		const actionContext = this.actionContexts.get(actionId);
 		if (!md || !actionContext?.isKey()) return;
 
-		const displayName = md.line1.needsAnimation()
-			? md.line1.getCurrentText()
-			: md.repoName;
-		const displayTag = md.line2.needsAnimation()
-			? md.line2.getCurrentText()
-			: md.tagName;
-
-		await actionContext.setImage(renderReleaseImage(displayTag, md.detail, displayName));
+		await actionContext.setImage(renderProjectsBoardImage(md.projects));
 		await actionContext.setTitle("");
 	}
 
@@ -428,13 +372,12 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 		const md = this.marqueeData.get(actionId);
 		if (!md) return;
 
-		const needsAnimation = md.line1.needsAnimation() || md.line2.needsAnimation();
+		const needsAnimation = md.line1.needsAnimation();
 
 		if (needsAnimation && !md.timer) {
 			md.timer = setInterval(() => {
-				const changed1 = md.line1.tick();
-				const changed2 = md.line2.tick();
-				if (changed1 || changed2) {
+				const changed = md.line1.tick();
+				if (changed) {
 					this.renderWithMarquee(actionId).catch(() => {});
 				}
 			}, MARQUEE_INTERVAL_MS);
