@@ -103,6 +103,9 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	/** Cached action contexts for O(1) lookup */
 	private actionContexts = new Map<string, Action<WorkflowStatusSettings>>();
 
+	/** Tracked dispatch retry timeouts for cleanup */
+	private dispatchTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+
 	/**
 	 * Called when the action becomes visible on the Stream Deck.
 	 */
@@ -154,6 +157,11 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	 * Called when the action is no longer visible. Cleans up the timer.
 	 */
 	override onWillDisappear(ev: WillDisappearEvent<WorkflowStatusSettings>): void {
+		const dispatchTimeout = this.dispatchTimeouts.get(ev.action.id);
+		if (dispatchTimeout) {
+			clearTimeout(dispatchTimeout);
+			this.dispatchTimeouts.delete(ev.action.id);
+		}
 		this.polling.stop(ev.action.id);
 		this.stopMarquee(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
@@ -513,10 +521,12 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			}
 
 			// Refresh after a short delay to show the new run
-			setTimeout(() => {
+			const timeoutId = setTimeout(() => {
+				this.dispatchTimeouts.delete(actionId);
 				this.polling.resetBackoff(actionId);
 				this.refreshStatus(actionId, true).catch(() => { /* ignore */ });
 			}, 3000);
+			this.dispatchTimeouts.set(actionId, timeoutId);
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : "Unknown error";
 			streamDeck.logger.error(`Workflow dispatch failed: ${message}`);

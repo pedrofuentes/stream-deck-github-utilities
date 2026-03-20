@@ -40,6 +40,9 @@ interface PollingState {
 /** Maximum backoff multiplier (2^5 = 32x base interval). */
 const MAX_BACKOFF_EXPONENT = 5;
 
+/** Default upper bound for polling interval in seconds (1 hour). */
+const DEFAULT_MAX_INTERVAL_SEC = 3600;
+
 /**
  * Reusable polling coordinator with error backoff and generation guards.
  *
@@ -62,16 +65,19 @@ export class PollingCoordinator {
 	 * @param callback Async function to invoke on each tick (should handle its own errors for display)
 	 * @param intervalSec Polling interval in seconds
 	 * @param minIntervalSec Minimum interval floor (default: 15)
+	 * @param maxIntervalSec Maximum interval ceiling (default: 3600)
 	 */
 	start(
 		actionId: string,
 		callback: () => Promise<void>,
 		intervalSec: number,
 		minIntervalSec = 15,
+		maxIntervalSec = DEFAULT_MAX_INTERVAL_SEC,
 	): void {
 		this.stop(actionId);
 
-		const baseIntervalMs = Math.max(intervalSec, minIntervalSec) * 1000;
+		const sanitized = Number.isFinite(intervalSec) && intervalSec > 0 ? intervalSec : minIntervalSec;
+		const baseIntervalMs = Math.min(Math.max(sanitized, minIntervalSec), maxIntervalSec) * 1000;
 		const state: PollingState = {
 			timer: null,
 			errorCount: 0,
@@ -142,13 +148,14 @@ export class PollingCoordinator {
 	/**
 	 * Restarts polling with a new interval. Preserves error state.
 	 */
-	restart(actionId: string, callback: () => Promise<void>, intervalSec: number, minIntervalSec = 15): void {
+	restart(actionId: string, callback: () => Promise<void>, intervalSec: number, minIntervalSec = 15, maxIntervalSec = DEFAULT_MAX_INTERVAL_SEC): void {
 		const oldState = this.states.get(actionId);
 		const errorCount = oldState?.errorCount ?? 0;
 
 		this.stop(actionId);
 
-		const baseIntervalMs = Math.max(intervalSec, minIntervalSec) * 1000;
+		const sanitized = Number.isFinite(intervalSec) && intervalSec > 0 ? intervalSec : minIntervalSec;
+		const baseIntervalMs = Math.min(Math.max(sanitized, minIntervalSec), maxIntervalSec) * 1000;
 		const state: PollingState = {
 			timer: null,
 			errorCount,

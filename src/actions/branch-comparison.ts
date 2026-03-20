@@ -134,7 +134,7 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 			const base = cached?.baseBranch ?? settings.baseBranch ?? "main";
 			const head = cached?.headBranch ?? settings.headBranch ?? "develop";
 			if (parsed) {
-				await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/compare/${base}...${head}`);
+				await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`);
 			}
 		}
 	}
@@ -157,7 +157,7 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 			const base = settings.baseBranch ?? "main";
 			const head = settings.headBranch ?? "develop";
 			if (parsed) {
-				await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/compare/${base}...${head}`);
+				await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`);
 			}
 		}
 	}

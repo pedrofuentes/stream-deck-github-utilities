@@ -324,4 +324,119 @@ describe("PollingCoordinator", () => {
 			expect(callback).toHaveBeenCalledTimes(2);
 		});
 	});
+
+	// ── Interval validation & bounds ──────────────────────────────
+
+	describe("interval validation and bounds", () => {
+		it("should clamp NaN to minimum interval", () => {
+			const callback = vi.fn().mockResolvedValue(undefined);
+			coordinator.start("action-1", callback, NaN, 15);
+
+			// Should fire at 15s (minIntervalSec fallback)
+			vi.advanceTimersByTime(15_000);
+			expect(callback).toHaveBeenCalledTimes(1);
+		});
+
+		it("should clamp Infinity to maximum interval", () => {
+			const callback = vi.fn().mockResolvedValue(undefined);
+			coordinator.start("action-1", callback, Infinity, 15);
+
+			// Infinity is not finite, so sanitized → minIntervalSec (15)
+			vi.advanceTimersByTime(15_000);
+			expect(callback).toHaveBeenCalledTimes(1);
+		});
+
+		it("should clamp negative Infinity to minimum interval", () => {
+			const callback = vi.fn().mockResolvedValue(undefined);
+			coordinator.start("action-1", callback, -Infinity, 15);
+
+			vi.advanceTimersByTime(15_000);
+			expect(callback).toHaveBeenCalledTimes(1);
+		});
+
+		it("should clamp negative values to minimum interval", () => {
+			const callback = vi.fn().mockResolvedValue(undefined);
+			coordinator.start("action-1", callback, -10, 15);
+
+			// -10 is not > 0, so sanitized → minIntervalSec (15)
+			vi.advanceTimersByTime(15_000);
+			expect(callback).toHaveBeenCalledTimes(1);
+		});
+
+		it("should clamp zero to minimum interval", () => {
+			const callback = vi.fn().mockResolvedValue(undefined);
+			coordinator.start("action-1", callback, 0, 15);
+
+			// 0 is not > 0, so sanitized → minIntervalSec (15)
+			vi.advanceTimersByTime(15_000);
+			expect(callback).toHaveBeenCalledTimes(1);
+		});
+
+		it("should clamp very large values to max interval (3600s)", () => {
+			const callback = vi.fn().mockResolvedValue(undefined);
+			coordinator.start("action-1", callback, 7200);
+
+			// Should be clamped to 3600s
+			expect(coordinator.getEffectiveIntervalMs("action-1")).toBe(3_600_000);
+
+			vi.advanceTimersByTime(3_600_000);
+			expect(callback).toHaveBeenCalledTimes(1);
+		});
+
+		it("should allow exactly 3600s (max default)", () => {
+			const callback = vi.fn().mockResolvedValue(undefined);
+			coordinator.start("action-1", callback, 3600);
+
+			expect(coordinator.getEffectiveIntervalMs("action-1")).toBe(3_600_000);
+
+			vi.advanceTimersByTime(3_600_000);
+			expect(callback).toHaveBeenCalledTimes(1);
+		});
+
+		it("should clamp just over 3600s to 3600s", () => {
+			const callback = vi.fn().mockResolvedValue(undefined);
+			coordinator.start("action-1", callback, 3601);
+
+			expect(coordinator.getEffectiveIntervalMs("action-1")).toBe(3_600_000);
+		});
+
+		it("should allow normal values within bounds", () => {
+			const callback = vi.fn().mockResolvedValue(undefined);
+			coordinator.start("action-1", callback, 120);
+
+			expect(coordinator.getEffectiveIntervalMs("action-1")).toBe(120_000);
+
+			vi.advanceTimersByTime(120_000);
+			expect(callback).toHaveBeenCalledTimes(1);
+		});
+
+		it("should allow custom maxIntervalSec", () => {
+			const callback = vi.fn().mockResolvedValue(undefined);
+			coordinator.start("action-1", callback, 500, 15, 300);
+
+			// 500 clamped to custom max of 300
+			expect(coordinator.getEffectiveIntervalMs("action-1")).toBe(300_000);
+		});
+
+		it("should apply the same sanitization in restart()", () => {
+			const callback = vi.fn().mockResolvedValue(undefined);
+			coordinator.start("action-1", callback, 60);
+
+			// Restart with NaN — should fall back to min
+			coordinator.restart("action-1", callback, NaN, 15);
+			expect(coordinator.getEffectiveIntervalMs("action-1")).toBe(15_000);
+
+			// Restart with very large — should clamp to max
+			coordinator.restart("action-1", callback, 7200, 15);
+			expect(coordinator.getEffectiveIntervalMs("action-1")).toBe(3_600_000);
+
+			// Restart with negative — should fall back to min
+			coordinator.restart("action-1", callback, -5, 15);
+			expect(coordinator.getEffectiveIntervalMs("action-1")).toBe(15_000);
+
+			// Restart with Infinity — should fall back to min
+			coordinator.restart("action-1", callback, Infinity, 15);
+			expect(coordinator.getEffectiveIntervalMs("action-1")).toBe(15_000);
+		});
+	});
 });

@@ -50,6 +50,7 @@ export class ContributionHeatmapAction extends SingletonAction<ContributionHeatm
 	private actionSettings = new Map<string, ContributionHeatmapSettings>();
 	/** Cached action contexts for O(1) lookup */
 	private actionContexts = new Map<string, Action<ContributionHeatmapSettings>>();
+	private retryTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 	private renderTimeout: ReturnType<typeof setTimeout> | null = null;
 	private lastUrl = new Map<string, string>();
 	/** Cached weekly data per action for rendering */
@@ -124,6 +125,11 @@ export class ContributionHeatmapAction extends SingletonAction<ContributionHeatm
 
 	override onWillDisappear(ev: WillDisappearEvent<ContributionHeatmapSettings>): void {
 		const scrollKey = this.getScrollKey(this.actionSettings.get(ev.action.id));
+		const retryTimeout = this.retryTimeouts.get(ev.action.id);
+		if (retryTimeout) {
+			clearTimeout(retryTimeout);
+			this.retryTimeouts.delete(ev.action.id);
+		}
 		this.polling.stop(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.actionContexts.delete(ev.action.id);

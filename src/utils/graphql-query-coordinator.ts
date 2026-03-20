@@ -336,6 +336,8 @@ export class GraphQLQueryCoordinator {
 			case "projectsV2":
 				this.cache.set(repo, "projectsV2", extractProjectsV2(node), "graphql");
 				break;
+			default:
+				break;
 		}
 	}
 
@@ -415,6 +417,10 @@ export class GraphQLQueryCoordinator {
 				case "projectsV2":
 				case "reviewRequestedPRs":
 					break;
+				default: {
+					const _exhaustiveCheck: never = fragment;
+					throw new Error(`Unhandled fragment type: ${_exhaustiveCheck}`);
+				}
 			}
 		} catch (err) {
 			// REST also failed — stale cache data (if any) will be used as fallback
@@ -537,6 +543,10 @@ export class GraphQLQueryCoordinator {
 			case "projectsV2":
 				result.projectsV2 = data as CoordinatorResult["projectsV2"];
 				break;
+			default: {
+				const _exhaustiveCheck: never = fragment;
+				throw new Error(`Unhandled fragment type: ${_exhaustiveCheck}`);
+			}
 		}
 	}
 }
