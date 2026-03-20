@@ -15,13 +15,10 @@
 
 import {
 	action,
-	type Action,
 	KeyDownEvent,
-	SingletonAction,
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
-	type SendToPluginEvent,
 } from "@elgato/streamdeck";
 import type {
 	DialDownEvent,
@@ -30,17 +27,14 @@ import type {
 } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
 
+import { BaseGitHubAction } from "./base-github-action";
 import type { GlobalSettings, BranchComparisonSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
 import { classifyErrorLabel } from "../utils/github-api";
 import { coordinator } from "../utils/graphql-query-coordinator";
-import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderBranchComparisonImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage, COLORS } from "../utils/button-renderer";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
-import { PollingCoordinator } from "../utils/polling-coordinator";
-import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
-import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300;
 const MIN_REFRESH_INTERVAL = 30;
@@ -48,14 +42,9 @@ const MARQUEE_INTERVAL_MS = 500;
 const LINE1_MAX_VISIBLE = 14;
 
 @action({ UUID: "com.pedrofuentes.github-utilities.branch-comparison" })
-export class BranchComparisonAction extends SingletonAction<BranchComparisonSettings> {
-	private polling = new PollingCoordinator();
-	private actionSettings = new Map<string, BranchComparisonSettings>();
+export class BranchComparisonAction extends BaseGitHubAction<BranchComparisonSettings> {
 	private lastUrl = new Map<string, string>();
 	private marqueeData = new Map<string, BranchMarqueeData>();
-	private urlOpener = new DebouncedUrlOpener();
-	/** Cached action contexts for O(1) lookup */
-	private actionContexts = new Map<string, Action<BranchComparisonSettings>>();
 
 	override async onWillAppear(ev: WillAppearEvent<BranchComparisonSettings>): Promise<void> {
 		this.actionContexts.set(ev.action.id, ev.action);
@@ -101,14 +90,10 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<BranchComparisonSettings>): void {
-		this.polling.stop(ev.action.id);
+		super.onWillDisappear(ev);
 		this.stopMarquee(ev.action.id);
-		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
-		this.urlOpener.cleanup(ev.action.id);
-		this.actionContexts.delete(ev.action.id);
-		coordinator.unsubscribe(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<BranchComparisonSettings>): Promise<void> {
@@ -178,18 +163,6 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 	override async onTouchTap(ev: TouchTapEvent<BranchComparisonSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
 		await this.refreshComparison(ev.action.id, true);
-	}
-
-	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, BranchComparisonSettings>): Promise<void> {
-		try {
-			const data = ev.payload as PIDataRequest;
-			const event = data?.event;
-			if (!event || typeof event !== "string") return;
-			await handlePIDataRequest(event, () => ev.action.getSettings());
-		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			streamDeck.logger.error(`BranchComparison onSendToPlugin error: ${message}`);
-		}
 	}
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<BranchComparisonSettings>): Promise<void> {

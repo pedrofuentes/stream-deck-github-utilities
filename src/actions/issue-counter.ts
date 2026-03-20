@@ -16,12 +16,9 @@
 import {
 	action,
 	KeyDownEvent,
-	SingletonAction,
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
-	type Action,
-	type SendToPluginEvent,
 } from "@elgato/streamdeck";
 import type {
 	DialRotateEvent,
@@ -31,17 +28,14 @@ import type {
 } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
 
+import { BaseGitHubAction } from "./base-github-action";
 import type { GlobalSettings, IssueCounterSettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { classifyErrorLabel } from "../utils/github-api";
 import { coordinator } from "../utils/graphql-query-coordinator";
-import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderIssueCountImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
-import { PollingCoordinator } from "../utils/polling-coordinator";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
-import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
-import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300;
 const MIN_REFRESH_INTERVAL = 30;
@@ -64,16 +58,10 @@ interface IssueMarqueeData {
 }
 
 @action({ UUID: "com.pedrofuentes.github-utilities.issue-counter" })
-export class IssueCounterAction extends SingletonAction<IssueCounterSettings> {
-	private polling = new PollingCoordinator();
-	private actionSettings = new Map<string, IssueCounterSettings>();
+export class IssueCounterAction extends BaseGitHubAction<IssueCounterSettings> {
 	private marqueeData = new Map<string, IssueMarqueeData>();
 	private recentSetSettings = new Set<string>();
 	private trendCache = new Map<string, number[]>();
-	private urlOpener = new DebouncedUrlOpener();
-
-	/** Cached action contexts for O(1) lookup */
-	private actionContexts = new Map<string, Action<IssueCounterSettings>>();
 
 	override async onWillAppear(ev: WillAppearEvent<IssueCounterSettings>): Promise<void> {
 		this.actionContexts.set(ev.action.id, ev.action);
@@ -120,15 +108,11 @@ export class IssueCounterAction extends SingletonAction<IssueCounterSettings> {
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<IssueCounterSettings>): void {
-		this.polling.stop(ev.action.id);
-		coordinator.unsubscribe(ev.action.id);
+		super.onWillDisappear(ev);
 		this.stopMarquee(ev.action.id);
-		this.actionSettings.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
 		this.recentSetSettings.delete(ev.action.id);
 		this.trendCache.delete(ev.action.id);
-		this.urlOpener.cleanup(ev.action.id);
-		this.actionContexts.delete(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<IssueCounterSettings>): Promise<void> {
@@ -203,18 +187,6 @@ export class IssueCounterAction extends SingletonAction<IssueCounterSettings> {
 	override async onTouchTap(ev: TouchTapEvent<IssueCounterSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
 		await this.refreshCount(ev.action.id, true);
-	}
-
-	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, IssueCounterSettings>): Promise<void> {
-		try {
-			const data = ev.payload as PIDataRequest;
-			const event = data?.event;
-			if (!event || typeof event !== "string") return;
-			await handlePIDataRequest(event, () => ev.action.getSettings());
-		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			streamDeck.logger.error(`IssueCounter onSendToPlugin error: ${message}`);
-		}
 	}
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<IssueCounterSettings>): Promise<void> {

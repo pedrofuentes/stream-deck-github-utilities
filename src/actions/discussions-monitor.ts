@@ -17,12 +17,9 @@
 import {
 	action,
 	KeyDownEvent,
-	SingletonAction,
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
-	type Action,
-	type SendToPluginEvent,
 } from "@elgato/streamdeck";
 import type {
 	DialRotateEvent,
@@ -33,16 +30,13 @@ import type {
 import streamDeck from "@elgato/streamdeck";
 
 import type { GlobalSettings, DiscussionsMonitorSettings } from "../types";
+import { BaseGitHubAction } from "./base-github-action";
 import { classifyErrorLabel } from "../utils/github-api";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { coordinator } from "../utils/graphql-query-coordinator";
-import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderDiscussionsImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
-import { PollingCoordinator } from "../utils/polling-coordinator";
-import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
-import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
 const MIN_REFRESH_INTERVAL = 30; // 30 seconds minimum
@@ -59,16 +53,10 @@ interface DiscussionsMarqueeData {
 }
 
 @action({ UUID: "com.pedrofuentes.github-utilities.discussions-monitor" })
-export class DiscussionsMonitorAction extends SingletonAction<DiscussionsMonitorSettings> {
-	private polling = new PollingCoordinator();
-	private actionSettings = new Map<string, DiscussionsMonitorSettings>();
+export class DiscussionsMonitorAction extends BaseGitHubAction<DiscussionsMonitorSettings> {
 	private marqueeData = new Map<string, DiscussionsMarqueeData>();
 	private recentSetSettings = new Set<string>();
 	private trendCache = new Map<string, number[]>();
-	private urlOpener = new DebouncedUrlOpener();
-
-	/** Cached action contexts for O(1) lookup */
-	private actionContexts = new Map<string, Action<DiscussionsMonitorSettings>>();
 
 	override async onWillAppear(ev: WillAppearEvent<DiscussionsMonitorSettings>): Promise<void> {
 		this.actionContexts.set(ev.action.id, ev.action);
@@ -114,15 +102,11 @@ export class DiscussionsMonitorAction extends SingletonAction<DiscussionsMonitor
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<DiscussionsMonitorSettings>): void {
-		this.polling.stop(ev.action.id);
-		coordinator.unsubscribe(ev.action.id);
+		super.onWillDisappear(ev);
 		this.stopMarquee(ev.action.id);
-		this.actionSettings.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
 		this.recentSetSettings.delete(ev.action.id);
 		this.trendCache.delete(ev.action.id);
-		this.urlOpener.cleanup(ev.action.id);
-		this.actionContexts.delete(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<DiscussionsMonitorSettings>): Promise<void> {
@@ -183,18 +167,6 @@ export class DiscussionsMonitorAction extends SingletonAction<DiscussionsMonitor
 	override async onTouchTap(ev: TouchTapEvent<DiscussionsMonitorSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
 		await this.refreshCount(ev.action.id, true);
-	}
-
-	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, DiscussionsMonitorSettings>): Promise<void> {
-		try {
-			const data = ev.payload as PIDataRequest;
-			const event = data?.event;
-			if (!event || typeof event !== "string") return;
-			await handlePIDataRequest(event, () => ev.action.getSettings());
-		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			streamDeck.logger.error(`DiscussionsMonitor onSendToPlugin error: ${message}`);
-		}
 	}
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<DiscussionsMonitorSettings>): Promise<void> {

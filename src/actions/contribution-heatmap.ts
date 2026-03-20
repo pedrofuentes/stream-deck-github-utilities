@@ -12,12 +12,9 @@
 
 import {
 	action,
-	SingletonAction,
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
-	type Action,
-	type SendToPluginEvent,
 	type DialRotateEvent,
 	type DialDownEvent,
 	type TouchTapEvent,
@@ -25,13 +22,11 @@ import {
 import streamDeck from "@elgato/streamdeck";
 
 import type { GlobalSettings, ContributionHeatmapSettings } from "../types";
+import { BaseGitHubAction } from "./base-github-action";
 import { parseRepoIdentifier } from "../utils/github";
 import { classifyErrorLabel, fetchCommitActivityWeeks } from "../utils/github-api";
 import { fetchContributionCalendar, calendarToWeeklyData } from "../utils/github-graphql";
-import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderHeatmapStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
-import { PollingCoordinator } from "../utils/polling-coordinator";
-import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300;
 const MIN_REFRESH_INTERVAL = 30;
@@ -45,11 +40,7 @@ function reorderDays(apiDays: number[]): number[] {
 }
 
 @action({ UUID: "com.pedrofuentes.github-utilities.contribution-heatmap" })
-export class ContributionHeatmapAction extends SingletonAction<ContributionHeatmapSettings> {
-	private polling = new PollingCoordinator();
-	private actionSettings = new Map<string, ContributionHeatmapSettings>();
-	/** Cached action contexts for O(1) lookup */
-	private actionContexts = new Map<string, Action<ContributionHeatmapSettings>>();
+export class ContributionHeatmapAction extends BaseGitHubAction<ContributionHeatmapSettings> {
 	private retryTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 	private renderTimeout: ReturnType<typeof setTimeout> | null = null;
 	private lastUrl = new Map<string, string>();
@@ -130,9 +121,8 @@ export class ContributionHeatmapAction extends SingletonAction<ContributionHeatm
 			clearTimeout(retryTimeout);
 			this.retryTimeouts.delete(ev.action.id);
 		}
-		this.polling.stop(ev.action.id);
-		this.actionSettings.delete(ev.action.id);
-		this.actionContexts.delete(ev.action.id);
+		// Note: must happen BEFORE super.onWillDisappear which deletes actionSettings/actionContexts
+		super.onWillDisappear(ev);
 		this.lastUrl.delete(ev.action.id);
 		this.weeklyCache.delete(ev.action.id);
 		this.totalCommitsCache.delete(ev.action.id);
@@ -172,18 +162,6 @@ export class ContributionHeatmapAction extends SingletonAction<ContributionHeatm
 		}
 		this.polling.resetBackoff(ev.action.id);
 		await this.refreshHeatmap(ev.action.id);
-	}
-
-	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, ContributionHeatmapSettings>): Promise<void> {
-		try {
-			const data = ev.payload as PIDataRequest;
-			const event = data?.event;
-			if (!event || typeof event !== "string") return;
-			await handlePIDataRequest(event, () => ev.action.getSettings());
-		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			streamDeck.logger.error(`ContributionHeatmap onSendToPlugin error: ${message}`);
-		}
 	}
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<ContributionHeatmapSettings>): Promise<void> {

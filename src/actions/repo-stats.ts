@@ -17,12 +17,9 @@ import {
 	action,
 	KeyDownEvent,
 	KeyUpEvent,
-	SingletonAction,
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
-	type Action,
-	type SendToPluginEvent,
 } from "@elgato/streamdeck";
 import type {
 	DialRotateEvent,
@@ -32,17 +29,14 @@ import type {
 } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
 
+import { BaseGitHubAction } from "./base-github-action";
 import type { GlobalSettings, RepoStatsSettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { classifyErrorLabel, getStatDisplay, getStatUrl, STAT_TYPES, type StatType } from "../utils/github-api";
 import { coordinator } from "../utils/graphql-query-coordinator";
-import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderStatImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
-import { PollingCoordinator } from "../utils/polling-coordinator";
-import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
-import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
 const MIN_REFRESH_INTERVAL = 30; // 30 seconds minimum
@@ -63,21 +57,12 @@ interface MarqueeData {
 }
 
 @action({ UUID: "com.pedrofuentes.github-utilities.repo-stats" })
-export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
-	/** Centralized polling coordinator with error backoff */
-	private polling = new PollingCoordinator();
-
-	/** Last known settings per action instance (for timer management) */
-	private actionSettings = new Map<string, RepoStatsSettings>();
-
+export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 	/** Last resolved URL per action instance (opened on long press) */
 	private lastUrl = new Map<string, string>();
 
 	/** Timestamp when key was pressed down (for long/short press detection) */
 	private keyDownTime = new Map<string, number>();
-
-	/** Debounced URL opener for double-click detection */
-	private urlOpener = new DebouncedUrlOpener();
 
 	/** Marquee scroll state per action instance */
 	private marqueeData = new Map<string, MarqueeData>();
@@ -91,9 +76,6 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 
 	/** Sparkline trend cache per action instance (last N stat values) */
 	private trendCache = new Map<string, number[]>();
-
-	/** Cached action contexts for O(1) lookup */
-	private actionContexts = new Map<string, Action<RepoStatsSettings>>();
 
 	/**
 	 * Called when the action becomes visible on the Stream Deck.
@@ -146,17 +128,13 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	 * Called when the action is no longer visible. Cleans up the timer.
 	 */
 	override onWillDisappear(ev: WillDisappearEvent<RepoStatsSettings>): void {
-		coordinator.unsubscribe(ev.action.id);
-		this.polling.stop(ev.action.id);
+		super.onWillDisappear(ev);
 		this.stopMarquee(ev.action.id);
-		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.keyDownTime.delete(ev.action.id);
-		this.urlOpener.cleanup(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
 		this.recentSetSettings.delete(ev.action.id);
 		this.trendCache.delete(ev.action.id);
-		this.actionContexts.delete(ev.action.id);
 	}
 
 	/**
@@ -223,26 +201,6 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 				this.polling.resetBackoff(ev.action.id);
 				await this.refreshStats(ev.action.id);
 			});
-		}
-	}
-
-	/**
-	 * Handles messages from the Property Inspector (datasource requests).
-	 */
-	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, RepoStatsSettings>): Promise<void> {
-		try {
-			const data = ev.payload as PIDataRequest;
-			const event = data?.event;
-
-			if (!event || typeof event !== "string") {
-				streamDeck.logger.debug(`RepoStats: received sendToPlugin without event: ${JSON.stringify(ev.payload)}`);
-				return;
-			}
-
-			await handlePIDataRequest(event, () => ev.action.getSettings());
-		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			streamDeck.logger.error(`RepoStats onSendToPlugin error: ${message}`);
 		}
 	}
 

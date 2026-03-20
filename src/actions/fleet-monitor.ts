@@ -18,13 +18,9 @@
 
 import {
 	action,
-	type Action,
 	KeyDownEvent,
-	SingletonAction,
 	WillAppearEvent,
-	WillDisappearEvent,
 	DidReceiveSettingsEvent,
-	type SendToPluginEvent,
 	type DialRotateEvent,
 	type DialDownEvent,
 	type TouchTapEvent,
@@ -39,24 +35,15 @@ import {
 	getWorkflowStatusLabel,
 } from "../utils/github-api";
 import { coordinator } from "../utils/graphql-query-coordinator";
-import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderKeyImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage, getWorkflowStatusColor } from "../utils/button-renderer";
 import { renderFleetStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
-import { PollingCoordinator } from "../utils/polling-coordinator";
-import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
-import type { JsonValue } from "@elgato/utils";
+import { BaseGitHubAction } from "./base-github-action";
 
 const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
 const MIN_REFRESH_INTERVAL = 15; // 15 seconds minimum
 
 @action({ UUID: "com.pedrofuentes.github-utilities.fleet-monitor" })
-export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
-	private polling = new PollingCoordinator();
-	private actionSettings = new Map<string, FleetMonitorSettings>();
-	private urlOpener = new DebouncedUrlOpener();
-	/** Cached action contexts for O(1) lookup */
-	private actionContexts = new Map<string, Action<FleetMonitorSettings>>();
-
+export class FleetMonitorAction extends BaseGitHubAction<FleetMonitorSettings> {
 	override async onWillAppear(ev: WillAppearEvent<FleetMonitorSettings>): Promise<void> {
 		this.actionContexts.set(ev.action.id, ev.action);
 		const settings = ev.payload.settings;
@@ -94,14 +81,6 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 		this.polling.start(ev.action.id, () => this.refreshFleet(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshFleet(ev.action.id);
-	}
-
-	override onWillDisappear(ev: WillDisappearEvent<FleetMonitorSettings>): void {
-		this.polling.stop(ev.action.id);
-		coordinator.unsubscribe(ev.action.id);
-		this.actionSettings.delete(ev.action.id);
-		this.urlOpener.cleanup(ev.action.id);
-		this.actionContexts.delete(ev.action.id);
 	}
 
 	/**
@@ -163,18 +142,6 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 	override async onTouchTap(ev: TouchTapEvent<FleetMonitorSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
 		await this.refreshFleet(ev.action.id, true);
-	}
-
-	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, FleetMonitorSettings>): Promise<void> {
-		try {
-			const data = ev.payload as PIDataRequest;
-			const event = data?.event;
-			if (!event || typeof event !== "string") return;
-			await handlePIDataRequest(event, () => ev.action.getSettings());
-		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			streamDeck.logger.error(`FleetMonitor onSendToPlugin error: ${message}`);
-		}
 	}
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<FleetMonitorSettings>): Promise<void> {

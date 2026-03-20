@@ -17,12 +17,9 @@
 import {
 	action,
 	KeyDownEvent,
-	SingletonAction,
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
-	type Action,
-	type SendToPluginEvent,
 } from "@elgato/streamdeck";
 import type {
 	DialRotateEvent,
@@ -36,13 +33,10 @@ import type { GlobalSettings, CommitActivitySettings } from "../types";
 import { classifyErrorLabel } from "../utils/github-api";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { coordinator } from "../utils/graphql-query-coordinator";
-import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderCommitActivityImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
-import { PollingCoordinator } from "../utils/polling-coordinator";
-import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
-import type { JsonValue } from "@elgato/utils";
+import { BaseGitHubAction } from "./base-github-action";
 
 const DEFAULT_REFRESH_INTERVAL = 300;
 const MIN_REFRESH_INTERVAL = 30;
@@ -64,15 +58,9 @@ interface CommitMarqueeData {
 }
 
 @action({ UUID: "com.pedrofuentes.github-utilities.commit-activity" })
-export class CommitActivityAction extends SingletonAction<CommitActivitySettings> {
-	private polling = new PollingCoordinator();
-	private actionSettings = new Map<string, CommitActivitySettings>();
+export class CommitActivityAction extends BaseGitHubAction<CommitActivitySettings> {
 	private marqueeData = new Map<string, CommitMarqueeData>();
 	private recentSetSettings = new Set<string>();
-	private urlOpener = new DebouncedUrlOpener();
-
-	/** Cached action contexts for O(1) lookup */
-	private actionContexts = new Map<string, Action<CommitActivitySettings>>();
 
 	override async onWillAppear(ev: WillAppearEvent<CommitActivitySettings>): Promise<void> {
 		this.actionContexts.set(ev.action.id, ev.action);
@@ -115,14 +103,10 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<CommitActivitySettings>): void {
-		this.polling.stop(ev.action.id);
+		super.onWillDisappear(ev);
 		this.stopMarquee(ev.action.id);
-		this.actionSettings.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
 		this.recentSetSettings.delete(ev.action.id);
-		this.urlOpener.cleanup(ev.action.id);
-		this.actionContexts.delete(ev.action.id);
-		coordinator.unsubscribe(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<CommitActivitySettings>): Promise<void> {
@@ -197,18 +181,6 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 	override async onTouchTap(ev: TouchTapEvent<CommitActivitySettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
 		await this.refreshActivity(ev.action.id, true);
-	}
-
-	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, CommitActivitySettings>): Promise<void> {
-		try {
-			const data = ev.payload as PIDataRequest;
-			const event = data?.event;
-			if (!event || typeof event !== "string") return;
-			await handlePIDataRequest(event, () => ev.action.getSettings());
-		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			streamDeck.logger.error(`CommitActivity onSendToPlugin error: ${message}`);
-		}
 	}
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<CommitActivitySettings>): Promise<void> {

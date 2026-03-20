@@ -12,12 +12,9 @@
 
 import {
 	action,
-	SingletonAction,
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
-	type Action,
-	type SendToPluginEvent,
 	type DialRotateEvent,
 	type DialDownEvent,
 	type TouchTapEvent,
@@ -25,23 +22,17 @@ import {
 import streamDeck from "@elgato/streamdeck";
 
 import type { GlobalSettings, BranchNetworkSettings } from "../types";
+import { BaseGitHubAction } from "./base-github-action";
 import { parseRepoIdentifier } from "../utils/github";
 import { classifyErrorLabel } from "../utils/github-api";
 import { coordinator } from "../utils/graphql-query-coordinator";
-import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderBranchNetworkStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
-import { PollingCoordinator } from "../utils/polling-coordinator";
-import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300;
 const MIN_REFRESH_INTERVAL = 30;
 
 @action({ UUID: "com.pedrofuentes.github-utilities.branch-network" })
-export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> {
-	private polling = new PollingCoordinator();
-	private actionSettings = new Map<string, BranchNetworkSettings>();
-	/** Cached action contexts for O(1) lookup */
-	private actionContexts = new Map<string, Action<BranchNetworkSettings>>();
+export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings> {
 	private renderTimeout: ReturnType<typeof setTimeout> | null = null;
 	private lastUrl = new Map<string, string>();
 	private branchCache = new Map<string, string[]>();
@@ -107,10 +98,7 @@ export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> 
 
 	override onWillDisappear(ev: WillDisappearEvent<BranchNetworkSettings>): void {
 		const repo = this.actionSettings.get(ev.action.id)?.repo;
-		this.polling.stop(ev.action.id);
-		coordinator.unsubscribe(ev.action.id);
-		this.actionSettings.delete(ev.action.id);
-		this.actionContexts.delete(ev.action.id);
+		super.onWillDisappear(ev);
 		this.lastUrl.delete(ev.action.id);
 		this.branchCache.delete(ev.action.id);
 		this.dialColumn.delete(ev.action.id);
@@ -165,18 +153,6 @@ export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> 
 			await ctx.setFeedback({
 				canvas: renderBranchNetworkStrip(branches, hOff, vScroll),
 			});
-		}
-	}
-
-	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, BranchNetworkSettings>): Promise<void> {
-		try {
-			const data = ev.payload as PIDataRequest;
-			const event = data?.event;
-			if (!event || typeof event !== "string") return;
-			await handlePIDataRequest(event, () => ev.action.getSettings());
-		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			streamDeck.logger.error(`BranchNetwork onSendToPlugin error: ${message}`);
 		}
 	}
 
