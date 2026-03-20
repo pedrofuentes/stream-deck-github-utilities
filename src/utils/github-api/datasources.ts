@@ -11,7 +11,7 @@ import type { JsonValue } from "@elgato/utils";
 import {
 	GITHUB_API_BASE,
 	buildHeaders,
-	fetchWithTimeout,
+	fetchWithRetry,
 	parseRateLimitHeaders,
 } from "./core";
 
@@ -41,7 +41,7 @@ export async function validateTokenStatus(token?: string): Promise<DataSourceIte
 
 	let response: Response;
 	try {
-		response = await fetchWithTimeout(`${GITHUB_API_BASE}/user`, { headers: buildHeaders(token) }, "validateTokenStatus");
+		response = await fetchWithRetry(`${GITHUB_API_BASE}/user`, { headers: buildHeaders(token) }, "validateTokenStatus");
 	} catch {
 		return [{ label: "⚠ Network error — check connection", value: "network-error", disabled: true }];
 	}
@@ -138,7 +138,7 @@ export async function fetchUserRepos(token?: string): Promise<DataSourceItem[]> 
 	while (url) {
 		let response: Response;
 		try {
-			response = await fetchWithTimeout(url, { headers }, "fetchUserRepos");
+			response = await fetchWithRetry(url, { headers }, "fetchUserRepos");
 		} catch {
 			if (allRepos.length > 0) break; // Return what we have so far
 			return [{ label: "⚠ Network error — check connection", value: "", disabled: true }];
@@ -208,7 +208,7 @@ export async function fetchRepoWorkflows(
 	const headers = buildHeaders(token);
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows?per_page=100`;
 
-	const response = await fetchWithTimeout(url, { headers }, "fetchRepoWorkflows");
+	const response = await fetchWithRetry(url, { headers }, "fetchRepoWorkflows");
 
 	if (!response.ok) {
 		if (response.status === 401) {
@@ -266,7 +266,7 @@ export async function fetchRepoBranches(
 	const headers = buildHeaders(token);
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100`;
 
-	const response = await fetchWithTimeout(url, { headers }, "fetchRepoBranches");
+	const response = await fetchWithRetry(url, { headers }, "fetchRepoBranches");
 
 	if (!response.ok) {
 		if (response.status === 401) {
@@ -312,7 +312,7 @@ export async function fetchRepoEnvironments(
 	const headers = buildHeaders(token);
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/environments`;
 
-	const response = await fetchWithTimeout(url, { headers }, "fetchRepoEnvironments");
+	const response = await fetchWithRetry(url, { headers }, "fetchRepoEnvironments");
 
 	if (!response.ok) {
 		// 404 = no environments configured, 403 = no Environments permission

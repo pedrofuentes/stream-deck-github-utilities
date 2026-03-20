@@ -10,7 +10,7 @@ import {
 	GITHUB_API_BASE,
 	GitHubApiError,
 	buildHeaders,
-	fetchWithTimeout,
+	fetchWithRetry,
 	handleApiError,
 	parseRateLimitHeaders,
 	parseRetryAfter,
@@ -45,7 +45,7 @@ export async function fetchOpenPullRequestCount(
 	const url = `${GITHUB_API_BASE}/search/issues?q=${encodeURIComponent(query)}&per_page=1`;
 	const headers = buildHeaders(token);
 
-	const response = await fetchWithTimeout(url, { headers }, "fetchOpenPullRequestCount");
+	const response = await fetchWithRetry(url, { headers }, "fetchOpenPullRequestCount");
 
 	if (!response.ok) {
 		return 0; // Graceful fallback — PR count is supplementary data
@@ -79,7 +79,7 @@ export async function fetchPullRequestCount(
 	const url = `${GITHUB_API_BASE}/search/issues?q=${encodeURIComponent(query)}&per_page=1`;
 	const headers = buildHeaders(token);
 
-	const response = await fetchWithTimeout(url, { headers }, "fetchPullRequestCount");
+	const response = await fetchWithRetry(url, { headers }, "fetchPullRequestCount");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -113,7 +113,7 @@ export async function fetchReviewRequestedPRs(
 	const url = `${GITHUB_API_BASE}/search/issues?q=${encodeURIComponent(query)}&per_page=10&sort=created&order=desc`;
 	const headers = buildHeaders(token);
 
-	const response = await fetchWithTimeout(url, { headers }, "fetchReviewRequestedPRs");
+	const response = await fetchWithRetry(url, { headers }, "fetchReviewRequestedPRs");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {

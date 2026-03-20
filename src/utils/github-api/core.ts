@@ -106,6 +106,61 @@ export async function fetchWithTimeout(url: string, options: RequestInit = {}, c
 	}
 }
 
+/** Maximum retry attempts for transient failures. */
+const MAX_RETRIES = 3;
+
+/** Base delay between retries in ms (exponential: 1s, 2s, 4s). */
+const RETRY_BASE_DELAY_MS = 1000;
+
+/** HTTP status codes that are safe to retry. */
+const RETRYABLE_STATUS_CODES = new Set([429, 502, 503, 504]);
+
+/**
+ * Fetch with automatic retry for transient failures.
+ * Retries up to 3 times with exponential backoff (1s, 2s, 4s).
+ * Only retries network errors, timeouts, and specific HTTP status codes (429, 502-504).
+ * Non-retryable errors (401, 403, 404, 422) fail immediately.
+ */
+export async function fetchWithRetry(
+	url: string,
+	options: RequestInit = {},
+	context?: string,
+): Promise<Response> {
+	let lastError: Error | undefined;
+
+	for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+		try {
+			const response = await fetchWithTimeout(url, options, context);
+
+			if (RETRYABLE_STATUS_CODES.has(response.status) && attempt < MAX_RETRIES) {
+				const retryAfter = parseRetryAfter(response.headers);
+				const delay = retryAfter
+					? retryAfter * 1000
+					: RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+				await new Promise(resolve => setTimeout(resolve, delay));
+				continue;
+			}
+
+			return response;
+		} catch (err) {
+			lastError = err instanceof Error ? err : new Error(String(err));
+
+			if (err instanceof GitHubApiError &&
+				(err.code === GitHubErrorCode.NETWORK_ERROR || err.code === GitHubErrorCode.TIMEOUT)) {
+				if (attempt < MAX_RETRIES) {
+					const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+					await new Promise(resolve => setTimeout(resolve, delay));
+					continue;
+				}
+			}
+
+			throw err;
+		}
+	}
+
+	throw lastError ?? new GitHubApiError("Max retries exceeded", 0, undefined, undefined, GitHubErrorCode.NETWORK_ERROR);
+}
+
 /**
  * Parses the Retry-After header value into seconds.
  * Supports both delay-seconds (integer) and HTTP-date formats.

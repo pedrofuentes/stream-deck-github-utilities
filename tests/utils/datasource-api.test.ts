@@ -180,13 +180,17 @@ describe("Datasource API", () => {
 		});
 
 		it("returns network error on fetch failure", async () => {
+			vi.useFakeTimers();
 			vi.mocked(globalThis.fetch).mockRejectedValue(new Error("Network error"));
 
-			const items = await fetchUserRepos("ghp_test");
+			const promise = fetchUserRepos("ghp_test");
+			await vi.advanceTimersByTimeAsync(10000);
+			const items = await promise;
 
 			expect(items).toHaveLength(1);
 			expect(items[0].label).toContain("Network error");
 			expect(items[0].disabled).toBe(true);
+			vi.useRealTimers();
 		});
 
 		it("returns 'no repos found' when response is empty array", async () => {
@@ -656,25 +660,33 @@ describe("Datasource API", () => {
 		});
 
 		it("returns error on unexpected status code", async () => {
+			vi.useFakeTimers();
 			vi.mocked(globalThis.fetch).mockResolvedValue(
 				mockFetchResponse({ message: "error" }, 502),
 			);
 
-			const items = await validateTokenStatus("ghp_test");
+			const promise = validateTokenStatus("ghp_test");
+			await vi.advanceTimersByTimeAsync(10000);
+			const items = await promise;
 
 			expect(items).toHaveLength(1);
 			expect(items[0].label).toContain("502");
 			expect(items[0].value).toBe("error");
+			vi.useRealTimers();
 		});
 
 		it("returns network error on fetch failure", async () => {
+			vi.useFakeTimers();
 			vi.mocked(globalThis.fetch).mockRejectedValue(new Error("ENOTFOUND"));
 
-			const items = await validateTokenStatus("ghp_test");
+			const promise = validateTokenStatus("ghp_test");
+			await vi.advanceTimersByTimeAsync(10000);
+			const items = await promise;
 
 			expect(items).toHaveLength(1);
 			expect(items[0].label).toContain("Network error");
 			expect(items[0].value).toBe("network-error");
+			vi.useRealTimers();
 		});
 
 		it("identifies classic token with scopes", async () => {

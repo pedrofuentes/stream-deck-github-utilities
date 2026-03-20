@@ -271,9 +271,15 @@ describe("github-api", () => {
 		});
 
 		it("handles fetch network errors gracefully", async () => {
+			vi.useFakeTimers();
 			vi.mocked(globalThis.fetch).mockRejectedValue(new Error("Network error"));
 
-			await expect(fetchRepoStats("owner", "repo")).rejects.toThrow("Network error");
+			const promise = fetchRepoStats("owner", "repo");
+			promise.catch(() => {}); // prevent unhandled rejection during timer advance
+			await vi.advanceTimersByTimeAsync(10000);
+
+			await expect(promise).rejects.toThrow("Network error");
+			vi.useRealTimers();
 		});
 	});
 
@@ -1251,13 +1257,27 @@ describe("fetchLatestRelease", () => {
 	});
 
 	// ── fetchWithTimeout (network resilience) ──────
+	// These tests go through fetchWithRetry (which wraps fetchWithTimeout),
+	// so fake timers are needed to advance past retry delays.
 
 	describe("fetchWithTimeout network resilience", () => {
+		beforeEach(() => {
+			vi.useFakeTimers();
+		});
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
 		it("converts network failure (TypeError) to GitHubApiError with status 0", async () => {
 			vi.mocked(globalThis.fetch).mockRejectedValue(new TypeError("fetch failed"));
 
+			const promise = fetchRepoStats("owner", "repo", "ghp_test");
+			promise.catch(() => {}); // prevent unhandled rejection during timer advance
+			await vi.advanceTimersByTimeAsync(10000);
+
 			try {
-				await fetchRepoStats("owner", "repo", "ghp_test");
+				await promise;
 				expect.unreachable("should have thrown");
 			} catch (err) {
 				expect(err).toBeInstanceOf(GitHubApiError);
@@ -1273,8 +1293,12 @@ describe("fetchLatestRelease", () => {
 			const abortError = new DOMException("The operation was aborted", "AbortError");
 			vi.mocked(globalThis.fetch).mockRejectedValue(abortError);
 
+			const promise = fetchRepoStats("owner", "repo", "ghp_test");
+			promise.catch(() => {}); // prevent unhandled rejection during timer advance
+			await vi.advanceTimersByTimeAsync(10000);
+
 			try {
-				await fetchRepoStats("owner", "repo", "ghp_test");
+				await promise;
 				expect.unreachable("should have thrown");
 			} catch (err) {
 				expect(err).toBeInstanceOf(GitHubApiError);
@@ -1289,8 +1313,12 @@ describe("fetchLatestRelease", () => {
 		it("converts non-Error throw to GitHubApiError with 'unknown' message", async () => {
 			vi.mocked(globalThis.fetch).mockRejectedValue("string error");
 
+			const promise = fetchRepoStats("owner", "repo", "ghp_test");
+			promise.catch(() => {}); // prevent unhandled rejection during timer advance
+			await vi.advanceTimersByTimeAsync(10000);
+
 			try {
-				await fetchRepoStats("owner", "repo", "ghp_test");
+				await promise;
 				expect.unreachable("should have thrown");
 			} catch (err) {
 				expect(err).toBeInstanceOf(GitHubApiError);
@@ -1413,19 +1441,24 @@ describe("fetchLatestRelease", () => {
 		});
 
 		it("sets RATE_LIMITED code for 429 responses", async () => {
-			vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+			vi.useFakeTimers();
+			vi.spyOn(globalThis, "fetch").mockResolvedValue(
 				new Response("Too Many Requests", {
 					status: 429,
 					headers: mockHeaders({ "x-ratelimit-remaining": "0", "retry-after": "60" }),
 				}),
 			);
+			const promise = fetchRepoStats("owner", "repo", "ghp_test");
+			promise.catch(() => {}); // prevent unhandled rejection during timer advance
+			await vi.advanceTimersByTimeAsync(200000);
 			try {
-				await fetchRepoStats("owner", "repo", "ghp_test");
+				await promise;
 				expect.unreachable("should have thrown");
 			} catch (err) {
 				expect(err).toBeInstanceOf(GitHubApiError);
 				expect((err as GitHubApiError).code).toBe(GitHubErrorCode.RATE_LIMITED);
 			}
+			vi.useRealTimers();
 		});
 
 		it("sets RATE_LIMITED code for 403 with exhausted rate limit", async () => {
@@ -1493,28 +1526,38 @@ describe("fetchLatestRelease", () => {
 		});
 
 		it("sets TIMEOUT code for aborted requests", async () => {
-			vi.spyOn(globalThis, "fetch").mockImplementationOnce(() => {
+			vi.useFakeTimers();
+			vi.spyOn(globalThis, "fetch").mockImplementation(() => {
 				const err = new DOMException("The operation was aborted", "AbortError");
 				throw err;
 			});
+			const promise = fetchRepoStats("owner", "repo", "ghp_test");
+			promise.catch(() => {}); // prevent unhandled rejection during timer advance
+			await vi.advanceTimersByTimeAsync(10000);
 			try {
-				await fetchRepoStats("owner", "repo", "ghp_test");
+				await promise;
 				expect.unreachable("should have thrown");
 			} catch (err) {
 				expect(err).toBeInstanceOf(GitHubApiError);
 				expect((err as GitHubApiError).code).toBe(GitHubErrorCode.TIMEOUT);
 			}
+			vi.useRealTimers();
 		});
 
 		it("sets NETWORK_ERROR code for network failures", async () => {
-			vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new TypeError("Failed to fetch"));
+			vi.useFakeTimers();
+			vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+			const promise = fetchRepoStats("owner", "repo", "ghp_test");
+			promise.catch(() => {}); // prevent unhandled rejection during timer advance
+			await vi.advanceTimersByTimeAsync(10000);
 			try {
-				await fetchRepoStats("owner", "repo", "ghp_test");
+				await promise;
 				expect.unreachable("should have thrown");
 			} catch (err) {
 				expect(err).toBeInstanceOf(GitHubApiError);
 				expect((err as GitHubApiError).code).toBe(GitHubErrorCode.NETWORK_ERROR);
 			}
+			vi.useRealTimers();
 		});
 	});
 });

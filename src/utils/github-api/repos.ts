@@ -11,7 +11,7 @@ import {
 	GitHubApiError,
 	GitHubErrorCode,
 	buildHeaders,
-	fetchWithTimeout,
+	fetchWithRetry,
 	parseRateLimitHeaders,
 } from "./core";
 
@@ -60,7 +60,7 @@ export async function fetchRepoStats(
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
 	const headers = buildHeaders(token);
 
-	const response = await fetchWithTimeout(url, { headers }, "fetchRepoStats");
+	const response = await fetchWithRetry(url, { headers }, "fetchRepoStats");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {

@@ -10,7 +10,7 @@ import {
 	GITHUB_API_BASE,
 	GitHubApiError,
 	buildHeaders,
-	fetchWithTimeout,
+	fetchWithRetry,
 	handleApiError,
 	parseRateLimitHeaders,
 	parseRetryAfter,
@@ -118,7 +118,7 @@ export async function fetchLatestWorkflowRun(
 	}
 
 	const headers = buildHeaders(token);
-	const response = await fetchWithTimeout(url, { headers }, "fetchLatestWorkflowRun");
+	const response = await fetchWithRetry(url, { headers }, "fetchLatestWorkflowRun");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -173,7 +173,7 @@ export async function fetchLatestDeploymentStatus(
 	}
 
 	const headers = buildHeaders(token);
-	const response = await fetchWithTimeout(url, { headers }, "fetchLatestDeploymentStatus");
+	const response = await fetchWithRetry(url, { headers }, "fetchLatestDeploymentStatus");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -191,7 +191,7 @@ export async function fetchLatestDeploymentStatus(
 
 	// Fetch the latest status for this deployment
 	const statusUrl = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/deployments/${deploymentId}/statuses?per_page=1`;
-	const statusResponse = await fetchWithTimeout(statusUrl, { headers }, "fetchLatestDeploymentStatus");
+	const statusResponse = await fetchWithRetry(statusUrl, { headers }, "fetchLatestDeploymentStatus");
 	const statusRateLimitInfo = parseRateLimitHeaders(statusResponse.headers);
 
 	if (!statusResponse.ok) {
@@ -266,7 +266,7 @@ export async function triggerWorkflowDispatch(
 	token: string,
 ): Promise<void> {
 	const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
-	const response = await fetchWithTimeout(url, {
+	const response = await fetchWithRetry(url, {
 		method: "POST",
 		headers: {
 			Accept: "application/vnd.github+json",

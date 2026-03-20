@@ -9,7 +9,7 @@
 import {
 	GITHUB_API_BASE,
 	buildHeaders,
-	fetchWithTimeout,
+	fetchWithRetry,
 	handleApiError,
 	parseRateLimitHeaders,
 	parseRetryAfter,
@@ -67,7 +67,7 @@ export async function fetchIssueCount(
 	const url = `${GITHUB_API_BASE}/search/issues?q=${encodeURIComponent(query)}&per_page=1`;
 	const headers = buildHeaders(token);
 
-	const response = await fetchWithTimeout(url, { headers }, "fetchIssueCount");
+	const response = await fetchWithRetry(url, { headers }, "fetchIssueCount");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -101,7 +101,7 @@ export async function fetchLatestRelease(
 	if (!includePreReleases) {
 		// GET /repos/{owner}/{repo}/releases/latest — skips pre-releases and drafts
 		const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases/latest`;
-		const response = await fetchWithTimeout(url, { headers }, "fetchLatestRelease");
+		const response = await fetchWithRetry(url, { headers }, "fetchLatestRelease");
 		const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 		if (response.status === 404) {
@@ -125,7 +125,7 @@ export async function fetchLatestRelease(
 
 	// Include pre-releases: get the first release (most recent)
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases?per_page=1`;
-	const response = await fetchWithTimeout(url, { headers }, "fetchLatestRelease");
+	const response = await fetchWithRetry(url, { headers }, "fetchLatestRelease");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {

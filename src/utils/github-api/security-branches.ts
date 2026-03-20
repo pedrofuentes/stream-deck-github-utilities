@@ -9,7 +9,7 @@
 import {
 	GITHUB_API_BASE,
 	buildHeaders,
-	fetchWithTimeout,
+	fetchWithRetry,
 	handleApiError,
 	parseRateLimitHeaders,
 	parseRetryAfter,
@@ -48,7 +48,7 @@ export async function fetchDependabotAlerts(
 ): Promise<SecurityAlertSummary> {
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dependabot/alerts?state=open&per_page=100`;
 	const headers = buildHeaders(token);
-	const response = await fetchWithTimeout(url, { headers }, "fetchDependabotAlerts");
+	const response = await fetchWithRetry(url, { headers }, "fetchDependabotAlerts");
 
 	if (!response.ok) {
 		const rateLimitInfo = parseRateLimitHeaders(response.headers);
@@ -101,7 +101,7 @@ export async function fetchBranchComparison(
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`;
 	const headers = buildHeaders(token);
 
-	const response = await fetchWithTimeout(url, { headers }, "fetchBranchComparison");
+	const response = await fetchWithRetry(url, { headers }, "fetchBranchComparison");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -144,7 +144,7 @@ export async function fetchBranchNetwork(
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=10`;
 	const headers = buildHeaders(token);
 
-	const response = await fetchWithTimeout(url, { headers }, "fetchBranchNetwork");
+	const response = await fetchWithRetry(url, { headers }, "fetchBranchNetwork");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -192,7 +192,7 @@ export async function fetchCommitActivity(
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/stats/commit_activity`;
 	const headers = buildHeaders(token);
 
-	const response = await fetchWithTimeout(url, { headers }, "fetchCommitActivity");
+	const response = await fetchWithRetry(url, { headers }, "fetchCommitActivity");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	// Stats endpoints return 202 while computing — treat as "data not ready"
@@ -263,7 +263,7 @@ export async function fetchCommitActivityWeeks(
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/stats/commit_activity`;
 	const headers = buildHeaders(token);
 
-	const response = await fetchWithTimeout(url, { headers }, "fetchCommitActivityWeeks");
+	const response = await fetchWithRetry(url, { headers }, "fetchCommitActivityWeeks");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	// Stats endpoints return 202 while computing — data not ready yet
