@@ -17,12 +17,9 @@
 import {
 	action,
 	KeyDownEvent,
-	SingletonAction,
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
-	type Action,
-	type SendToPluginEvent,
 } from "@elgato/streamdeck";
 import type {
 	DialRotateEvent,
@@ -32,17 +29,14 @@ import type {
 } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
 
+import { BaseGitHubAction } from "./base-github-action";
 import type { GlobalSettings, ReleaseMonitorSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
 import { classifyErrorLabel, formatRelativeTime } from "../utils/github-api";
 import { coordinator } from "../utils/graphql-query-coordinator";
-import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderReleaseImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
-import { PollingCoordinator } from "../utils/polling-coordinator";
-import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
-import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300;
 const MIN_REFRESH_INTERVAL = 30;
@@ -61,16 +55,10 @@ interface ReleaseMarqueeData {
 }
 
 @action({ UUID: "com.pedrofuentes.github-utilities.release-monitor" })
-export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings> {
-	private polling = new PollingCoordinator();
-	private actionSettings = new Map<string, ReleaseMonitorSettings>();
+export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSettings> {
 	private lastUrl = new Map<string, string>();
 	private marqueeData = new Map<string, ReleaseMarqueeData>();
 	private recentSetSettings = new Set<string>();
-	private urlOpener = new DebouncedUrlOpener();
-
-	/** Cached action contexts for O(1) lookup */
-	private actionContexts = new Map<string, Action<ReleaseMonitorSettings>>();
 
 	override async onWillAppear(ev: WillAppearEvent<ReleaseMonitorSettings>): Promise<void> {
 		this.actionContexts.set(ev.action.id, ev.action);
@@ -117,15 +105,11 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<ReleaseMonitorSettings>): void {
-		this.polling.stop(ev.action.id);
-		coordinator.unsubscribe(ev.action.id);
+		super.onWillDisappear(ev);
 		this.stopMarquee(ev.action.id);
-		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
 		this.recentSetSettings.delete(ev.action.id);
-		this.urlOpener.cleanup(ev.action.id);
-		this.actionContexts.delete(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<ReleaseMonitorSettings>): Promise<void> {
@@ -219,18 +203,6 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 	override async onTouchTap(ev: TouchTapEvent<ReleaseMonitorSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
 		await this.refreshRelease(ev.action.id, true);
-	}
-
-	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, ReleaseMonitorSettings>): Promise<void> {
-		try {
-			const data = ev.payload as PIDataRequest;
-			const event = data?.event;
-			if (!event || typeof event !== "string") return;
-			await handlePIDataRequest(event, () => ev.action.getSettings());
-		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			streamDeck.logger.error(`ReleaseMonitor onSendToPlugin error: ${message}`);
-		}
 	}
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<ReleaseMonitorSettings>): Promise<void> {

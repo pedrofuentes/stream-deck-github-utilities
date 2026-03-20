@@ -17,30 +17,23 @@
 
 import {
 	action,
-	type Action,
 	KeyDownEvent,
-	SingletonAction,
 	WillAppearEvent,
-	WillDisappearEvent,
 	DidReceiveSettingsEvent,
-	type SendToPluginEvent,
 	type DialRotateEvent,
 	type DialDownEvent,
 	type TouchTapEvent,
 } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
 
+import { BaseGitHubAction } from "./base-github-action";
 import type { GlobalSettings, SecurityHealthSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
 import { coordinator } from "../utils/graphql-query-coordinator";
 import { classifyErrorLabel } from "../utils/github-api";
 import type { SecurityAlertSummary } from "../utils/github-api";
-import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderKeyImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderSecurityArcStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
-import { PollingCoordinator } from "../utils/polling-coordinator";
-import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
-import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
 const MIN_REFRESH_INTERVAL = 30; // 30 seconds minimum
@@ -71,13 +64,7 @@ export function computeGrade(alerts: SecurityAlertSummary): { grade: string; sco
 }
 
 @action({ UUID: "com.pedrofuentes.github-utilities.security-health" })
-export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings> {
-	private polling = new PollingCoordinator();
-	private actionSettings = new Map<string, SecurityHealthSettings>();
-	private urlOpener = new DebouncedUrlOpener();
-	/** Cached action contexts for O(1) lookup */
-	private actionContexts = new Map<string, Action<SecurityHealthSettings>>();
-
+export class SecurityHealthAction extends BaseGitHubAction<SecurityHealthSettings> {
 	override async onWillAppear(ev: WillAppearEvent<SecurityHealthSettings>): Promise<void> {
 		this.actionContexts.set(ev.action.id, ev.action);
 		const settings = ev.payload.settings;
@@ -108,14 +95,6 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 		this.polling.start(ev.action.id, () => this.refreshHealth(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshHealth(ev.action.id);
-	}
-
-	override onWillDisappear(ev: WillDisappearEvent<SecurityHealthSettings>): void {
-		this.polling.stop(ev.action.id);
-		coordinator.unsubscribe(ev.action.id);
-		this.actionSettings.delete(ev.action.id);
-		this.urlOpener.cleanup(ev.action.id);
-		this.actionContexts.delete(ev.action.id);
 	}
 
 	/**
@@ -177,18 +156,6 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 	override async onTouchTap(ev: TouchTapEvent<SecurityHealthSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
 		await this.refreshHealth(ev.action.id, true);
-	}
-
-	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, SecurityHealthSettings>): Promise<void> {
-		try {
-			const data = ev.payload as PIDataRequest;
-			const event = data?.event;
-			if (!event || typeof event !== "string") return;
-			await handlePIDataRequest(event, () => ev.action.getSettings());
-		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			streamDeck.logger.error(`SecurityHealth onSendToPlugin error: ${message}`);
-		}
 	}
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<SecurityHealthSettings>): Promise<void> {

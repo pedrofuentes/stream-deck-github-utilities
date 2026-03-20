@@ -20,12 +20,9 @@
 import {
 	action,
 	KeyDownEvent,
-	SingletonAction,
 	WillAppearEvent,
 	WillDisappearEvent,
 	DidReceiveSettingsEvent,
-	type Action,
-	type SendToPluginEvent,
 	type DialRotateEvent,
 	type DialDownEvent,
 	type TouchTapEvent,
@@ -43,7 +40,6 @@ import {
 	type DeploymentState,
 } from "../utils/github-api";
 import { coordinator } from "../utils/graphql-query-coordinator";
-import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import {
 	renderWorkflowImage,
 	renderDeployingImage,
@@ -53,9 +49,7 @@ import {
 } from "../utils/button-renderer";
 import { renderWorkflowStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
-import { PollingCoordinator } from "../utils/polling-coordinator";
-import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
-import type { JsonValue } from "@elgato/utils";
+import { BaseGitHubAction } from "./base-github-action";
 
 const DEFAULT_REFRESH_INTERVAL = 60; // 1 minute (workflows change faster than stats)
 const MIN_REFRESH_INTERVAL = 15; // 15 seconds minimum
@@ -81,13 +75,7 @@ interface WfMarqueeData {
 }
 
 @action({ UUID: "com.pedrofuentes.github-utilities.workflow-status" })
-export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings> {
-	/** Centralized polling coordinator with error backoff */
-	private polling = new PollingCoordinator();
-
-	/** Last known settings per action instance */
-	private actionSettings = new Map<string, WorkflowStatusSettings>();
-
+export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSettings> {
 	/** Last known URL per action instance (for opening on key press) */
 	private lastUrl = new Map<string, string>();
 
@@ -99,12 +87,6 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 
 	/** Last seen workflow run ID per action (to avoid duplicate dots) */
 	private lastRunId = new Map<string, number>();
-
-	/** Debounced URL opener for double-click detection */
-	private urlOpener = new DebouncedUrlOpener();
-
-	/** Cached action contexts for O(1) lookup */
-	private actionContexts = new Map<string, Action<WorkflowStatusSettings>>();
 
 	/** Tracked dispatch retry timeouts for cleanup */
 	private dispatchTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
@@ -165,16 +147,12 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			clearTimeout(dispatchTimeout);
 			this.dispatchTimeouts.delete(ev.action.id);
 		}
-		this.polling.stop(ev.action.id);
+		super.onWillDisappear(ev);
 		this.stopMarquee(ev.action.id);
-		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
 		this.runHistory.delete(ev.action.id);
 		this.lastRunId.delete(ev.action.id);
-		this.urlOpener.cleanup(ev.action.id);
-		this.actionContexts.delete(ev.action.id);
-		coordinator.unsubscribe(ev.action.id);
 	}
 
 	/**
@@ -245,26 +223,6 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		// Regular tap → refresh
 		this.polling.resetBackoff(ev.action.id);
 		await this.refreshStatus(ev.action.id, true);
-	}
-
-	/**
-	 * Handles messages from the Property Inspector (datasource requests).
-	 */
-	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, WorkflowStatusSettings>): Promise<void> {
-		try {
-			const data = ev.payload as PIDataRequest;
-			const event = data?.event;
-
-			if (!event || typeof event !== "string") {
-				streamDeck.logger.debug(`WorkflowStatus: received sendToPlugin without event: ${JSON.stringify(ev.payload)}`);
-				return;
-			}
-
-			await handlePIDataRequest(event, () => ev.action.getSettings());
-		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			streamDeck.logger.error(`WorkflowStatus onSendToPlugin error: ${message}`);
-		}
 	}
 
 	/**
