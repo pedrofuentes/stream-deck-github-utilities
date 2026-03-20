@@ -913,4 +913,59 @@ describe("WorkflowStatusAction", () => {
 			expect(body.ref).toBe("main");
 		});
 	});
+
+	describe("setTimeout memory leak prevention", () => {
+		it("clears dispatch timeout when action disappears before it fires", async () => {
+			vi.useFakeTimers();
+			try {
+				const mockAction = createMockKeyAction("wf-leak-1");
+				const settings = { repo: "owner/repo", workflowFile: "deploy.yml", branch: "main" };
+
+				Object.defineProperty(action, "actions", {
+					get: () => [mockAction],
+					configurable: true,
+				});
+
+				setupCoordinatorMock();
+				const fetchMock = vi.mocked(globalThis.fetch);
+				fetchMock.mockImplementation((url: string | URL | Request) => {
+					const urlStr = typeof url === "string" ? url : url.toString();
+					if (urlStr.includes("/dispatches")) {
+						return Promise.resolve({
+							ok: true,
+							status: 204,
+							headers: makeHeaders(),
+						} as unknown as Response);
+					}
+					return Promise.resolve(makeWorkflowRunsResponse([makeRunData()]));
+				});
+
+				// Appear to register settings
+				const appearEv = createWillAppearEvent(mockAction, settings);
+				await action.onWillAppear?.(appearEv as never);
+
+				// Dispatch workflow (creates the 3s setTimeout)
+				function createTouchTapEv(actionMock: ReturnType<typeof createMockKeyAction>, s: Record<string, unknown>, hold = false) {
+					return { action: actionMock, payload: { settings: s, hold } };
+				}
+				const ev = createTouchTapEv(mockAction, settings, true);
+				await action.onTouchTap?.(ev as never);
+
+				// Track calls to refreshStatus via coordinator mock
+				mockInvalidateAndFetch.mockClear();
+				mockFetchData.mockClear();
+
+				// Disappear before the 3s timeout fires
+				action.onWillDisappear?.(createWillDisappearEvent(mockAction) as never);
+
+				// Advance past the 3s dispatch refresh timeout
+				await vi.advanceTimersByTimeAsync(4000);
+
+				// The refresh callback should NOT have fired after disappear
+				expect(mockInvalidateAndFetch).not.toHaveBeenCalled();
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+	});
 });

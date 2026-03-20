@@ -733,4 +733,61 @@ describe("ContributionHeatmapAction", () => {
 			expect(mockAction1.setFeedback).toHaveBeenCalled();
 		});
 	});
+
+	describe("setTimeout memory leak prevention", () => {
+		it("clears retry timeout when action disappears before it fires", async () => {
+			vi.useFakeTimers();
+			try {
+				const mockAction = createMockDialAction("ch-leak-1");
+				const settings = { repo: "owner/repo" };
+
+				Object.defineProperty(action, "actions", {
+					get: () => [mockAction],
+					configurable: true,
+				});
+
+				// Return 202 to trigger the retry setTimeout
+				vi.mocked(globalThis.fetch).mockResolvedValue({
+					ok: true,
+					status: 202,
+					headers: new Headers({
+						"x-ratelimit-limit": "5000",
+						"x-ratelimit-remaining": "4999",
+						"x-ratelimit-reset": "9999999999",
+						"x-ratelimit-used": "1",
+					}),
+					json: () => Promise.resolve({}),
+					text: () => Promise.resolve(""),
+				} as unknown as Response);
+
+				await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+				// Disappear before the 5s retry fires
+				action.onWillDisappear?.(createWillDisappearEvent(mockAction) as never);
+
+				// Now set up a mock that would be called if the retry fires
+				const fetchAfterDisappear = vi.fn().mockResolvedValue({
+					ok: true,
+					status: 200,
+					headers: new Headers({
+						"x-ratelimit-limit": "5000",
+						"x-ratelimit-remaining": "4999",
+						"x-ratelimit-reset": "9999999999",
+						"x-ratelimit-used": "1",
+					}),
+					json: () => Promise.resolve([]),
+					text: () => Promise.resolve(""),
+				} as unknown as Response);
+				globalThis.fetch = fetchAfterDisappear;
+
+				// Advance past the 5s retry timeout
+				await vi.advanceTimersByTimeAsync(6000);
+
+				// The retry callback should NOT have fired
+				expect(fetchAfterDisappear).not.toHaveBeenCalled();
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+	});
 });
