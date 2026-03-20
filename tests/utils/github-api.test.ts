@@ -27,6 +27,8 @@ import {
 	formatRunDuration,
 	parseRateLimitHeaders,
 	GitHubApiError,
+	classifyErrorLabel,
+	GitHubErrorCode,
 	type RepoStats,
 	type StatType,
 	type BranchComparison,
@@ -1296,6 +1298,222 @@ describe("fetchLatestRelease", () => {
 				expect(apiErr.status).toBe(0);
 				expect(apiErr.message).toContain("Network error");
 				expect(apiErr.message).toContain("unknown");
+			}
+		});
+	});
+
+	// ── classifyErrorLabel ──────────────────────────────────────────────────
+
+	describe("classifyErrorLabel", () => {
+		describe("structured GitHubErrorCode mapping", () => {
+			it("maps RATE_LIMITED to 'Rate Limited'", () => {
+				const err = new GitHubApiError("rate limit", 429, undefined, undefined, GitHubErrorCode.RATE_LIMITED);
+				expect(classifyErrorLabel(err)).toBe("Rate Limited");
+			});
+
+			it("maps NOT_FOUND to 'Not Found'", () => {
+				const err = new GitHubApiError("missing", 404, undefined, undefined, GitHubErrorCode.NOT_FOUND);
+				expect(classifyErrorLabel(err)).toBe("Not Found");
+			});
+
+			it("maps AUTH_ERROR to 'Auth Error'", () => {
+				const err = new GitHubApiError("bad creds", 401, undefined, undefined, GitHubErrorCode.AUTH_ERROR);
+				expect(classifyErrorLabel(err)).toBe("Auth Error");
+			});
+
+			it("maps ACCESS_DENIED to 'No Access'", () => {
+				const err = new GitHubApiError("forbidden", 403, undefined, undefined, GitHubErrorCode.ACCESS_DENIED);
+				expect(classifyErrorLabel(err)).toBe("No Access");
+			});
+
+			it("maps SERVER_ERROR to 'Server Error'", () => {
+				const err = new GitHubApiError("internal", 500, undefined, undefined, GitHubErrorCode.SERVER_ERROR);
+				expect(classifyErrorLabel(err)).toBe("Server Error");
+			});
+
+			it("maps NETWORK_ERROR to 'Network Error'", () => {
+				const err = new GitHubApiError("network", 0, undefined, undefined, GitHubErrorCode.NETWORK_ERROR);
+				expect(classifyErrorLabel(err)).toBe("Network Error");
+			});
+
+			it("maps TIMEOUT to 'Timeout'", () => {
+				const err = new GitHubApiError("timed out", 0, undefined, undefined, GitHubErrorCode.TIMEOUT);
+				expect(classifyErrorLabel(err)).toBe("Timeout");
+			});
+		});
+
+		describe("fallback string matching", () => {
+			it("detects 'rate limit' in message", () => {
+				expect(classifyErrorLabel(new Error("GitHub API rate limit exceeded"))).toBe("Rate Limited");
+			});
+
+			it("detects 'not found' in message", () => {
+				expect(classifyErrorLabel(new Error("Repository not found"))).toBe("Not Found");
+			});
+
+			it("detects '404' in message", () => {
+				expect(classifyErrorLabel(new Error("HTTP 404"))).toBe("Not Found");
+			});
+
+			it("detects 'token' in message", () => {
+				expect(classifyErrorLabel(new Error("Invalid token"))).toBe("Auth Error");
+			});
+
+			it("detects '401' in message", () => {
+				expect(classifyErrorLabel(new Error("HTTP 401 Unauthorized"))).toBe("Auth Error");
+			});
+
+			it("detects 'bad credentials' in message", () => {
+				expect(classifyErrorLabel(new Error("Bad credentials"))).toBe("Auth Error");
+			});
+
+			it("detects 'access denied' in message", () => {
+				expect(classifyErrorLabel(new Error("Access denied to resource"))).toBe("No Access");
+			});
+
+			it("detects '403' in message", () => {
+				expect(classifyErrorLabel(new Error("HTTP 403 Forbidden"))).toBe("No Access");
+			});
+
+			it("returns 'Error' for unrecognized messages", () => {
+				expect(classifyErrorLabel(new Error("Something went wrong"))).toBe("Error");
+			});
+
+			it("handles non-Error values", () => {
+				expect(classifyErrorLabel("rate limit string")).toBe("Rate Limited");
+				expect(classifyErrorLabel("unknown problem")).toBe("Error");
+			});
+		});
+
+		describe("GitHubApiError without code falls back to message matching", () => {
+			it("uses message when code is undefined", () => {
+				const err = new GitHubApiError("rate limit exceeded", 403);
+				expect(classifyErrorLabel(err)).toBe("Rate Limited");
+			});
+		});
+	});
+
+	// ── GitHubApiError.code in handleApiError ───────────────────────────────
+
+	describe("handleApiError error codes", () => {
+		it("sets AUTH_ERROR code for 401 responses", async () => {
+			vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+				new Response("Unauthorized", {
+					status: 401,
+					headers: mockHeaders(),
+				}),
+			);
+			try {
+				await fetchRepoStats("owner", "repo", "ghp_test");
+				expect.unreachable("should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(GitHubApiError);
+				expect((err as GitHubApiError).code).toBe(GitHubErrorCode.AUTH_ERROR);
+			}
+		});
+
+		it("sets RATE_LIMITED code for 429 responses", async () => {
+			vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+				new Response("Too Many Requests", {
+					status: 429,
+					headers: mockHeaders({ "x-ratelimit-remaining": "0", "retry-after": "60" }),
+				}),
+			);
+			try {
+				await fetchRepoStats("owner", "repo", "ghp_test");
+				expect.unreachable("should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(GitHubApiError);
+				expect((err as GitHubApiError).code).toBe(GitHubErrorCode.RATE_LIMITED);
+			}
+		});
+
+		it("sets RATE_LIMITED code for 403 with exhausted rate limit", async () => {
+			vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+				new Response("Forbidden", {
+					status: 403,
+					headers: mockHeaders({ "x-ratelimit-remaining": "0" }),
+				}),
+			);
+			try {
+				await fetchRepoStats("owner", "repo", "ghp_test");
+				expect.unreachable("should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(GitHubApiError);
+				expect((err as GitHubApiError).code).toBe(GitHubErrorCode.RATE_LIMITED);
+			}
+		});
+
+		it("sets ACCESS_DENIED code for 403 with remaining rate limit", async () => {
+			vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+				new Response("Forbidden", {
+					status: 403,
+					headers: mockHeaders({ "x-ratelimit-remaining": "4999" }),
+				}),
+			);
+			try {
+				await fetchRepoStats("owner", "repo", "ghp_test");
+				expect.unreachable("should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(GitHubApiError);
+				expect((err as GitHubApiError).code).toBe(GitHubErrorCode.ACCESS_DENIED);
+			}
+		});
+
+		it("sets NOT_FOUND code for 404 responses", async () => {
+			vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+				new Response("Not Found", {
+					status: 404,
+					headers: mockHeaders(),
+				}),
+			);
+			try {
+				await fetchRepoStats("owner", "repo", "ghp_test");
+				expect.unreachable("should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(GitHubApiError);
+				expect((err as GitHubApiError).code).toBe(GitHubErrorCode.NOT_FOUND);
+			}
+		});
+
+		it("sets SERVER_ERROR code for 500 responses", async () => {
+			vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+				new Response("Internal Server Error", {
+					status: 500,
+					headers: mockHeaders(),
+				}),
+			);
+			try {
+				await fetchRepoStats("owner", "repo", "ghp_test");
+				expect.unreachable("should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(GitHubApiError);
+				expect((err as GitHubApiError).code).toBe(GitHubErrorCode.SERVER_ERROR);
+			}
+		});
+
+		it("sets TIMEOUT code for aborted requests", async () => {
+			vi.spyOn(globalThis, "fetch").mockImplementationOnce(() => {
+				const err = new DOMException("The operation was aborted", "AbortError");
+				throw err;
+			});
+			try {
+				await fetchRepoStats("owner", "repo", "ghp_test");
+				expect.unreachable("should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(GitHubApiError);
+				expect((err as GitHubApiError).code).toBe(GitHubErrorCode.TIMEOUT);
+			}
+		});
+
+		it("sets NETWORK_ERROR code for network failures", async () => {
+			vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new TypeError("Failed to fetch"));
+			try {
+				await fetchRepoStats("owner", "repo", "ghp_test");
+				expect.unreachable("should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(GitHubApiError);
+				expect((err as GitHubApiError).code).toBe(GitHubErrorCode.NETWORK_ERROR);
 			}
 		});
 	});

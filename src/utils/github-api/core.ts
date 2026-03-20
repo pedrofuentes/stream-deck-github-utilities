@@ -6,6 +6,17 @@
  * @license MIT
  */
 
+/** Canonical error codes for GitHub API errors. */
+export enum GitHubErrorCode {
+	RATE_LIMITED = "rate_limited",
+	NOT_FOUND = "not_found",
+	AUTH_ERROR = "auth_error",
+	ACCESS_DENIED = "access_denied",
+	SERVER_ERROR = "server_error",
+	NETWORK_ERROR = "network_error",
+	TIMEOUT = "timeout",
+}
+
 /** Rate limit information from response headers */
 export interface RateLimitInfo {
 	limit: number;
@@ -22,6 +33,8 @@ export class GitHubApiError extends Error {
 		public readonly rateLimitInfo?: RateLimitInfo,
 		/** Seconds to wait before retrying (from Retry-After header or rate limit reset). */
 		public readonly retryAfterSeconds?: number,
+		/** Canonical error code for structured classification. */
+		public readonly code?: GitHubErrorCode,
 	) {
 		super(message);
 		this.name = "GitHubApiError";
@@ -76,11 +89,17 @@ export async function fetchWithTimeout(url: string, options: RequestInit = {}, c
 			throw new GitHubApiError(
 				`Request timed out after 30s${context ? ` (${context})` : ""}`,
 				0,
+				undefined,
+				undefined,
+				GitHubErrorCode.TIMEOUT,
 			);
 		}
 		throw new GitHubApiError(
 			`Network error: ${err instanceof Error ? err.message : "unknown"}${context ? ` (${context})` : ""}`,
 			0,
+			undefined,
+			undefined,
+			GitHubErrorCode.NETWORK_ERROR,
 		);
 	} finally {
 		clearTimeout(timeoutId);
@@ -118,7 +137,7 @@ export function parseRetryAfter(headers: Headers): number | undefined {
  */
 export function handleApiError(status: number, rateLimitInfo: RateLimitInfo, owner: string, repo: string, retryAfterSeconds?: number): never {
 	if (status === 401) {
-		throw new GitHubApiError("Invalid or expired GitHub token", status, rateLimitInfo);
+		throw new GitHubApiError("Invalid or expired GitHub token", status, rateLimitInfo, undefined, GitHubErrorCode.AUTH_ERROR);
 	}
 
 	if (status === 429) {
@@ -128,6 +147,7 @@ export function handleApiError(status: number, rateLimitInfo: RateLimitInfo, own
 			status,
 			rateLimitInfo,
 			waitSec,
+			GitHubErrorCode.RATE_LIMITED,
 		);
 	}
 
@@ -139,11 +159,12 @@ export function handleApiError(status: number, rateLimitInfo: RateLimitInfo, own
 			status,
 			rateLimitInfo,
 			waitSec > 0 ? waitSec : undefined,
+			GitHubErrorCode.RATE_LIMITED,
 		);
 	}
 
 	if (status === 403) {
-		throw new GitHubApiError("Access denied. Check token permissions.", status, rateLimitInfo);
+		throw new GitHubApiError("Access denied. Check token permissions.", status, rateLimitInfo, undefined, GitHubErrorCode.ACCESS_DENIED);
 	}
 
 	if (status === 404) {
@@ -151,8 +172,35 @@ export function handleApiError(status: number, rateLimitInfo: RateLimitInfo, own
 			`Repository "${owner}/${repo}" not found or is private`,
 			status,
 			rateLimitInfo,
+			undefined,
+			GitHubErrorCode.NOT_FOUND,
 		);
 	}
 
-	throw new GitHubApiError(`GitHub API error (${status})`, status, rateLimitInfo);
+	throw new GitHubApiError(`GitHub API error (${status})`, status, rateLimitInfo, undefined, GitHubErrorCode.SERVER_ERROR);
+}
+
+/**
+ * Maps an error to a user-facing label for button display.
+ * Uses structured GitHubErrorCode when available, falls back to message matching.
+ */
+export function classifyErrorLabel(error: unknown): string {
+	if (error instanceof GitHubApiError && error.code) {
+		switch (error.code) {
+			case GitHubErrorCode.RATE_LIMITED: return "Rate Limited";
+			case GitHubErrorCode.NOT_FOUND: return "Not Found";
+			case GitHubErrorCode.AUTH_ERROR: return "Auth Error";
+			case GitHubErrorCode.ACCESS_DENIED: return "No Access";
+			case GitHubErrorCode.SERVER_ERROR: return "Server Error";
+			case GitHubErrorCode.NETWORK_ERROR: return "Network Error";
+			case GitHubErrorCode.TIMEOUT: return "Timeout";
+		}
+	}
+	// Fallback for non-GitHubApiError errors (e.g., GraphQL errors, generic errors)
+	const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+	if (message.includes("rate limit")) return "Rate Limited";
+	if (message.includes("not found") || message.includes("404")) return "Not Found";
+	if (message.includes("token") || message.includes("401") || message.includes("bad credentials")) return "Auth Error";
+	if (message.includes("access denied") || message.includes("403")) return "No Access";
+	return "Error";
 }

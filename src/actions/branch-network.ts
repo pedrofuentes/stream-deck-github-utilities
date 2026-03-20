@@ -26,6 +26,7 @@ import streamDeck from "@elgato/streamdeck";
 
 import type { GlobalSettings, BranchNetworkSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
+import { classifyErrorLabel } from "../utils/github-api";
 import { coordinator } from "../utils/graphql-query-coordinator";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderBranchNetworkStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
@@ -268,10 +269,7 @@ export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> 
 			const message = error instanceof Error ? error.message : "Unknown error";
 			streamDeck.logger.error(`Failed to fetch branch network for ${settings.repo}: ${message}`);
 
-			let errorLabel = "Error";
-			if (message.includes("rate limit")) errorLabel = "Rate Limited";
-			else if (message.includes("not found")) errorLabel = "Not Found";
-			else if (message.includes("token") || message.includes("401")) errorLabel = "Auth Error";
+			const errorLabel = classifyErrorLabel(error);
 
 			this.polling.reportError(actionId);
 			if (actionContext.isDial()) await actionContext.setFeedback({ canvas: renderStripError(errorLabel) });

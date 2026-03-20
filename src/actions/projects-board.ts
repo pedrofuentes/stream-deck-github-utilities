@@ -34,6 +34,7 @@ import streamDeck from "@elgato/streamdeck";
 
 import type { GlobalSettings, ProjectsBoardSettings, ProjectsV2Data } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
+import { classifyErrorLabel } from "../utils/github-api";
 import { coordinator } from "../utils/graphql-query-coordinator";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderProjectsBoardImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
@@ -310,11 +311,7 @@ export class ProjectsBoardAction extends SingletonAction<ProjectsBoardSettings> 
 			streamDeck.logger.error(`Failed to fetch projects for ${settings.repo}: ${message}`);
 			this.stopMarquee(actionId);
 
-			let errorLabel = "Error";
-			if (message.includes("rate limit")) errorLabel = "Rate Limited";
-			else if (message.includes("not found")) errorLabel = "Not Found";
-			else if (message.includes("token") || message.includes("401")) errorLabel = "Auth Error";
-			else if (message.includes("Access denied")) errorLabel = "No Access";
+			const errorLabel = classifyErrorLabel(error);
 
 			this.polling.reportError(actionId);
 			if (actionContext.isKey()) {

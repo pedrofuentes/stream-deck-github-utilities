@@ -9,6 +9,7 @@
 import {
 	GITHUB_API_BASE,
 	GitHubApiError,
+	GitHubErrorCode,
 	buildHeaders,
 	fetchWithTimeout,
 	parseRateLimitHeaders,
@@ -66,7 +67,18 @@ export async function fetchRepoStats(
 		const errorBody = await response.text().catch(() => "Unknown error");
 
 		if (response.status === 401) {
-			throw new GitHubApiError("Invalid or expired GitHub token", response.status, rateLimitInfo);
+			throw new GitHubApiError("Invalid or expired GitHub token", response.status, rateLimitInfo, undefined, GitHubErrorCode.AUTH_ERROR);
+		}
+
+		if (response.status === 429) {
+			const resetTime = rateLimitInfo.reset.toLocaleTimeString();
+			throw new GitHubApiError(
+				`GitHub API rate limit exceeded (429). Resets at ${resetTime}`,
+				response.status,
+				rateLimitInfo,
+				undefined,
+				GitHubErrorCode.RATE_LIMITED,
+			);
 		}
 
 		if (response.status === 403 && rateLimitInfo.remaining === 0) {
@@ -75,11 +87,13 @@ export async function fetchRepoStats(
 				`GitHub API rate limit exceeded. Resets at ${resetTime}`,
 				response.status,
 				rateLimitInfo,
+				undefined,
+				GitHubErrorCode.RATE_LIMITED,
 			);
 		}
 
 		if (response.status === 403) {
-			throw new GitHubApiError("Access denied. Check token permissions.", response.status, rateLimitInfo);
+			throw new GitHubApiError("Access denied. Check token permissions.", response.status, rateLimitInfo, undefined, GitHubErrorCode.ACCESS_DENIED);
 		}
 
 		if (response.status === 404) {
@@ -87,6 +101,8 @@ export async function fetchRepoStats(
 				`Repository "${owner}/${repo}" not found or is private`,
 				response.status,
 				rateLimitInfo,
+				undefined,
+				GitHubErrorCode.NOT_FOUND,
 			);
 		}
 
@@ -94,6 +110,8 @@ export async function fetchRepoStats(
 			`GitHub API error (${response.status}): ${errorBody}`,
 			response.status,
 			rateLimitInfo,
+			undefined,
+			GitHubErrorCode.SERVER_ERROR,
 		);
 	}
 

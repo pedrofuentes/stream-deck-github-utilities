@@ -33,6 +33,7 @@ import streamDeck from "@elgato/streamdeck";
 
 import type { GlobalSettings, PullRequestCounterSettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
+import { classifyErrorLabel } from "../utils/github-api";
 import { coordinator } from "../utils/graphql-query-coordinator";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderPRCountImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
@@ -349,11 +350,7 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 			streamDeck.logger.error(`Failed to fetch PR count for ${settings.repo}: ${message}`);
 			this.stopMarquee(actionId);
 
-			let errorLabel = "Error";
-			if (message.includes("rate limit")) errorLabel = "Rate Limited";
-			else if (message.includes("not found")) errorLabel = "Not Found";
-			else if (message.includes("token") || message.includes("401")) errorLabel = "Auth Error";
-			else if (message.includes("Access denied")) errorLabel = "No Access";
+			const errorLabel = classifyErrorLabel(error);
 
 			this.polling.reportError(actionId);
 			if (actionContext.isKey()) {

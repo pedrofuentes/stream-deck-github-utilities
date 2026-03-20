@@ -27,6 +27,8 @@ export {
 	formatRepoSize,
 	parseRateLimitHeaders,
 	GitHubApiError,
+	classifyErrorLabel,
+	GitHubErrorCode,
 	fetchLatestWorkflowRun,
 	fetchLatestDeploymentStatus,
 	fetchWorkflowInfo,

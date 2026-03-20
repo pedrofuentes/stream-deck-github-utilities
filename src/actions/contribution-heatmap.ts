@@ -26,7 +26,7 @@ import streamDeck from "@elgato/streamdeck";
 
 import type { GlobalSettings, ContributionHeatmapSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
-import { fetchCommitActivityWeeks } from "../utils/github-api";
+import { classifyErrorLabel, fetchCommitActivityWeeks } from "../utils/github-api";
 import { fetchContributionCalendar, calendarToWeeklyData } from "../utils/github-graphql";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderHeatmapStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
@@ -374,10 +374,7 @@ export class ContributionHeatmapAction extends SingletonAction<ContributionHeatm
 			const label = dataSource === "user" ? "contribution calendar" : settings?.repo;
 			streamDeck.logger.error(`Failed to fetch ${label}: ${message}`);
 
-			let errorLabel = "Error";
-			if (message.includes("rate limit")) errorLabel = "Rate Limited";
-			else if (message.includes("not found")) errorLabel = "Not Found";
-			else if (message.includes("token") || message.includes("401")) errorLabel = "Auth Error";
+			const errorLabel = classifyErrorLabel(error);
 
 			this.polling.reportError(actionId);
 			if (actionContext.isDial()) await actionContext.setFeedback({ canvas: renderStripError(errorLabel) });

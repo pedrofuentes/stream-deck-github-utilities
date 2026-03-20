@@ -34,6 +34,7 @@ import streamDeck from "@elgato/streamdeck";
 import type { GlobalSettings, FleetMonitorSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
 import {
+	classifyErrorLabel,
 	getWorkflowDisplayStatus,
 	getWorkflowStatusLabel,
 } from "../utils/github-api";
@@ -320,11 +321,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 			const message = error instanceof Error ? error.message : "Unknown error";
 			streamDeck.logger.error(`Failed to refresh fleet monitor: ${message}`);
 
-			let errorLabel = "Error";
-			if (message.includes("rate limit")) errorLabel = "Rate Limited";
-			else if (message.includes("not found")) errorLabel = "Not Found";
-			else if (message.includes("token") || message.includes("401")) errorLabel = "Auth Error";
-			else if (message.includes("Access denied")) errorLabel = "No Access";
+			const errorLabel = classifyErrorLabel(error);
 
 			this.polling.reportError(actionId);
 			if (actionContext.isKey()) {

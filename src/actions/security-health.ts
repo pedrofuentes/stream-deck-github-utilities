@@ -33,6 +33,7 @@ import streamDeck from "@elgato/streamdeck";
 import type { GlobalSettings, SecurityHealthSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
 import { coordinator } from "../utils/graphql-query-coordinator";
+import { classifyErrorLabel } from "../utils/github-api";
 import type { SecurityAlertSummary } from "../utils/github-api";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { renderKeyImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
@@ -304,11 +305,7 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 			const message = error instanceof Error ? error.message : "Unknown error";
 			streamDeck.logger.error(`Failed to fetch security health: ${message}`);
 
-			let errorLabel = "Error";
-			if (message.includes("rate limit")) errorLabel = "Rate Limited";
-			else if (message.includes("not found")) errorLabel = "Not Found";
-			else if (message.includes("token") || message.includes("401")) errorLabel = "Auth Error";
-			else if (message.includes("Access denied")) errorLabel = "No Access";
+			const errorLabel = classifyErrorLabel(error);
 
 			this.polling.reportError(actionId);
 			if (actionContext.isKey()) {
