@@ -120,6 +120,10 @@ export {
 	GraphQLQueryCoordinator,
 } from "./graphql-query-coordinator";
 export {
+	fragmentRegistry,
+	type FragmentStrategy,
+} from "./fragment-strategies";
+export {
 	buildRepoQuery,
 	buildSearchQuery,
 	isGraphQLFragment,

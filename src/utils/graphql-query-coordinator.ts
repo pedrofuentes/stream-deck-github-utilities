@@ -23,31 +23,10 @@ import type {
 import { RepoDataCache } from "./repo-data-cache";
 import { buildRepoQuery, buildSearchQuery, isGraphQLFragment } from "./graphql-query-builder";
 import { executeGraphQLQuery } from "./github-graphql";
-import {
-	extractRepoMetadata,
-	extractPRCount,
-	extractIssueCount,
-	extractLatestRelease,
-	extractBranches,
-	extractSecurityAlerts,
-	extractReviewRequestedPRs,
-	extractDiscussions,
-	extractProjectsV2,
-} from "./data-fragments";
-import {
-	fetchRepoStats,
-	fetchOpenPullRequestCount,
-	fetchPullRequestCount,
-	fetchIssueCount,
-	fetchLatestRelease,
-	fetchBranchNetwork,
-	fetchDependabotAlerts,
-	fetchReviewRequestedPRs,
-	fetchWorkflowInfo,
-	fetchCommitActivityWeeks,
-	fetchBranchComparison,
-} from "./github-api";
+import { extractReviewRequestedPRs } from "./data-fragments";
+import { fetchReviewRequestedPRs } from "./github-api";
 import { parseRepoIdentifier } from "./github";
+import { fragmentRegistry } from "./fragment-strategies";
 import streamDeck from "@elgato/streamdeck";
 
 /**
@@ -304,6 +283,7 @@ export class GraphQLQueryCoordinator {
 
 	/**
 	 * Extracts data from a GraphQL repo node and caches it.
+	 * Delegates to the registered {@link FragmentStrategy} for the fragment.
 	 */
 	private extractAndCacheFragment(
 		repo: string,
@@ -311,38 +291,15 @@ export class GraphQLQueryCoordinator {
 		node: GraphQLRepoNode,
 		params?: FragmentParams,
 	): void {
-		switch (fragment) {
-			case "repoMetadata":
-				this.cache.set(repo, "repoMetadata", extractRepoMetadata(node), "graphql");
-				break;
-			case "prCount":
-				this.cache.set(repo, "prCount", extractPRCount(node, params?.prState ?? "open"), "graphql");
-				break;
-			case "issueCount":
-				this.cache.set(repo, "issueCount", extractIssueCount(node, params?.issueState ?? "open"), "graphql");
-				break;
-			case "latestRelease":
-				this.cache.set(repo, "latestRelease", extractLatestRelease(node, params?.includePreReleases ?? false), "graphql");
-				break;
-			case "branches":
-				this.cache.set(repo, "branches", extractBranches(node), "graphql");
-				break;
-			case "vulnerabilityAlerts":
-				this.cache.set(repo, "vulnerabilityAlerts", extractSecurityAlerts(node), "graphql");
-				break;
-			case "discussions":
-				this.cache.set(repo, "discussions", extractDiscussions(node), "graphql");
-				break;
-			case "projectsV2":
-				this.cache.set(repo, "projectsV2", extractProjectsV2(node), "graphql");
-				break;
-			default:
-				break;
+		const strategy = fragmentRegistry.get(fragment);
+		if (strategy?.supportsGraphQL && strategy.extractFromGraphQL) {
+			strategy.extractFromGraphQL(this.cache, repo, node, params);
 		}
 	}
 
 	/**
 	 * Fetches a single fragment via REST API and caches the result.
+	 * Delegates to the registered {@link FragmentStrategy} for the fragment.
 	 */
 	private async fetchRESTFragment(
 		repo: string,
@@ -350,78 +307,11 @@ export class GraphQLQueryCoordinator {
 		token: string,
 		params?: FragmentParams,
 	): Promise<void> {
-		const parsed = parseRepoIdentifier(repo);
-		if (!parsed) return;
-
-		const { owner, repo: repoName } = parsed;
+		const strategy = fragmentRegistry.get(fragment);
+		if (!strategy) return;
 
 		try {
-			switch (fragment) {
-				case "repoMetadata": {
-					const [stats, openPRCount] = await Promise.all([
-						fetchRepoStats(owner, repoName, token),
-						fetchOpenPullRequestCount(owner, repoName, token),
-					]);
-					stats.open_pull_request_count = openPRCount;
-					this.cache.set(repo, "repoMetadata", stats, "rest");
-					break;
-				}
-				case "prCount": {
-					const count = await fetchPullRequestCount(owner, repoName, token, params?.prState ?? "open");
-					this.cache.set(repo, "prCount", count, "rest");
-					break;
-				}
-				case "issueCount": {
-					const count = await fetchIssueCount(owner, repoName, token, params?.issueState ?? "open");
-					this.cache.set(repo, "issueCount", count, "rest");
-					break;
-				}
-				case "latestRelease": {
-					const release = await fetchLatestRelease(owner, repoName, token, params?.includePreReleases ?? false);
-					this.cache.set(repo, "latestRelease", release, "rest");
-					break;
-				}
-				case "branches": {
-					const branches = await fetchBranchNetwork(owner, repoName, token);
-					this.cache.set(repo, "branches", branches, "rest");
-					break;
-				}
-				case "vulnerabilityAlerts": {
-					const alerts = await fetchDependabotAlerts(owner, repoName, token);
-					this.cache.set(repo, "vulnerabilityAlerts", alerts, "rest");
-					break;
-				}
-				case "workflowRuns": {
-					const info = await fetchWorkflowInfo(owner, repoName, token, {
-						branch: params?.branch,
-						workflowFile: params?.workflowFile,
-						environment: params?.environment,
-					});
-					this.cache.set(repo, "workflowRuns", info, "rest");
-					break;
-				}
-				case "commitActivity": {
-					const weeks = await fetchCommitActivityWeeks(owner, repoName, token);
-					this.cache.set(repo, "commitActivity", weeks, "rest");
-					break;
-				}
-				case "branchComparison": {
-					const base = params?.baseBranch ?? "main";
-					const head = params?.headBranch ?? "develop";
-					const comparison = await fetchBranchComparison(owner, repoName, base, head, token);
-					this.cache.set(repo, "branchComparison", comparison, "rest");
-					break;
-				}
-				// discussions and projectsV2 have no REST fallback
-				case "discussions":
-				case "projectsV2":
-				case "reviewRequestedPRs":
-					break;
-				default: {
-					const _exhaustiveCheck: never = fragment;
-					throw new Error(`Unhandled fragment type: ${_exhaustiveCheck}`);
-				}
-			}
+			await strategy.fetchViaREST(this.cache, repo, token, params);
 		} catch (err) {
 			// REST also failed — stale cache data (if any) will be used as fallback
 			streamDeck.logger.debug(`REST fallback failed for ${fragment} on ${repo}: ${err instanceof Error ? err.message : "unknown"}`);
@@ -500,53 +390,16 @@ export class GraphQLQueryCoordinator {
 
 	/**
 	 * Assigns a fragment's data to the appropriate field on the result object.
+	 * Delegates to the registered {@link FragmentStrategy} for the fragment.
 	 */
 	private assignFragmentToResult(
 		result: CoordinatorResult,
 		fragment: DataFragmentName,
 		data: unknown,
 	): void {
-		switch (fragment) {
-			case "repoMetadata":
-				result.repoMetadata = data as CoordinatorResult["repoMetadata"];
-				break;
-			case "prCount":
-				result.prCount = data as CoordinatorResult["prCount"];
-				break;
-			case "issueCount":
-				result.issueCount = data as CoordinatorResult["issueCount"];
-				break;
-			case "latestRelease":
-				result.latestRelease = data as CoordinatorResult["latestRelease"];
-				break;
-			case "branches":
-				result.branches = data as CoordinatorResult["branches"];
-				break;
-			case "vulnerabilityAlerts":
-				result.vulnerabilityAlerts = data as CoordinatorResult["vulnerabilityAlerts"];
-				break;
-			case "reviewRequestedPRs":
-				result.reviewRequestedPRs = data as CoordinatorResult["reviewRequestedPRs"];
-				break;
-			case "workflowRuns":
-				result.workflowRuns = data as CoordinatorResult["workflowRuns"];
-				break;
-			case "commitActivity":
-				result.commitActivity = data as CoordinatorResult["commitActivity"];
-				break;
-			case "branchComparison":
-				result.branchComparison = data as CoordinatorResult["branchComparison"];
-				break;
-			case "discussions":
-				result.discussions = data as CoordinatorResult["discussions"];
-				break;
-			case "projectsV2":
-				result.projectsV2 = data as CoordinatorResult["projectsV2"];
-				break;
-			default: {
-				const _exhaustiveCheck: never = fragment;
-				throw new Error(`Unhandled fragment type: ${_exhaustiveCheck}`);
-			}
+		const strategy = fragmentRegistry.get(fragment);
+		if (strategy) {
+			strategy.assignToResult(result, data);
 		}
 	}
 }
