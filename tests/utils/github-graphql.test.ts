@@ -163,6 +163,13 @@ describe("github-graphql", () => {
 			await expect(fetchContributionCalendar("bad_token")).rejects.toThrow("GraphQL request failed: 401");
 		});
 
+		it("throws GraphQLQueryError (not generic Error) on HTTP failure", async () => {
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockHttpError(401));
+
+			await expect(fetchContributionCalendar("bad_token"))
+				.rejects.toBeInstanceOf(GraphQLQueryError);
+		});
+
 		it("throws on HTTP 500 error", async () => {
 			vi.mocked(globalThis.fetch).mockResolvedValue(mockHttpError(500));
 
@@ -176,6 +183,17 @@ describe("github-graphql", () => {
 
 			await expect(fetchContributionCalendar("ghp_test", "nonexistent"))
 				.rejects.toThrow("GraphQL error: Could not resolve to a User");
+		});
+
+		it("preserves GraphQLQueryError type and structured info on GraphQL errors", async () => {
+			vi.mocked(globalThis.fetch).mockResolvedValue(
+				mockGraphQLResponse(null, [{ message: "Could not resolve to a User" }]),
+			);
+
+			const err = await fetchContributionCalendar("ghp_test", "nonexistent").catch((e) => e);
+			expect(err).toBeInstanceOf(GraphQLQueryError);
+			expect(err.graphqlErrors).toBeDefined();
+			expect(err.graphqlErrors).toHaveLength(1);
 		});
 
 		it("throws on missing contribution data", async () => {
@@ -526,6 +544,37 @@ describe("github-graphql", () => {
 				expect(gqlErr.status).toBe(403);
 				expect(gqlErr.rateLimit).toBeDefined();
 				expect(gqlErr.rateLimit!.remaining).toBe(0);
+			}
+		});
+
+		it("converts network failure to GraphQLQueryError with status 0", async () => {
+			vi.mocked(globalThis.fetch).mockRejectedValue(new TypeError("fetch failed"));
+
+			try {
+				await executeGraphQLQuery("ghp_token", "query { viewer { login } }");
+				expect.unreachable("should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(GraphQLQueryError);
+				const gqlErr = err as GraphQLQueryError;
+				expect(gqlErr.status).toBe(0);
+				expect(gqlErr.message).toContain("Network error");
+				expect(gqlErr.message).toContain("fetch failed");
+			}
+		});
+
+		it("converts timeout (AbortError) to GraphQLQueryError with 'timed out' message", async () => {
+			const abortError = new DOMException("The operation was aborted", "AbortError");
+			vi.mocked(globalThis.fetch).mockRejectedValue(abortError);
+
+			try {
+				await executeGraphQLQuery("ghp_token", "query { viewer { login } }");
+				expect.unreachable("should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(GraphQLQueryError);
+				const gqlErr = err as GraphQLQueryError;
+				expect(gqlErr.status).toBe(0);
+				expect(gqlErr.message).toContain("timed out");
+				expect(gqlErr.message).toContain("30s");
 			}
 		});
 	});

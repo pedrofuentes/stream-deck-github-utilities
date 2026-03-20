@@ -26,6 +26,19 @@ const mocks = vi.hoisted(() => ({
 	fetchCommitActivityWeeks: vi.fn(),
 	fetchBranchComparison: vi.fn(),
 	parseRepoIdentifier: vi.fn(),
+	loggerDebug: vi.fn(),
+}));
+
+vi.mock("@elgato/streamdeck", () => ({
+	default: {
+		logger: {
+			debug: mocks.loggerDebug,
+			info: vi.fn(),
+			warn: vi.fn(),
+			error: vi.fn(),
+			setLevel: vi.fn(),
+		},
+	},
 }));
 
 vi.mock("../../src/utils/github-graphql", () => ({
@@ -627,6 +640,54 @@ describe("GraphQLQueryCoordinator", () => {
 
 			expect(mocks.fetchDependabotAlerts).toHaveBeenCalled();
 			expect(result.vulnerabilityAlerts!.total).toBe(1);
+		});
+
+		it("should log debug message when GraphQL batch fails", async () => {
+			mocks.executeGraphQLQuery.mockRejectedValue(new Error("timeout"));
+			mocks.fetchPullRequestCount.mockResolvedValue(42);
+
+			coordinator.subscribe(baseSub({ fragments: ["prCount"] }));
+			await coordinator.fetchData("action-1", TOKEN);
+
+			expect(mocks.loggerDebug).toHaveBeenCalledWith(
+				expect.stringContaining("owner/repo"),
+			);
+			expect(mocks.loggerDebug).toHaveBeenCalledWith(
+				expect.stringMatching(/GraphQL batch failed.*timeout/),
+			);
+		});
+
+		it("should log debug message when individual fragment extraction fails", async () => {
+			mocks.executeGraphQLQuery.mockResolvedValue({
+				data: {
+					repository: {
+						...makeRepoNode(),
+						refs: { nodes: [{ name: "main", target: null }] },
+					},
+				},
+			});
+			mocks.fetchBranchNetwork.mockResolvedValue([
+				{ name: "main", commitSha: "abc123" },
+			]);
+
+			coordinator.subscribe(baseSub({ fragments: ["branches"] }));
+			await coordinator.fetchData("action-1", TOKEN);
+
+			expect(mocks.loggerDebug).toHaveBeenCalledWith(
+				expect.stringMatching(/Fragment extraction failed.*branches.*owner\/repo/),
+			);
+		});
+
+		it("should log debug message when REST fallback fails", async () => {
+			mocks.executeGraphQLQuery.mockRejectedValue(new Error("GraphQL down"));
+			mocks.fetchPullRequestCount.mockRejectedValue(new Error("REST 500"));
+
+			coordinator.subscribe(baseSub({ fragments: ["prCount"] }));
+			await coordinator.fetchData("action-1", TOKEN);
+
+			expect(mocks.loggerDebug).toHaveBeenCalledWith(
+				expect.stringMatching(/REST fallback failed.*prCount.*owner\/repo.*REST 500/),
+			);
 		});
 	});
 

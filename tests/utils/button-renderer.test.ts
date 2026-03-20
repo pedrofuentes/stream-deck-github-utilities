@@ -12,6 +12,7 @@
 import { describe, it, expect } from "vitest";
 import {
 	COLORS,
+	STAT_LABELS,
 	getWorkflowStatusColor,
 	getStatusIcon,
 	escapeXml,
@@ -28,6 +29,7 @@ import {
 	SPINNER_FRAME_COUNT,
 	SPINNER_INTERVAL_MS,
 } from "../../src/utils/button-renderer";
+import type { StatType } from "../../src/utils/github-api";
 
 /** Decode SVG from a data URI */
 function decodeSvg(dataUri: string): string {
@@ -35,6 +37,26 @@ function decodeSvg(dataUri: string): string {
 }
 
 describe("button-renderer", () => {
+	// ── STAT_LABELS ────────────────────────────────
+
+	describe("STAT_LABELS", () => {
+		const ALL_STAT_TYPES: StatType[] = [
+			"stars", "issues", "forks", "watchers", "pull_requests",
+			"language", "size", "license", "default_branch", "visibility",
+		];
+
+		it("has a label for every StatType", () => {
+			for (const type of ALL_STAT_TYPES) {
+				expect(STAT_LABELS[type]).toBeDefined();
+				expect(STAT_LABELS[type].length).toBeGreaterThan(0);
+			}
+		});
+
+		it("has no extra keys beyond StatType", () => {
+			expect(Object.keys(STAT_LABELS).sort()).toEqual(ALL_STAT_TYPES.sort());
+		});
+	});
+
 	// ── COLORS ──────────────────────────────────
 
 	describe("COLORS", () => {

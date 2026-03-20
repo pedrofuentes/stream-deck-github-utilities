@@ -67,6 +67,7 @@ export {
 	getStatusIcon,
 	escapeXml,
 	COLORS,
+	STAT_LABELS,
 	renderKeyImage,
 	renderIconKeyImage,
 	renderStatImage,

@@ -269,7 +269,15 @@ export function renderIconKeyImage(options: KeyIconImageOptions): string {
 
 // ── Convenience renderers ──────────────────────────────────────────────────
 
-const STAT_LABELS: Record<StatType, string> = {
+/**
+ * Display labels for stat types on Stream Deck keys.
+ * Uses `satisfies` to ensure compile-time exhaustiveness — adding a new
+ * {@link StatType} without a label here will cause a type error.
+ *
+ * See also: `STAT_LABELS` in `touch-strip-renderer.ts` for the
+ * touch-strip variant with Unicode glyphs.
+ */
+export const STAT_LABELS = {
 	stars: "Stars",
 	issues: "Issues",
 	forks: "Forks",
@@ -280,7 +288,7 @@ const STAT_LABELS: Record<StatType, string> = {
 	license: "License",
 	default_branch: "Branch",
 	visibility: "Visibility",
-};
+} as const satisfies Record<StatType, string>;
 
 /**
  * Renders a repo stat image.

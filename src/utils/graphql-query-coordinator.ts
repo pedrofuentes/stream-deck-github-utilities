@@ -48,6 +48,7 @@ import {
 	fetchBranchComparison,
 } from "./github-api";
 import { parseRepoIdentifier } from "./github";
+import streamDeck from "@elgato/streamdeck";
 
 /**
  * Centralized data fetching coordinator for Stream Deck actions.
@@ -286,15 +287,17 @@ export class GraphQLQueryCoordinator {
 			for (const frag of repoScopedFragments) {
 				try {
 					this.extractAndCacheFragment(repo, frag, node, params);
-				} catch {
+				} catch (err) {
 					// Individual extractor failed — try REST fallback for this fragment
+					streamDeck.logger.debug(`Fragment extraction failed for ${frag} on ${repo}, falling back to REST: ${err instanceof Error ? err.message : "unknown"}`);
 					await this.fetchRESTFragment(repo, frag, token, params);
 				}
 			}
 
 			return true;
-		} catch {
+		} catch (err) {
 			// Total GraphQL failure — caller will fall back to REST
+			streamDeck.logger.debug(`GraphQL batch failed for ${repo}: ${err instanceof Error ? err.message : "unknown"}`);
 			return false;
 		}
 	}
@@ -413,8 +416,9 @@ export class GraphQLQueryCoordinator {
 				case "reviewRequestedPRs":
 					break;
 			}
-		} catch {
+		} catch (err) {
 			// REST also failed — stale cache data (if any) will be used as fallback
+			streamDeck.logger.debug(`REST fallback failed for ${fragment} on ${repo}: ${err instanceof Error ? err.message : "unknown"}`);
 		}
 	}
 

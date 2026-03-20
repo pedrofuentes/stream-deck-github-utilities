@@ -52,6 +52,18 @@ describe("renderStatStrip", () => {
 		expect(svg).toContain("PRS");
 	});
 
+	it("should have a symbolic label for every base stat type", () => {
+		const baseTypes = [
+			"stars", "issues", "forks", "watchers", "pull_requests",
+			"language", "size", "license", "default_branch", "visibility",
+		];
+		for (const type of baseTypes) {
+			const svg = decodeSvg(renderStatStrip("1", type));
+			// Every stat type should render a label (uppercase text after the symbol)
+			expect(svg).toMatch(/[A-Z]{2,}/);
+		}
+	});
+
 	it("should use the correct accent color for stars", () => {
 		const svg = decodeSvg(renderStatStrip("100", "stars"));
 		expect(svg).toContain("#e3b341");

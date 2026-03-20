@@ -77,14 +77,32 @@ export async function executeGraphQLQuery<T>(
 		body.variables = variables;
 	}
 
-	const response = await fetch(GITHUB_GRAPHQL_ENDPOINT, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${token}`,
-		},
-		body: JSON.stringify(body),
-	});
+	let response: Response;
+	try {
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 30000);
+		try {
+			response = await fetch(GITHUB_GRAPHQL_ENDPOINT, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${token}`,
+				},
+				body: JSON.stringify(body),
+				signal: controller.signal,
+			});
+		} finally {
+			clearTimeout(timeoutId);
+		}
+	} catch (err) {
+		if (err instanceof Error && err.name === "AbortError") {
+			throw new GraphQLQueryError("GraphQL request timed out after 30s", 0);
+		}
+		throw new GraphQLQueryError(
+			`Network error: ${err instanceof Error ? err.message : "unknown"}`,
+			0,
+		);
+	}
 
 	const rateLimit = parseRateLimitHeaders(response.headers);
 
@@ -162,16 +180,7 @@ export async function fetchContributionCalendar(
 		? `query { user(login: "${username}") { contributionsCollection { contributionCalendar { totalContributions weeks { contributionDays { date contributionCount } } } } } }`
 		: `query { viewer { contributionsCollection { contributionCalendar { totalContributions weeks { contributionDays { date contributionCount } } } } } }`;
 
-	let result: GraphQLQueryResult<ContributionCalendarResponse>;
-	try {
-		result = await executeGraphQLQuery<ContributionCalendarResponse>(token, query);
-	} catch (err) {
-		if (err instanceof GraphQLQueryError) {
-			// Preserve original error message format for backward compatibility
-			throw new Error(err.message);
-		}
-		throw err;
-	}
+	const result = await executeGraphQLQuery<ContributionCalendarResponse>(token, query);
 
 	const calendar = result.data.user?.contributionsCollection?.contributionCalendar
 		?? result.data.viewer?.contributionsCollection?.contributionCalendar;

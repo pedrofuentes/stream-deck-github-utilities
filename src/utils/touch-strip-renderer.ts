@@ -20,6 +20,7 @@
  */
 
 import { COLORS, escapeXml, getWorkflowStatusColor } from "./button-renderer";
+import type { StatType } from "./github-api";
 
 // ── SVG Encoding ───────────────────────────────────────────────────────────
 
@@ -50,7 +51,18 @@ const STRIP_SURFACE = "#0d1117";
 
 // ── Stat label map ─────────────────────────────────────────────────────────
 
-const STAT_LABELS: Record<string, string> = {
+/** Touch-strip extra stat keys beyond the base {@link StatType}. */
+type TouchStripExtraKey = "releases" | "commits" | "branches" | "discussions" | "projects";
+
+/**
+ * Symbolic labels for the touch-strip — uses Unicode glyphs and ALL-CAPS.
+ * The base keys must stay in sync with {@link StatType}; the typed record
+ * ensures a compile-time error if a new StatType is added without a
+ * corresponding label here.
+ *
+ * See also: `STAT_LABELS` in `button-renderer.ts` for the key-image variant.
+ */
+const STAT_LABELS: Record<StatType | TouchStripExtraKey, string> = {
 	stars: "★ STARS",
 	issues: "◉ ISSUES",
 	forks: "⑂ FORKS",
