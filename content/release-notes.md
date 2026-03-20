@@ -4,6 +4,21 @@
   Character limit per entry: 1,500
 -->
 
+## v2.2.1
+<!-- Characters: ~480 / 1,500 -->
+
+Bug fix release addressing touch/dial refresh behavior.
+
+**Bug Fixes:**
+- **Touch tap and dial rotate now force-refresh data** — 6 actions were returning cached data on touch/dial interactions instead of fetching fresh from GitHub. All actions now consistently invalidate cache on user-initiated refreshes.
+- **Sibling instance synchronization** — when multiple instances of the same action watch the same repository, force-refreshing one now automatically updates all others. Previously, only the tapped instance would refresh.
+
+**Under the Hood:**
+- Consolidated all actions to use a single force-refresh pattern (removed redundant `forceRefresh()` methods)
+- Added `onSiblingRefresh` callback mechanism to the GraphQL Query Coordinator
+
+---
+
 ## v2.2.0
 <!-- Characters: ~580 / 1,500 -->
 

@@ -333,7 +333,8 @@
   </div>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="rn-220">v2.2.0</button>
+    <button class="tab-btn active" data-tab="rn-221">v2.2.1</button>
+    <button class="tab-btn" data-tab="rn-220">v2.2.0</button>
     <button class="tab-btn" data-tab="rn-200">v2.0.0</button>
     <button class="tab-btn" data-tab="rn-150">v1.5.0</button>
     <button class="tab-btn" data-tab="rn-140">v1.4.0</button>
@@ -349,8 +350,26 @@
 
   <div class="tab-content-wrapper">
 
+    <!-- v2.2.1 -->
+    <div class="tab-panel active" id="rn-221">
+      <div class="content-box rn-box">
+        <h2>v2.2.1</h2>
+        <p>Bug fix release addressing touch/dial refresh behavior.</p>
+        <h3>Bug Fixes</h3>
+        <ul>
+          <li><strong>Touch tap and dial rotate now force-refresh data</strong> — 6 actions were returning cached data on touch/dial interactions instead of fetching fresh from GitHub. All actions now consistently invalidate cache on user-initiated refreshes.</li>
+          <li><strong>Sibling instance synchronization</strong> — when multiple instances of the same action watch the same repository, force-refreshing one now automatically updates all others.</li>
+        </ul>
+        <h3>Under the Hood</h3>
+        <ul>
+          <li>Consolidated all actions to use a single force-refresh pattern</li>
+          <li>Added sibling refresh callback mechanism to the GraphQL Query Coordinator</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- v2.2.0 -->
-    <div class="tab-panel active" id="rn-220">
+    <div class="tab-panel" id="rn-220">
       <div class="content-box rn-box">
         <h2>v2.2.0</h2>
         <p>New actions and smarter API usage with the GraphQL batch query coordinator.</p>
