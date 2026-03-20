@@ -40,14 +40,13 @@ import { renderCommitActivityImage, renderAnimatedSpinner, renderErrorImage, ren
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
 import { PollingCoordinator } from "../utils/polling-coordinator";
+import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300;
 const MIN_REFRESH_INTERVAL = 30;
 const MARQUEE_INTERVAL_MS = 500;
 const LINE1_MAX_VISIBLE = 14;
-const DOUBLE_CLICK_MS = 400;
-
 const RANGE_LABELS: Record<string, string> = {
 	"24h": "Commits (24h)",
 	"7d": "Commits (7d)",
@@ -69,7 +68,7 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 	private actionSettings = new Map<string, CommitActivitySettings>();
 	private marqueeData = new Map<string, CommitMarqueeData>();
 	private recentSetSettings = new Set<string>();
-	private openUrlTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	private urlOpener = new DebouncedUrlOpener();
 
 	/** Cached action contexts for O(1) lookup */
 	private actionContexts = new Map<string, Action<CommitActivitySettings>>();
@@ -120,21 +119,13 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 		this.actionSettings.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
 		this.recentSetSettings.delete(ev.action.id);
-		const urlTimer = this.openUrlTimers.get(ev.action.id);
-		if (urlTimer) {
-			clearTimeout(urlTimer);
-			this.openUrlTimers.delete(ev.action.id);
-		}
+		this.urlOpener.cleanup(ev.action.id);
 		this.actionContexts.delete(ev.action.id);
 		coordinator.unsubscribe(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<CommitActivitySettings>): Promise<void> {
-		// Double-click detection with debounced URL open
-		const pendingTimer = this.openUrlTimers.get(ev.action.id);
-		if (pendingTimer) {
-			clearTimeout(pendingTimer);
-			this.openUrlTimers.delete(ev.action.id);
+		if (this.urlOpener.handlePress(ev.action.id)) {
 			this.polling.resetBackoff(ev.action.id);
 			await this.refreshActivity(ev.action.id, true);
 			return;
@@ -148,10 +139,7 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 		const parsed = parseRepoIdentifier(repo);
 		if (parsed) {
 			const url = `https://github.com/${parsed.owner}/${parsed.repo}/commits`;
-			this.openUrlTimers.set(ev.action.id, setTimeout(() => {
-				this.openUrlTimers.delete(ev.action.id);
-				streamDeck.system.openUrl(url);
-			}, DOUBLE_CLICK_MS));
+			this.urlOpener.scheduleOpen(ev.action.id, url);
 		}
 	}
 

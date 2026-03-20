@@ -38,13 +38,13 @@ import { renderBranchComparisonImage, renderAnimatedSpinner, renderErrorImage, r
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
 import { PollingCoordinator } from "../utils/polling-coordinator";
+import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300;
 const MIN_REFRESH_INTERVAL = 30;
 const MARQUEE_INTERVAL_MS = 500;
 const LINE1_MAX_VISIBLE = 14;
-const DOUBLE_CLICK_MS = 400;
 
 @action({ UUID: "com.pedrofuentes.github-utilities.branch-comparison" })
 export class BranchComparisonAction extends SingletonAction<BranchComparisonSettings> {
@@ -52,7 +52,7 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 	private actionSettings = new Map<string, BranchComparisonSettings>();
 	private lastUrl = new Map<string, string>();
 	private marqueeData = new Map<string, BranchMarqueeData>();
-	private openUrlTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	private urlOpener = new DebouncedUrlOpener();
 	/** Cached action contexts for O(1) lookup */
 	private actionContexts = new Map<string, Action<BranchComparisonSettings>>();
 
@@ -105,21 +105,13 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
-		const urlTimer = this.openUrlTimers.get(ev.action.id);
-		if (urlTimer) {
-			clearTimeout(urlTimer);
-			this.openUrlTimers.delete(ev.action.id);
-		}
+		this.urlOpener.cleanup(ev.action.id);
 		this.actionContexts.delete(ev.action.id);
 		coordinator.unsubscribe(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<BranchComparisonSettings>): Promise<void> {
-		// Double-click detection with debounced URL open
-		const pendingTimer = this.openUrlTimers.get(ev.action.id);
-		if (pendingTimer) {
-			clearTimeout(pendingTimer);
-			this.openUrlTimers.delete(ev.action.id);
+		if (this.urlOpener.handlePress(ev.action.id)) {
 			this.polling.resetBackoff(ev.action.id);
 			await this.refreshComparison(ev.action.id, true);
 			return;
@@ -144,11 +136,7 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 		}
 
 		if (url) {
-			const openUrl = url;
-			this.openUrlTimers.set(ev.action.id, setTimeout(() => {
-				this.openUrlTimers.delete(ev.action.id);
-				streamDeck.system.openUrl(openUrl);
-			}, DOUBLE_CLICK_MS));
+			this.urlOpener.scheduleOpen(ev.action.id, url);
 		}
 	}
 

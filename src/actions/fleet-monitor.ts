@@ -42,17 +42,17 @@ import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provid
 import { renderKeyImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage, getWorkflowStatusColor } from "../utils/button-renderer";
 import { renderFleetStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { PollingCoordinator } from "../utils/polling-coordinator";
+import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
 const MIN_REFRESH_INTERVAL = 15; // 15 seconds minimum
-const DOUBLE_CLICK_MS = 400;
 
 @action({ UUID: "com.pedrofuentes.github-utilities.fleet-monitor" })
 export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 	private polling = new PollingCoordinator();
 	private actionSettings = new Map<string, FleetMonitorSettings>();
-	private openUrlTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	private urlOpener = new DebouncedUrlOpener();
 	/** Cached action contexts for O(1) lookup */
 	private actionContexts = new Map<string, Action<FleetMonitorSettings>>();
 
@@ -99,11 +99,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 		this.polling.stop(ev.action.id);
 		coordinator.unsubscribe(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
-		const urlTimer = this.openUrlTimers.get(ev.action.id);
-		if (urlTimer) {
-			clearTimeout(urlTimer);
-			this.openUrlTimers.delete(ev.action.id);
-		}
+		this.urlOpener.cleanup(ev.action.id);
 		this.actionContexts.delete(ev.action.id);
 	}
 
@@ -111,11 +107,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 	 * Called when the user presses the button. Opens the repository on GitHub.
 	 */
 	override async onKeyDown(ev: KeyDownEvent<FleetMonitorSettings>): Promise<void> {
-		// Double-click detection with debounced URL open
-		const pendingTimer = this.openUrlTimers.get(ev.action.id);
-		if (pendingTimer) {
-			clearTimeout(pendingTimer);
-			this.openUrlTimers.delete(ev.action.id);
+		if (this.urlOpener.handlePress(ev.action.id)) {
 			this.polling.resetBackoff(ev.action.id);
 			await this.refreshFleet(ev.action.id, true);
 			return;
@@ -133,10 +125,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 			}
 		}
 
-		this.openUrlTimers.set(ev.action.id, setTimeout(() => {
-			this.openUrlTimers.delete(ev.action.id);
-			streamDeck.system.openUrl(url);
-		}, DOUBLE_CLICK_MS));
+		this.urlOpener.scheduleOpen(ev.action.id, url);
 	}
 
 	/**

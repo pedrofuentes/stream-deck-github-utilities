@@ -38,11 +38,11 @@ import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provid
 import { renderKeyImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderSecurityArcStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { PollingCoordinator } from "../utils/polling-coordinator";
+import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
 const MIN_REFRESH_INTERVAL = 30; // 30 seconds minimum
-const DOUBLE_CLICK_MS = 400;
 
 /**
  * Computes a letter grade and numeric score from alert severity counts.
@@ -73,7 +73,7 @@ export function computeGrade(alerts: SecurityAlertSummary): { grade: string; sco
 export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings> {
 	private polling = new PollingCoordinator();
 	private actionSettings = new Map<string, SecurityHealthSettings>();
-	private openUrlTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	private urlOpener = new DebouncedUrlOpener();
 	/** Cached action contexts for O(1) lookup */
 	private actionContexts = new Map<string, Action<SecurityHealthSettings>>();
 
@@ -113,11 +113,7 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 		this.polling.stop(ev.action.id);
 		coordinator.unsubscribe(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
-		const urlTimer = this.openUrlTimers.get(ev.action.id);
-		if (urlTimer) {
-			clearTimeout(urlTimer);
-			this.openUrlTimers.delete(ev.action.id);
-		}
+		this.urlOpener.cleanup(ev.action.id);
 		this.actionContexts.delete(ev.action.id);
 	}
 
@@ -125,11 +121,7 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 	 * Called when the user presses the button. Opens the security page on GitHub.
 	 */
 	override async onKeyDown(ev: KeyDownEvent<SecurityHealthSettings>): Promise<void> {
-		// Double-click detection with debounced URL open
-		const pendingTimer = this.openUrlTimers.get(ev.action.id);
-		if (pendingTimer) {
-			clearTimeout(pendingTimer);
-			this.openUrlTimers.delete(ev.action.id);
+		if (this.urlOpener.handlePress(ev.action.id)) {
 			this.polling.resetBackoff(ev.action.id);
 			await this.refreshHealth(ev.action.id, true);
 			return;
@@ -147,10 +139,7 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 			}
 		}
 
-		this.openUrlTimers.set(ev.action.id, setTimeout(() => {
-			this.openUrlTimers.delete(ev.action.id);
-			streamDeck.system.openUrl(url);
-		}, DOUBLE_CLICK_MS));
+		this.urlOpener.scheduleOpen(ev.action.id, url);
 	}
 
 	/**

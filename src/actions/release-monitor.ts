@@ -41,6 +41,7 @@ import { renderReleaseImage, renderAnimatedSpinner, renderErrorImage, renderUnco
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
 import { PollingCoordinator } from "../utils/polling-coordinator";
+import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300;
@@ -48,9 +49,8 @@ const MIN_REFRESH_INTERVAL = 30;
 const MARQUEE_INTERVAL_MS = 500;
 const LINE1_MAX_VISIBLE = 14;
 const LINE2_MAX_VISIBLE = 16;
-const DOUBLE_CLICK_MS = 400;
 
-/** Cached render data and marquee state per action instance. */
+/** Cached render dataand marquee state per action instance. */
 interface ReleaseMarqueeData {
 	line1: MarqueeController;
 	line2: MarqueeController;
@@ -67,7 +67,7 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 	private lastUrl = new Map<string, string>();
 	private marqueeData = new Map<string, ReleaseMarqueeData>();
 	private recentSetSettings = new Set<string>();
-	private openUrlTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	private urlOpener = new DebouncedUrlOpener();
 
 	/** Cached action contexts for O(1) lookup */
 	private actionContexts = new Map<string, Action<ReleaseMonitorSettings>>();
@@ -124,20 +124,12 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 		this.lastUrl.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
 		this.recentSetSettings.delete(ev.action.id);
-		const urlTimer = this.openUrlTimers.get(ev.action.id);
-		if (urlTimer) {
-			clearTimeout(urlTimer);
-			this.openUrlTimers.delete(ev.action.id);
-		}
+		this.urlOpener.cleanup(ev.action.id);
 		this.actionContexts.delete(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<ReleaseMonitorSettings>): Promise<void> {
-		// Double-click detection with debounced URL open
-		const pendingTimer = this.openUrlTimers.get(ev.action.id);
-		if (pendingTimer) {
-			clearTimeout(pendingTimer);
-			this.openUrlTimers.delete(ev.action.id);
+		if (this.urlOpener.handlePress(ev.action.id)) {
 			this.polling.resetBackoff(ev.action.id);
 			await this.refreshRelease(ev.action.id, true);
 			return;
@@ -160,11 +152,7 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 		}
 
 		if (url) {
-			const openUrl = url;
-			this.openUrlTimers.set(ev.action.id, setTimeout(() => {
-				this.openUrlTimers.delete(ev.action.id);
-				streamDeck.system.openUrl(openUrl);
-			}, DOUBLE_CLICK_MS));
+			this.urlOpener.scheduleOpen(ev.action.id, url);
 		}
 	}
 

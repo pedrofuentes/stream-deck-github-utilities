@@ -41,6 +41,7 @@ import { renderStatImage, renderAnimatedSpinner, renderErrorImage, renderUnconfi
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
 import { PollingCoordinator } from "../utils/polling-coordinator";
+import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
@@ -49,7 +50,7 @@ const LONG_PRESS_THRESHOLD_MS = 500; // hold ≥ 500ms = long press
 const MARQUEE_INTERVAL_MS = 500; // marquee scroll speed
 const LINE1_MAX_VISIBLE = 14; // max chars at 18px (hardware-tested)
 const LINE2_MAX_VISIBLE = 16; // max chars at 18px for stat value
-const DOUBLE_CLICK_MS = 400;
+
 
 /** Cached render data and marquee state per action instance. */
 interface MarqueeData {
@@ -75,8 +76,8 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	/** Timestamp when key was pressed down (for long/short press detection) */
 	private keyDownTime = new Map<string, number>();
 
-	/** Timestamp of last key-up per action (for double-click detection) */
-	private openUrlTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	/** Debounced URL opener for double-click detection */
+	private urlOpener = new DebouncedUrlOpener();
 
 	/** Marquee scroll state per action instance */
 	private marqueeData = new Map<string, MarqueeData>();
@@ -151,11 +152,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.keyDownTime.delete(ev.action.id);
-		const urlTimer = this.openUrlTimers.get(ev.action.id);
-		if (urlTimer) {
-			clearTimeout(urlTimer);
-			this.openUrlTimers.delete(ev.action.id);
-		}
+		this.urlOpener.cleanup(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
 		this.recentSetSettings.delete(ev.action.id);
 		this.trendCache.delete(ev.action.id);
@@ -175,11 +172,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	 * Long press (≥ 500ms): opens the stat's GitHub page in the browser.
 	 */
 	override async onKeyUp(ev: KeyUpEvent<RepoStatsSettings>): Promise<void> {
-		// Double-click detection with debounced action
-		const pendingTimer = this.openUrlTimers.get(ev.action.id);
-		if (pendingTimer) {
-			clearTimeout(pendingTimer);
-			this.openUrlTimers.delete(ev.action.id);
+		if (this.urlOpener.handlePress(ev.action.id)) {
 			this.polling.resetBackoff(ev.action.id);
 			await this.refreshStats(ev.action.id, true);
 			return;
@@ -203,25 +196,18 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			// Long press → schedule URL open with debounce
 			const url = this.lastUrl.get(ev.action.id);
 			if (url) {
-				this.openUrlTimers.set(ev.action.id, setTimeout(() => {
-					this.openUrlTimers.delete(ev.action.id);
-					streamDeck.system.openUrl(url);
-				}, DOUBLE_CLICK_MS));
+				this.urlOpener.scheduleOpen(ev.action.id, url);
 			} else {
 				const parsed = parseRepoIdentifier(repo);
 				if (parsed) {
 					const statType: StatType = cached?.statType ?? settings.statType ?? "stars";
 					const computedUrl = getStatUrl(parsed.owner, parsed.repo, statType);
-					this.openUrlTimers.set(ev.action.id, setTimeout(() => {
-						this.openUrlTimers.delete(ev.action.id);
-						streamDeck.system.openUrl(computedUrl);
-					}, DOUBLE_CLICK_MS));
+					this.urlOpener.scheduleOpen(ev.action.id, computedUrl);
 				}
 			}
 		} else {
 			// Short press → schedule stat cycle with debounce
-			this.openUrlTimers.set(ev.action.id, setTimeout(async () => {
-				this.openUrlTimers.delete(ev.action.id);
+			this.urlOpener.schedule(ev.action.id, async () => {
 				// Cycle to next stat type
 				const cachedSettings = this.actionSettings.get(ev.action.id);
 				const currentType: StatType = cachedSettings?.statType ?? settings.statType ?? "stars";
@@ -236,7 +222,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 
 				this.polling.resetBackoff(ev.action.id);
 				await this.refreshStats(ev.action.id);
-			}, DOUBLE_CLICK_MS));
+			});
 		}
 	}
 

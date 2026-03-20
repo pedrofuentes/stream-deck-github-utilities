@@ -53,6 +53,7 @@ import {
 import { renderWorkflowStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
 import { PollingCoordinator } from "../utils/polling-coordinator";
+import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
 import type { JsonValue } from "@elgato/utils";
 
 const DEFAULT_REFRESH_INTERVAL = 60; // 1 minute (workflows change faster than stats)
@@ -60,7 +61,7 @@ const MIN_REFRESH_INTERVAL = 15; // 15 seconds minimum
 const MARQUEE_INTERVAL_MS = 500; // marquee scroll speed
 const LINE1_MAX_VISIBLE = 14; // max chars at 18px
 const LINE3_MAX_VISIBLE = 18; // max chars at 15px
-const DOUBLE_CLICK_MS = 400;
+
 
 /** Render variant cache for marquee re-rendering without API calls. */
 type WfRenderVariant =
@@ -98,8 +99,8 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	/** Last seen workflow run ID per action (to avoid duplicate dots) */
 	private lastRunId = new Map<string, number>();
 
-	/** Timestamp of last key-down per action (for double-click detection) */
-	private openUrlTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	/** Debounced URL opener for double-click detection */
+	private urlOpener = new DebouncedUrlOpener();
 
 	/** Cached action contexts for O(1) lookup */
 	private actionContexts = new Map<string, Action<WorkflowStatusSettings>>();
@@ -170,11 +171,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		this.marqueeData.delete(ev.action.id);
 		this.runHistory.delete(ev.action.id);
 		this.lastRunId.delete(ev.action.id);
-		const urlTimer = this.openUrlTimers.get(ev.action.id);
-		if (urlTimer) {
-			clearTimeout(urlTimer);
-			this.openUrlTimers.delete(ev.action.id);
-		}
+		this.urlOpener.cleanup(ev.action.id);
 		this.actionContexts.delete(ev.action.id);
 		coordinator.unsubscribe(ev.action.id);
 	}
@@ -183,11 +180,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	 * Called when the user presses the button. Opens the workflow run URL in the browser.
 	 */
 	override async onKeyDown(ev: KeyDownEvent<WorkflowStatusSettings>): Promise<void> {
-		// Double-click detection with debounced URL open
-		const pendingTimer = this.openUrlTimers.get(ev.action.id);
-		if (pendingTimer) {
-			clearTimeout(pendingTimer);
-			this.openUrlTimers.delete(ev.action.id);
+		if (this.urlOpener.handlePress(ev.action.id)) {
 			this.polling.resetBackoff(ev.action.id);
 			await this.refreshStatus(ev.action.id, true);
 			return;
@@ -214,11 +207,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		}
 
 		if (url) {
-			const openUrl = url;
-			this.openUrlTimers.set(ev.action.id, setTimeout(() => {
-				this.openUrlTimers.delete(ev.action.id);
-				streamDeck.system.openUrl(openUrl);
-			}, DOUBLE_CLICK_MS));
+			this.urlOpener.scheduleOpen(ev.action.id, url);
 		}
 	}
 

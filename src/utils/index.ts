@@ -149,3 +149,6 @@ export {
 	renderStripUnconfigured,
 	renderSecurityArcStrip,
 } from "./touch-strip-renderer";
+export {
+	DebouncedUrlOpener,
+} from "./debounced-url-opener";
