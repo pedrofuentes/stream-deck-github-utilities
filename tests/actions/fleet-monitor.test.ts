@@ -438,10 +438,13 @@ describe("FleetMonitorAction", () => {
 				configurable: true,
 			});
 
+			vi.useFakeTimers();
 			const ev = createKeyDownEvent(mockAction, {});
 			await action.onKeyDown?.(ev as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com");
+			vi.useRealTimers();
 		});
 
 		it("opens repo page when repo is configured", async () => {
@@ -454,10 +457,13 @@ describe("FleetMonitorAction", () => {
 			});
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
+			vi.useFakeTimers();
 			const ev = createKeyDownEvent(mockAction, settings);
 			await action.onKeyDown?.(ev as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/facebook/react");
+			vi.useRealTimers();
 		});
 
 		it("force refreshes on double-click", async () => {

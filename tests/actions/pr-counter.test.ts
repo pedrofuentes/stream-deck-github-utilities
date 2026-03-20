@@ -335,10 +335,13 @@ describe("PRCounterAction", () => {
 			mockCoordinator.fetchData.mockResolvedValue({ prCount: 5 });
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
+			vi.useFakeTimers();
 			const ev = createKeyDownEvent(mockAction, settings);
 			await action.onKeyDown?.(ev as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/facebook/react/pulls");
+			vi.useRealTimers();
 		});
 
 		it("does nothing when repo is not configured", async () => {

@@ -398,19 +398,25 @@ describe("SecurityHealthAction", () => {
 			});
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
+			vi.useFakeTimers();
 			const ev = createKeyDownEvent(mockAction, settings);
 			await action.onKeyDown?.(ev as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/facebook/react/security");
+			vi.useRealTimers();
 		});
 
 		it("opens github.com when no repo configured", async () => {
 			const mockAction = createMockKeyAction("sh-k-2");
 
+			vi.useFakeTimers();
 			const ev = createKeyDownEvent(mockAction, {});
 			await action.onKeyDown?.(ev as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com");
+			vi.useRealTimers();
 		});
 	});
 

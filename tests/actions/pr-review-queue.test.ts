@@ -371,10 +371,13 @@ describe("PRReviewQueueAction", () => {
 			mockCoordinatorFetchData.mockResolvedValue(mockCoordinatorResponse(1));
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, {}) as never);
 
+			vi.useFakeTimers();
 			const ev = createKeyDownEvent(mockAction, {});
 			await action.onKeyDown?.(ev as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/pulls/review-requested");
+			vi.useRealTimers();
 		});
 
 		it("opens repo-specific review page when repo is configured", async () => {
@@ -388,12 +391,15 @@ describe("PRReviewQueueAction", () => {
 			mockCoordinatorFetchData.mockResolvedValue(mockCoordinatorResponse(1));
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
+			vi.useFakeTimers();
 			const ev = createKeyDownEvent(mockAction, settings);
 			await action.onKeyDown?.(ev as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith(
 				"https://github.com/facebook/react/pulls?q=is%3Apr+is%3Aopen+review-requested%3A%40me"
 			);
+			vi.useRealTimers();
 		});
 	});
 

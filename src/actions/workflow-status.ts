@@ -60,6 +60,7 @@ const MIN_REFRESH_INTERVAL = 15; // 15 seconds minimum
 const MARQUEE_INTERVAL_MS = 500; // marquee scroll speed
 const LINE1_MAX_VISIBLE = 14; // max chars at 18px
 const LINE3_MAX_VISIBLE = 18; // max chars at 15px
+const DOUBLE_CLICK_MS = 400;
 
 /** Render variant cache for marquee re-rendering without API calls. */
 type WfRenderVariant =
@@ -98,7 +99,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	private lastRunId = new Map<string, number>();
 
 	/** Timestamp of last key-down per action (for double-click detection) */
-	private lastKeyUpTime = new Map<string, number>();
+	private openUrlTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 	/** Cached action contexts for O(1) lookup */
 	private actionContexts = new Map<string, Action<WorkflowStatusSettings>>();
@@ -169,7 +170,11 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 		this.marqueeData.delete(ev.action.id);
 		this.runHistory.delete(ev.action.id);
 		this.lastRunId.delete(ev.action.id);
-		this.lastKeyUpTime.delete(ev.action.id);
+		const urlTimer = this.openUrlTimers.get(ev.action.id);
+		if (urlTimer) {
+			clearTimeout(urlTimer);
+			this.openUrlTimers.delete(ev.action.id);
+		}
 		this.actionContexts.delete(ev.action.id);
 		coordinator.unsubscribe(ev.action.id);
 	}
@@ -178,12 +183,11 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 	 * Called when the user presses the button. Opens the workflow run URL in the browser.
 	 */
 	override async onKeyDown(ev: KeyDownEvent<WorkflowStatusSettings>): Promise<void> {
-		// Double-click detection → force refresh
-		const now = Date.now();
-		const lastUp = this.lastKeyUpTime.get(ev.action.id) ?? 0;
-		this.lastKeyUpTime.set(ev.action.id, now);
-		if (now - lastUp < 400) {
-			this.lastKeyUpTime.delete(ev.action.id);
+		// Double-click detection with debounced URL open
+		const pendingTimer = this.openUrlTimers.get(ev.action.id);
+		if (pendingTimer) {
+			clearTimeout(pendingTimer);
+			this.openUrlTimers.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
 			await this.refreshStatus(ev.action.id, true);
 			return;
@@ -195,19 +199,26 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			return;
 		}
 
-		// Open the last known URL for this action (workflow run or repo actions page)
-		const url = this.lastUrl.get(ev.action.id);
-		if (url) {
-			await streamDeck.system.openUrl(url);
+		// Compute URL synchronously, then schedule it to open after delay
+		const cachedUrl = this.lastUrl.get(ev.action.id);
+		let url: string | undefined;
+		if (cachedUrl) {
+			url = cachedUrl;
 		} else {
-			// Fallback: open the repo's Actions tab
 			const parsed = parseRepoIdentifier(settings.repo);
 			if (parsed) {
-				const fallbackUrl = settings.workflowFile
+				url = settings.workflowFile
 					? `https://github.com/${parsed.owner}/${parsed.repo}/actions/workflows/${encodeURIComponent(settings.workflowFile)}`
 					: `https://github.com/${parsed.owner}/${parsed.repo}/actions`;
-				await streamDeck.system.openUrl(fallbackUrl);
 			}
+		}
+
+		if (url) {
+			const openUrl = url;
+			this.openUrlTimers.set(ev.action.id, setTimeout(() => {
+				this.openUrlTimers.delete(ev.action.id);
+				streamDeck.system.openUrl(openUrl);
+			}, DOUBLE_CLICK_MS));
 		}
 	}
 

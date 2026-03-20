@@ -322,9 +322,12 @@ describe("BranchComparisonAction", () => {
 			});
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			vi.useFakeTimers();
 			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/compare/main...develop");
+			vi.useRealTimers();
 		});
 
 		it("constructs fallback URL when no cached URL", async () => {
@@ -351,11 +354,14 @@ describe("BranchComparisonAction", () => {
 				headBranch: "fix#123",
 			};
 
+			vi.useFakeTimers();
 			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith(
 				`https://github.com/owner/repo/compare/${encodeURIComponent("feature/my-branch")}...${encodeURIComponent("fix#123")}`
 			);
+			vi.useRealTimers();
 		});
 
 		it("does nothing when repo is not configured", async () => {

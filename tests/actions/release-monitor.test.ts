@@ -276,9 +276,12 @@ describe("ReleaseMonitorAction", () => {
 			});
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			vi.useFakeTimers();
 			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/releases/tag/v1.0.0");
+			vi.useRealTimers();
 		});
 
 		it("opens releases page when no specific release URL", async () => {
@@ -286,9 +289,12 @@ describe("ReleaseMonitorAction", () => {
 			const settings = { repo: "owner/repo" };
 
 			// Don't appear first — no cached URL
+			vi.useFakeTimers();
 			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/releases");
+			vi.useRealTimers();
 		});
 
 		it("does nothing when repo is not configured", async () => {

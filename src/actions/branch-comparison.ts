@@ -44,6 +44,7 @@ const DEFAULT_REFRESH_INTERVAL = 300;
 const MIN_REFRESH_INTERVAL = 30;
 const MARQUEE_INTERVAL_MS = 500;
 const LINE1_MAX_VISIBLE = 14;
+const DOUBLE_CLICK_MS = 400;
 
 @action({ UUID: "com.pedrofuentes.github-utilities.branch-comparison" })
 export class BranchComparisonAction extends SingletonAction<BranchComparisonSettings> {
@@ -51,7 +52,7 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 	private actionSettings = new Map<string, BranchComparisonSettings>();
 	private lastUrl = new Map<string, string>();
 	private marqueeData = new Map<string, BranchMarqueeData>();
-	private lastKeyUpTime = new Map<string, number>();
+	private openUrlTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	/** Cached action contexts for O(1) lookup */
 	private actionContexts = new Map<string, Action<BranchComparisonSettings>>();
 
@@ -104,18 +105,21 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
-		this.lastKeyUpTime.delete(ev.action.id);
+		const urlTimer = this.openUrlTimers.get(ev.action.id);
+		if (urlTimer) {
+			clearTimeout(urlTimer);
+			this.openUrlTimers.delete(ev.action.id);
+		}
 		this.actionContexts.delete(ev.action.id);
 		coordinator.unsubscribe(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<BranchComparisonSettings>): Promise<void> {
-		// Double-click detection → force refresh
-		const now = Date.now();
-		const lastUp = this.lastKeyUpTime.get(ev.action.id) ?? 0;
-		this.lastKeyUpTime.set(ev.action.id, now);
-		if (now - lastUp < 400) {
-			this.lastKeyUpTime.delete(ev.action.id);
+		// Double-click detection with debounced URL open
+		const pendingTimer = this.openUrlTimers.get(ev.action.id);
+		if (pendingTimer) {
+			clearTimeout(pendingTimer);
+			this.openUrlTimers.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
 			await this.refreshComparison(ev.action.id, true);
 			return;
@@ -126,16 +130,25 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 		const repo = cached?.repo ?? settings.repo;
 		if (!repo) return;
 
-		const url = this.lastUrl.get(ev.action.id);
-		if (url) {
-			await streamDeck.system.openUrl(url);
+		const cachedUrl = this.lastUrl.get(ev.action.id);
+		let url: string | undefined;
+		if (cachedUrl) {
+			url = cachedUrl;
 		} else {
 			const parsed = parseRepoIdentifier(repo);
 			const base = cached?.baseBranch ?? settings.baseBranch ?? "main";
 			const head = cached?.headBranch ?? settings.headBranch ?? "develop";
 			if (parsed) {
-				await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`);
+				url = `https://github.com/${parsed.owner}/${parsed.repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`;
 			}
+		}
+
+		if (url) {
+			const openUrl = url;
+			this.openUrlTimers.set(ev.action.id, setTimeout(() => {
+				this.openUrlTimers.delete(ev.action.id);
+				streamDeck.system.openUrl(openUrl);
+			}, DOUBLE_CLICK_MS));
 		}
 	}
 

@@ -253,9 +253,13 @@ describe("CommitActivityAction", () => {
 			setupCoordinatorMock(weeks);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			vi.useFakeTimers();
 			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/facebook/react/commits");
+			vi.useRealTimers();
 		});
 
 		it("does nothing when repo is not configured", async () => {

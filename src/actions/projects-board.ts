@@ -46,6 +46,7 @@ const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
 const MIN_REFRESH_INTERVAL = 30; // 30 seconds minimum
 const MARQUEE_INTERVAL_MS = 500;
 const LINE1_MAX_VISIBLE = 14;
+const DOUBLE_CLICK_MS = 400;
 
 /** Cached render data and marquee state per action instance. */
 interface ProjectsMarqueeData {
@@ -60,7 +61,7 @@ export class ProjectsBoardAction extends SingletonAction<ProjectsBoardSettings> 
 	private actionSettings = new Map<string, ProjectsBoardSettings>();
 	private marqueeData = new Map<string, ProjectsMarqueeData>();
 	private recentSetSettings = new Set<string>();
-	private lastKeyUpTime = new Map<string, number>();
+	private openUrlTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 	/** Cached action contexts for O(1) lookup */
 	private actionContexts = new Map<string, Action<ProjectsBoardSettings>>();
@@ -115,17 +116,20 @@ export class ProjectsBoardAction extends SingletonAction<ProjectsBoardSettings> 
 		this.actionSettings.delete(ev.action.id);
 		this.marqueeData.delete(ev.action.id);
 		this.recentSetSettings.delete(ev.action.id);
-		this.lastKeyUpTime.delete(ev.action.id);
+		const urlTimer = this.openUrlTimers.get(ev.action.id);
+		if (urlTimer) {
+			clearTimeout(urlTimer);
+			this.openUrlTimers.delete(ev.action.id);
+		}
 		this.actionContexts.delete(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<ProjectsBoardSettings>): Promise<void> {
-		// Double-click detection → force refresh
-		const now = Date.now();
-		const lastUp = this.lastKeyUpTime.get(ev.action.id) ?? 0;
-		this.lastKeyUpTime.set(ev.action.id, now);
-		if (now - lastUp < 400) {
-			this.lastKeyUpTime.delete(ev.action.id);
+		// Double-click detection with debounced URL open
+		const pendingTimer = this.openUrlTimers.get(ev.action.id);
+		if (pendingTimer) {
+			clearTimeout(pendingTimer);
+			this.openUrlTimers.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
 			await this.refreshData(ev.action.id, true);
 			return;
@@ -138,7 +142,11 @@ export class ProjectsBoardAction extends SingletonAction<ProjectsBoardSettings> 
 
 		const parsed = parseRepoIdentifier(repo);
 		if (parsed) {
-			await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/projects`);
+			const url = `https://github.com/${parsed.owner}/${parsed.repo}/projects`;
+			this.openUrlTimers.set(ev.action.id, setTimeout(() => {
+				this.openUrlTimers.delete(ev.action.id);
+				streamDeck.system.openUrl(url);
+			}, DOUBLE_CLICK_MS));
 		}
 	}
 

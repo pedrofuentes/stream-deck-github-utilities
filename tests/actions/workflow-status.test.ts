@@ -500,10 +500,13 @@ describe("WorkflowStatusAction", () => {
 
 			mockOpenUrl.mockClear();
 
+			vi.useFakeTimers();
 			const ev = createKeyDownEvent(mockAction, settings);
 			await action.onKeyDown?.(ev as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/actions/runs/12345");
+			vi.useRealTimers();
 		});
 
 		it("falls back to actions page when no URL stored", async () => {
@@ -511,32 +514,41 @@ describe("WorkflowStatusAction", () => {
 			const settings = { repo: "owner/repo" };
 
 			// Don't set up appearance (no lastUrl stored)
+			vi.useFakeTimers();
 			const ev = createKeyDownEvent(mockAction, settings);
 			await action.onKeyDown?.(ev as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/actions");
+			vi.useRealTimers();
 		});
 
 		it("falls back to workflow file URL when workflowFile is set and no stored URL", async () => {
 			const mockAction = createMockKeyAction("wf-14-wffile");
 			const settings = { repo: "owner/repo", workflowFile: "deploy.yml" };
 
+			vi.useFakeTimers();
 			const ev = createKeyDownEvent(mockAction, settings);
 			await action.onKeyDown?.(ev as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/actions/workflows/deploy.yml");
+			vi.useRealTimers();
 		});
 
 		it("encodes special characters in workflowFile for fallback URL", async () => {
 			const mockAction = createMockKeyAction("wf-14-wffile-enc");
 			const settings = { repo: "owner/repo", workflowFile: "my workflow#2.yml" };
 
+			vi.useFakeTimers();
 			const ev = createKeyDownEvent(mockAction, settings);
 			await action.onKeyDown?.(ev as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith(
 				`https://github.com/owner/repo/actions/workflows/${encodeURIComponent("my workflow#2.yml")}`
 			);
+			vi.useRealTimers();
 		});
 
 		it("opens actions page when no runs exist", async () => {
@@ -555,10 +567,13 @@ describe("WorkflowStatusAction", () => {
 
 			mockOpenUrl.mockClear();
 
+			vi.useFakeTimers();
 			const ev = createKeyDownEvent(mockAction, settings);
 			await action.onKeyDown?.(ev as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/actions");
+			vi.useRealTimers();
 		});
 	});
 
@@ -966,6 +981,92 @@ describe("WorkflowStatusAction", () => {
 			} finally {
 				vi.useRealTimers();
 			}
+		});
+	});
+
+	describe("debounced URL open", () => {
+		it("opens URL after 400ms delay on single click", async () => {
+			vi.useFakeTimers();
+			const mockAction = createMockKeyAction("wf-debounce-1");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			setupCoordinatorMock(makeRunData({ html_url: "https://github.com/owner/repo/actions/runs/99" }));
+
+			const appearEv = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(appearEv as never);
+			mockOpenUrl.mockClear();
+
+			const ev = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev as never);
+
+			expect(mockOpenUrl).not.toHaveBeenCalled();
+
+			vi.advanceTimersByTime(400);
+
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/actions/runs/99");
+			vi.useRealTimers();
+		});
+
+		it("cancels URL open on double-click and refreshes instead", async () => {
+			vi.useFakeTimers();
+			const mockAction = createMockKeyAction("wf-debounce-2");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			setupCoordinatorMock(makeRunData({ html_url: "https://github.com/owner/repo/actions/runs/99" }));
+
+			const appearEv = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(appearEv as never);
+			mockOpenUrl.mockClear();
+			mockInvalidateAndFetch.mockClear();
+
+			const ev1 = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev1 as never);
+
+			const ev2 = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev2 as never);
+
+			vi.advanceTimersByTime(400);
+
+			expect(mockOpenUrl).not.toHaveBeenCalled();
+			expect(mockInvalidateAndFetch).toHaveBeenCalled();
+			vi.useRealTimers();
+		});
+
+		it("cleans up pending URL timer on disappear", async () => {
+			vi.useFakeTimers();
+			const mockAction = createMockKeyAction("wf-debounce-3");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			setupCoordinatorMock(makeRunData({ html_url: "https://github.com/owner/repo/actions/runs/99" }));
+
+			const appearEv = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(appearEv as never);
+			mockOpenUrl.mockClear();
+
+			const ev = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev as never);
+
+			action.onWillDisappear?.(createWillDisappearEvent(mockAction) as never);
+
+			vi.advanceTimersByTime(400);
+
+			expect(mockOpenUrl).not.toHaveBeenCalled();
+			vi.useRealTimers();
 		});
 	});
 });

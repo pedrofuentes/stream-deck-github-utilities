@@ -49,6 +49,7 @@ const LONG_PRESS_THRESHOLD_MS = 500; // hold ≥ 500ms = long press
 const MARQUEE_INTERVAL_MS = 500; // marquee scroll speed
 const LINE1_MAX_VISIBLE = 14; // max chars at 18px (hardware-tested)
 const LINE2_MAX_VISIBLE = 16; // max chars at 18px for stat value
+const DOUBLE_CLICK_MS = 400;
 
 /** Cached render data and marquee state per action instance. */
 interface MarqueeData {
@@ -75,7 +76,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	private keyDownTime = new Map<string, number>();
 
 	/** Timestamp of last key-up per action (for double-click detection) */
-	private lastKeyUpTime = new Map<string, number>();
+	private openUrlTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 	/** Marquee scroll state per action instance */
 	private marqueeData = new Map<string, MarqueeData>();
@@ -150,7 +151,11 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 		this.actionSettings.delete(ev.action.id);
 		this.lastUrl.delete(ev.action.id);
 		this.keyDownTime.delete(ev.action.id);
-		this.lastKeyUpTime.delete(ev.action.id);
+		const urlTimer = this.openUrlTimers.get(ev.action.id);
+		if (urlTimer) {
+			clearTimeout(urlTimer);
+			this.openUrlTimers.delete(ev.action.id);
+		}
 		this.marqueeData.delete(ev.action.id);
 		this.recentSetSettings.delete(ev.action.id);
 		this.trendCache.delete(ev.action.id);
@@ -170,12 +175,11 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	 * Long press (≥ 500ms): opens the stat's GitHub page in the browser.
 	 */
 	override async onKeyUp(ev: KeyUpEvent<RepoStatsSettings>): Promise<void> {
-		// Double-click detection → force refresh
-		const now = Date.now();
-		const lastUp = this.lastKeyUpTime.get(ev.action.id) ?? 0;
-		this.lastKeyUpTime.set(ev.action.id, now);
-		if (now - lastUp < 400) {
-			this.lastKeyUpTime.delete(ev.action.id);
+		// Double-click detection with debounced action
+		const pendingTimer = this.openUrlTimers.get(ev.action.id);
+		if (pendingTimer) {
+			clearTimeout(pendingTimer);
+			this.openUrlTimers.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
 			await this.refreshStats(ev.action.id, true);
 			return;
@@ -196,40 +200,43 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 		const pressDuration = Date.now() - downTime;
 
 		if (pressDuration >= LONG_PRESS_THRESHOLD_MS) {
-			// Long press → open URL
+			// Long press → schedule URL open with debounce
 			const url = this.lastUrl.get(ev.action.id);
 			if (url) {
-				await streamDeck.system.openUrl(url);
+				this.openUrlTimers.set(ev.action.id, setTimeout(() => {
+					this.openUrlTimers.delete(ev.action.id);
+					streamDeck.system.openUrl(url);
+				}, DOUBLE_CLICK_MS));
 			} else {
 				const parsed = parseRepoIdentifier(repo);
 				if (parsed) {
 					const statType: StatType = cached?.statType ?? settings.statType ?? "stars";
-					await streamDeck.system.openUrl(getStatUrl(parsed.owner, parsed.repo, statType));
+					const computedUrl = getStatUrl(parsed.owner, parsed.repo, statType);
+					this.openUrlTimers.set(ev.action.id, setTimeout(() => {
+						this.openUrlTimers.delete(ev.action.id);
+						streamDeck.system.openUrl(computedUrl);
+					}, DOUBLE_CLICK_MS));
 				}
 			}
 		} else {
-			// Short press → cycle to next stat type
-			// Use the local actionSettings cache as the source of truth for the
-			// current stat type. The cache always reflects our own setSettings
-			// calls, whereas ev.payload.settings may be stale when multiple
-			// button instances exist or rapid presses occur.
-			const cachedSettings = this.actionSettings.get(ev.action.id);
-			const currentType: StatType = cachedSettings?.statType ?? settings.statType ?? "stars";
-			const currentIndex = STAT_TYPES.indexOf(currentType);
-			const nextIndex = (currentIndex + 1) % STAT_TYPES.length;
-			const nextType = STAT_TYPES[nextIndex];
+			// Short press → schedule stat cycle with debounce
+			this.openUrlTimers.set(ev.action.id, setTimeout(async () => {
+				this.openUrlTimers.delete(ev.action.id);
+				// Cycle to next stat type
+				const cachedSettings = this.actionSettings.get(ev.action.id);
+				const currentType: StatType = cachedSettings?.statType ?? settings.statType ?? "stars";
+				const currentIndex = STAT_TYPES.indexOf(currentType);
+				const nextIndex = (currentIndex + 1) % STAT_TYPES.length;
+				const nextType = STAT_TYPES[nextIndex];
 
-			// Update settings with new stat type
-			const newSettings: RepoStatsSettings = { ...settings, ...cachedSettings, statType: nextType };
-			// Mark this action as recently updated by us, so onDidReceiveSettings
-			// can skip its redundant loading/refresh cycle.
-			this.recentSetSettings.add(ev.action.id);
-			await ev.action.setSettings(newSettings);
-			this.actionSettings.set(ev.action.id, newSettings);
+				const newSettings: RepoStatsSettings = { ...settings, ...cachedSettings, statType: nextType };
+				this.recentSetSettings.add(ev.action.id);
+				await ev.action.setSettings(newSettings);
+				this.actionSettings.set(ev.action.id, newSettings);
 
-			// Refresh display immediately with new stat
-			this.polling.resetBackoff(ev.action.id);
-			await this.refreshStats(ev.action.id);
+				this.polling.resetBackoff(ev.action.id);
+				await this.refreshStats(ev.action.id);
+			}, DOUBLE_CLICK_MS));
 		}
 	}
 

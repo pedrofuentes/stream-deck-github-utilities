@@ -361,10 +361,13 @@ describe("ProjectsBoardAction", () => {
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
+			vi.useFakeTimers();
 			const ev = createKeyDownEvent(mockAction, settings);
 			await action.onKeyDown?.(ev as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/facebook/react/projects");
+			vi.useRealTimers();
 		});
 
 		it("does nothing when repo is not configured", async () => {

@@ -388,10 +388,13 @@ describe("IssueCounterAction", () => {
 			mockCoordinator.fetchData.mockResolvedValue({ issueCount: 100 });
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
+			vi.useFakeTimers();
 			const ev = createKeyDownEvent(mockAction, settings);
 			await action.onKeyDown?.(ev as never);
+			vi.advanceTimersByTime(400);
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/facebook/react/issues");
+			vi.useRealTimers();
 		});
 
 		it("does nothing when repo is not configured", async () => {
@@ -685,6 +688,86 @@ describe("IssueCounterAction", () => {
 
 			expect(mockAction.setImage).toHaveBeenCalled();
 			expect(lastImage(mockAction)).toContain("Error");
+		});
+	});
+
+	describe("debounced URL open", () => {
+		it("opens URL after 400ms delay on single click", async () => {
+			vi.useFakeTimers();
+			const mockAction = createMockKeyAction("issue-debounce-1");
+			const settings = { repo: "facebook/react" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockCoordinator.fetchData.mockResolvedValue({ issueCount: 100 });
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			mockOpenUrl.mockClear();
+
+			const ev = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev as never);
+
+			expect(mockOpenUrl).not.toHaveBeenCalled();
+
+			vi.advanceTimersByTime(400);
+
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/facebook/react/issues");
+			vi.useRealTimers();
+		});
+
+		it("cancels URL open on double-click and refreshes instead", async () => {
+			vi.useFakeTimers();
+			const mockAction = createMockKeyAction("issue-debounce-2");
+			const settings = { repo: "owner/repo", stateFilter: "open" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockCoordinator.fetchData.mockResolvedValue({ issueCount: 10 });
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({ issueCount: 42 });
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			mockCoordinator.invalidateAndFetch.mockClear();
+
+			const ev1 = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev1 as never);
+
+			const ev2 = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev2 as never);
+
+			vi.advanceTimersByTime(400);
+
+			expect(mockOpenUrl).not.toHaveBeenCalled();
+			expect(mockCoordinator.invalidateAndFetch).toHaveBeenCalled();
+			vi.useRealTimers();
+		});
+
+		it("cleans up pending URL timer on disappear", async () => {
+			vi.useFakeTimers();
+			const mockAction = createMockKeyAction("issue-debounce-3");
+			const settings = { repo: "owner/repo", stateFilter: "open" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockCoordinator.fetchData.mockResolvedValue({ issueCount: 10 });
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			mockOpenUrl.mockClear();
+
+			const ev = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev as never);
+
+			action.onWillDisappear?.(createWillDisappearEvent(mockAction) as never);
+
+			vi.advanceTimersByTime(400);
+
+			expect(mockOpenUrl).not.toHaveBeenCalled();
+			vi.useRealTimers();
 		});
 	});
 });

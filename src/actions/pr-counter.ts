@@ -45,6 +45,7 @@ const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
 const MIN_REFRESH_INTERVAL = 30; // 30 seconds minimum
 const MARQUEE_INTERVAL_MS = 500;
 const LINE1_MAX_VISIBLE = 14;
+const DOUBLE_CLICK_MS = 400;
 
 const STATE_LABELS: Record<string, string> = {
 	open: "Open PRs",
@@ -68,7 +69,7 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 	private marqueeData = new Map<string, PRMarqueeData>();
 	private recentSetSettings = new Set<string>();
 	private trendCache = new Map<string, number[]>();
-	private lastKeyUpTime = new Map<string, number>();
+	private openUrlTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 	/** Cached action contexts for O(1) lookup */
 	private actionContexts = new Map<string, Action<PullRequestCounterSettings>>();
@@ -125,17 +126,20 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 		this.marqueeData.delete(ev.action.id);
 		this.recentSetSettings.delete(ev.action.id);
 		this.trendCache.delete(ev.action.id);
-		this.lastKeyUpTime.delete(ev.action.id);
+		const urlTimer = this.openUrlTimers.get(ev.action.id);
+		if (urlTimer) {
+			clearTimeout(urlTimer);
+			this.openUrlTimers.delete(ev.action.id);
+		}
 		this.actionContexts.delete(ev.action.id);
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<PullRequestCounterSettings>): Promise<void> {
-		// Double-click detection → force refresh
-		const now = Date.now();
-		const lastUp = this.lastKeyUpTime.get(ev.action.id) ?? 0;
-		this.lastKeyUpTime.set(ev.action.id, now);
-		if (now - lastUp < 400) {
-			this.lastKeyUpTime.delete(ev.action.id);
+		// Double-click detection with debounced URL open
+		const pendingTimer = this.openUrlTimers.get(ev.action.id);
+		if (pendingTimer) {
+			clearTimeout(pendingTimer);
+			this.openUrlTimers.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
 			await this.refreshCount(ev.action.id, true);
 			return;
@@ -148,7 +152,11 @@ export class PRCounterAction extends SingletonAction<PullRequestCounterSettings>
 
 		const parsed = parseRepoIdentifier(repo);
 		if (parsed) {
-			await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/pulls`);
+			const url = `https://github.com/${parsed.owner}/${parsed.repo}/pulls`;
+			this.openUrlTimers.set(ev.action.id, setTimeout(() => {
+				this.openUrlTimers.delete(ev.action.id);
+				streamDeck.system.openUrl(url);
+			}, DOUBLE_CLICK_MS));
 		}
 	}
 

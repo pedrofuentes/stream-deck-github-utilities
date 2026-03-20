@@ -321,6 +321,7 @@ describe("RepoStatsAction", () => {
 
 	describe("onKeyUp — short press (cycle stat type)", () => {
 		it("does nothing when repo is not configured", async () => {
+			vi.useFakeTimers();
 			const mockAction = createMockKeyAction("action-sp-1");
 			const now = 1000;
 			vi.spyOn(Date, "now").mockReturnValue(now);
@@ -330,11 +331,15 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 100);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction, {}) as never);
 
+			await vi.advanceTimersByTimeAsync(400);
+
 			expect(mockOpenUrl).not.toHaveBeenCalled();
 			expect(mockAction.setSettings).not.toHaveBeenCalled();
+			vi.useRealTimers();
 		});
 
 		it("cycles from stars to issues on short press", async () => {
+			vi.useFakeTimers();
 			const mockAction = createMockKeyAction("action-sp-2");
 			const settings = { repo: "owner/repo", statType: "stars" };
 
@@ -353,13 +358,17 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 100);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
 
+			await vi.advanceTimersByTimeAsync(400);
+
 			expect(mockOpenUrl).not.toHaveBeenCalled();
 			expect(mockAction.setSettings).toHaveBeenCalledWith(
 				expect.objectContaining({ statType: "issues" }),
 			);
+			vi.useRealTimers();
 		});
 
 		it("cycles from visibility (last) back to stars (first)", async () => {
+			vi.useFakeTimers();
 			const mockAction = createMockKeyAction("action-sp-3");
 			const settings = { repo: "owner/repo", statType: "visibility" };
 
@@ -377,12 +386,16 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 50);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
 
+			await vi.advanceTimersByTimeAsync(400);
+
 			expect(mockAction.setSettings).toHaveBeenCalledWith(
 				expect.objectContaining({ statType: "stars" }),
 			);
+			vi.useRealTimers();
 		});
 
 		it("defaults to stars then cycles to issues when statType is not set", async () => {
+			vi.useFakeTimers();
 			const mockAction = createMockKeyAction("action-sp-4");
 			const settings = { repo: "owner/repo" };
 
@@ -400,13 +413,17 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 200);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
 
+			await vi.advanceTimersByTimeAsync(400);
+
 			// Default statType is "stars" → next is "issues"
 			expect(mockAction.setSettings).toHaveBeenCalledWith(
 				expect.objectContaining({ statType: "issues" }),
 			);
+			vi.useRealTimers();
 		});
 
 		it("refreshes the display after cycling stat type", async () => {
+			vi.useFakeTimers();
 			const mockAction = createMockKeyAction("action-sp-5");
 			const settings = { repo: "owner/repo", statType: "forks" };
 
@@ -431,15 +448,19 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 150);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
 
+			await vi.advanceTimersByTimeAsync(400);
+
 			// Should have triggered a coordinator fetch for the new stat
 			expect(mockCoordinatorFetchData).toHaveBeenCalled();
 			// Should have updated the image with new stat display
 			expect(mockAction.setImage).toHaveBeenCalled();
+			vi.useRealTimers();
 		});
 	});
 
 	describe("onKeyUp — long press (open URL)", () => {
 		it("opens the stat URL after data loads", async () => {
+			vi.useFakeTimers();
 			const mockAction = createMockKeyAction("action-lp-1");
 			const settings = { repo: "owner/repo", statType: "issues" };
 
@@ -463,11 +484,15 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 600);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
 
+			vi.advanceTimersByTime(400);
+
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/issues");
 			expect(mockAction.setSettings).not.toHaveBeenCalled();
+			vi.useRealTimers();
 		});
 
 		it("opens stargazers URL for stars stat type", async () => {
+			vi.useFakeTimers();
 			const mockAction = createMockKeyAction("action-lp-2");
 			const settings = { repo: "owner/repo", statType: "stars" };
 
@@ -489,10 +514,14 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 700);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
 
+			vi.advanceTimersByTime(400);
+
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/stargazers");
+			vi.useRealTimers();
 		});
 
 		it("falls back to constructed URL when lastUrl is not set", async () => {
+			vi.useFakeTimers();
 			const mockAction = createMockKeyAction("action-lp-3");
 			const settings = { repo: "owner/repo", statType: "forks" };
 
@@ -505,10 +534,14 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 500);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
 
+			vi.advanceTimersByTime(400);
+
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/forks");
+			vi.useRealTimers();
 		});
 
 		it("does not open URL on long press when repo is not configured", async () => {
+			vi.useFakeTimers();
 			const mockAction = createMockKeyAction("action-lp-4");
 
 			const now = 8000;
@@ -519,10 +552,14 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 1000);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction, {}) as never);
 
+			vi.advanceTimersByTime(400);
+
 			expect(mockOpenUrl).not.toHaveBeenCalled();
+			vi.useRealTimers();
 		});
 
 		it("treats exactly 500ms as long press", async () => {
+			vi.useFakeTimers();
 			const mockAction = createMockKeyAction("action-lp-5");
 			const settings = { repo: "owner/repo", statType: "forks" };
 
@@ -534,11 +571,15 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 500);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
 
+			vi.advanceTimersByTime(400);
+
 			expect(mockOpenUrl).toHaveBeenCalled();
 			expect(mockAction.setSettings).not.toHaveBeenCalled();
+			vi.useRealTimers();
 		});
 
 		it("treats 499ms as short press", async () => {
+			vi.useFakeTimers();
 			const mockAction = createMockKeyAction("action-lp-6");
 			const settings = { repo: "owner/repo", statType: "stars" };
 
@@ -556,10 +597,13 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 499);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
 
+			await vi.advanceTimersByTimeAsync(400);
+
 			expect(mockOpenUrl).not.toHaveBeenCalled();
 			expect(mockAction.setSettings).toHaveBeenCalledWith(
 				expect.objectContaining({ statType: "issues" }),
 			);
+			vi.useRealTimers();
 		});
 	});
 
@@ -743,6 +787,7 @@ describe("RepoStatsAction", () => {
 		}
 
 		it("second button cycles independently from the first", async () => {
+			vi.useFakeTimers();
 			const mockActionA = createMockKeyAction("multi-A");
 			const mockActionB = createMockKeyAction("multi-B");
 			const settingsA = { repo: "owner/repoA", statType: "stars" };
@@ -765,15 +810,19 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 100);
 			await action.onKeyUp?.(createKeyUpEvent(mockActionB, settingsB) as never);
 
+			await vi.advanceTimersByTimeAsync(400);
+
 			// Button B should have cycled stars → issues
 			expect(mockActionB.setSettings).toHaveBeenCalledWith(
 				expect.objectContaining({ statType: "issues" }),
 			);
 			// Button A should NOT have been touched by setSettings
 			expect(mockActionA.setSettings).not.toHaveBeenCalled();
+			vi.useRealTimers();
 		});
 
 		it("both buttons cycle independently through all stat types", async () => {
+			vi.useFakeTimers();
 			const mockActionA = createMockKeyAction("multi-cycle-A");
 			const mockActionB = createMockKeyAction("multi-cycle-B");
 
@@ -795,6 +844,7 @@ describe("RepoStatsAction", () => {
 			await action.onKeyDown?.(createKeyDownEvent(mockActionA, settingsA) as never);
 			vi.spyOn(Date, "now").mockReturnValue(now + 50);
 			await action.onKeyUp?.(createKeyUpEvent(mockActionA, settingsA) as never);
+			await vi.advanceTimersByTimeAsync(400);
 			expect(mockActionA.setSettings).toHaveBeenCalledWith(
 				expect.objectContaining({ statType: "issues" }),
 			);
@@ -805,6 +855,7 @@ describe("RepoStatsAction", () => {
 			await action.onKeyDown?.(createKeyDownEvent(mockActionB, settingsB) as never);
 			vi.spyOn(Date, "now").mockReturnValue(now + 50);
 			await action.onKeyUp?.(createKeyUpEvent(mockActionB, settingsB) as never);
+			await vi.advanceTimersByTimeAsync(400);
 			expect(mockActionB.setSettings).toHaveBeenCalledWith(
 				expect.objectContaining({ statType: "issues" }),
 			);
@@ -816,13 +867,16 @@ describe("RepoStatsAction", () => {
 			await action.onKeyDown?.(createKeyDownEvent(mockActionA, settingsA) as never);
 			vi.spyOn(Date, "now").mockReturnValue(now + 50);
 			await action.onKeyUp?.(createKeyUpEvent(mockActionA, settingsA) as never);
+			await vi.advanceTimersByTimeAsync(400);
 
 			// Should cycle to "forks" (using cached "issues"), NOT "issues" (stale payload "stars")
 			const lastCall = mockActionA.setSettings.mock.calls.at(-1)?.[0] as Record<string, unknown>;
 			expect(lastCall.statType).toBe("forks");
+			vi.useRealTimers();
 		});
 
 		it("cycling uses cached statType when event payload is stale", async () => {
+			vi.useFakeTimers();
 			const mockAction1 = createMockKeyAction("stale-payload-1");
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction1],
@@ -839,6 +893,7 @@ describe("RepoStatsAction", () => {
 			await action.onKeyDown?.(createKeyDownEvent(mockAction1, initialSettings) as never);
 			vi.spyOn(Date, "now").mockReturnValue(now + 50);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction1, initialSettings) as never);
+			await vi.advanceTimersByTimeAsync(400);
 			expect(mockAction1.setSettings).toHaveBeenCalledWith(
 				expect.objectContaining({ statType: "issues" }),
 			);
@@ -850,12 +905,15 @@ describe("RepoStatsAction", () => {
 			await action.onKeyDown?.(createKeyDownEvent(mockAction1, initialSettings) as never);
 			vi.spyOn(Date, "now").mockReturnValue(now + 50);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction1, initialSettings) as never);
+			await vi.advanceTimersByTimeAsync(400);
 
 			const lastCall = mockAction1.setSettings.mock.calls.at(-1)?.[0] as Record<string, unknown>;
 			expect(lastCall.statType).toBe("forks");
+			vi.useRealTimers();
 		});
 
 		it("onDidReceiveSettings is skipped after programmatic setSettings", async () => {
+			vi.useFakeTimers();
 			const mockAction1 = createMockKeyAction("drs-skip-1");
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction1],
@@ -873,6 +931,8 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 50);
 			await action.onKeyUp?.(createKeyUpEvent(mockAction1, settings) as never);
 
+			await vi.advanceTimersByTimeAsync(400);
+
 			// Track setImage calls AFTER the cycle
 			mockAction1.setImage.mockClear();
 			mockCoordinatorFetchData.mockClear();
@@ -885,6 +945,7 @@ describe("RepoStatsAction", () => {
 			expect(mockCoordinatorFetchData).not.toHaveBeenCalled();
 			// onDidReceiveSettings should have returned early (no setImage calls)
 			expect(mockAction1.setImage).not.toHaveBeenCalled();
+			vi.useRealTimers();
 		});
 
 		it("onDidReceiveSettings still refreshes for PI-triggered changes", async () => {
@@ -915,6 +976,7 @@ describe("RepoStatsAction", () => {
 		});
 
 		it("second button renders correctly after cycling", async () => {
+			vi.useFakeTimers();
 			const mockActionA = createMockKeyAction("render-A");
 			const mockActionB = createMockKeyAction("render-B");
 
@@ -941,6 +1003,8 @@ describe("RepoStatsAction", () => {
 			vi.spyOn(Date, "now").mockReturnValue(now + 50);
 			await action.onKeyUp?.(createKeyUpEvent(mockActionB, settingsB) as never);
 
+			await vi.advanceTimersByTimeAsync(400);
+
 			// Button B should have been rendered (setImage called)
 			expect(mockActionB.setImage).toHaveBeenCalled();
 			const bSvg = lastImage(mockActionB);
@@ -948,6 +1012,7 @@ describe("RepoStatsAction", () => {
 
 			// Button A should NOT have had setImage called by the cycling
 			expect(mockActionA.setImage).not.toHaveBeenCalled();
+			vi.useRealTimers();
 		});
 	});
 
@@ -1168,6 +1233,105 @@ describe("RepoStatsAction", () => {
 
 			// fetchData should have been called during initial refresh
 			expect(mockCoordinatorFetchData).toHaveBeenCalled();
+		});
+	});
+
+	describe("debounced URL open", () => {
+		it("opens URL after 400ms delay on single click (long press)", async () => {
+			vi.useFakeTimers();
+			const mockAction = createMockKeyAction("rs-debounce-1");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
+
+			const appearEv = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(appearEv as never);
+			mockOpenUrl.mockClear();
+
+			const now = 10000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+
+			// Long press: 600ms later
+			vi.spyOn(Date, "now").mockReturnValue(now + 600);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			expect(mockOpenUrl).not.toHaveBeenCalled();
+
+			vi.advanceTimersByTime(400);
+
+			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/stargazers");
+			vi.useRealTimers();
+		});
+
+		it("cancels URL open on double-click and refreshes instead", async () => {
+			vi.useFakeTimers();
+			const mockAction = createMockKeyAction("rs-debounce-2");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
+			mockCoordinatorInvalidateAndFetch.mockResolvedValue(makeCoordinatorResult());
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			mockCoordinatorInvalidateAndFetch.mockClear();
+
+			// First click (short press)
+			const now = 100000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+			vi.spyOn(Date, "now").mockReturnValue(now + 50);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			// Second click within 400ms (short press)
+			vi.spyOn(Date, "now").mockReturnValue(now + 200);
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+			vi.spyOn(Date, "now").mockReturnValue(now + 250);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			await vi.advanceTimersByTimeAsync(400);
+
+			expect(mockOpenUrl).not.toHaveBeenCalled();
+			expect(mockCoordinatorInvalidateAndFetch).toHaveBeenCalled();
+			vi.useRealTimers();
+		});
+
+		it("cleans up pending URL timer on disappear", async () => {
+			vi.useFakeTimers();
+			const mockAction = createMockKeyAction("rs-debounce-3");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
+
+			const appearEv = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(appearEv as never);
+			mockOpenUrl.mockClear();
+
+			const now = 20000;
+			vi.spyOn(Date, "now").mockReturnValue(now);
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+
+			// Long press: 600ms later
+			vi.spyOn(Date, "now").mockReturnValue(now + 600);
+			await action.onKeyUp?.(createKeyUpEvent(mockAction, settings) as never);
+
+			action.onWillDisappear?.(createWillDisappearEvent(mockAction) as never);
+
+			vi.advanceTimersByTime(400);
+
+			expect(mockOpenUrl).not.toHaveBeenCalled();
+			vi.useRealTimers();
 		});
 	});
 });
