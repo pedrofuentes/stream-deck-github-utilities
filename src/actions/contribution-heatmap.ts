@@ -345,7 +345,11 @@ export class ContributionHeatmapAction extends SingletonAction<ContributionHeatm
 					await actionContext.setFeedback({ canvas: renderStripLoading("Computing…") });
 				}
 				// GitHub Stats API returns 202 on first request — retry quickly
-				setTimeout(() => this.refreshHeatmap(actionId).catch(() => {}), 5000);
+				const timeoutId = setTimeout(() => {
+					this.retryTimeouts.delete(actionId);
+					this.refreshHeatmap(actionId).catch(() => {});
+				}, 5000);
+				this.retryTimeouts.set(actionId, timeoutId);
 				return;
 			}
 

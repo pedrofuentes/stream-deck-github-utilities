@@ -343,6 +343,21 @@ describe("BranchComparisonAction", () => {
 			// will go through the fallback path that parses repo and builds URL)
 		});
 
+		it("encodes special characters in branch names for fallback URL", async () => {
+			const mockAction = createMockKeyAction("branch-4d");
+			const settings = {
+				repo: "owner/repo",
+				baseBranch: "feature/my-branch",
+				headBranch: "fix#123",
+			};
+
+			await action.onKeyDown?.(createKeyDownEvent(mockAction, settings) as never);
+
+			expect(mockOpenUrl).toHaveBeenCalledWith(
+				`https://github.com/owner/repo/compare/${encodeURIComponent("feature/my-branch")}...${encodeURIComponent("fix#123")}`
+			);
+		});
+
 		it("does nothing when repo is not configured", async () => {
 			const mockAction = createMockKeyAction("branch-4c");
 			await action.onKeyDown?.(createKeyDownEvent(mockAction, {}) as never);

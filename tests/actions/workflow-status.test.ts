@@ -527,6 +527,18 @@ describe("WorkflowStatusAction", () => {
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/owner/repo/actions/workflows/deploy.yml");
 		});
 
+		it("encodes special characters in workflowFile for fallback URL", async () => {
+			const mockAction = createMockKeyAction("wf-14-wffile-enc");
+			const settings = { repo: "owner/repo", workflowFile: "my workflow#2.yml" };
+
+			const ev = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev as never);
+
+			expect(mockOpenUrl).toHaveBeenCalledWith(
+				`https://github.com/owner/repo/actions/workflows/${encodeURIComponent("my workflow#2.yml")}`
+			);
+		});
+
 		it("opens actions page when no runs exist", async () => {
 			const mockAction = createMockKeyAction("wf-15-noruns");
 			const settings = { repo: "owner/repo" };

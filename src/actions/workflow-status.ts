@@ -204,7 +204,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 			const parsed = parseRepoIdentifier(settings.repo);
 			if (parsed) {
 				const fallbackUrl = settings.workflowFile
-					? `https://github.com/${parsed.owner}/${parsed.repo}/actions/workflows/${settings.workflowFile}`
+					? `https://github.com/${parsed.owner}/${parsed.repo}/actions/workflows/${encodeURIComponent(settings.workflowFile)}`
 					: `https://github.com/${parsed.owner}/${parsed.repo}/actions`;
 				await streamDeck.system.openUrl(fallbackUrl);
 			}
