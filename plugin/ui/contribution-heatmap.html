@@ -24,6 +24,10 @@
 							}
 							window._actionSettings = msg.payload;
 							_lastSendTime = Date.now();
+							// Notify locally so visibility toggles react immediately
+							window.dispatchEvent(new CustomEvent('sdpi-settings-loaded', {
+								detail: { settings: msg.payload }
+							}));
 							return _origSend(JSON.stringify(msg));
 						}
 					} catch(e) {}
@@ -200,22 +204,7 @@
 	<span class="sdpi-info">
 		Shows a contribution heatmap grid on the touch strip.
 		Rotate the dial to scroll through weeks. Press to open the activity page on GitHub.
-		Tap the strip to refresh.
-	</span>
-
-	<sdpi-item label="Quarter Position">
-		<sdpi-select setting="quarterPosition">
-			<option value="1">1 (standalone or leftmost)</option>
-			<option value="2">2</option>
-			<option value="3">3</option>
-			<option value="4">4 (rightmost)</option>
-		</sdpi-select>
-	</sdpi-item>
-
-	<span class="sdpi-info">
-		Place multiple instances on adjacent dials for a wider view.
-		Set each instance to a different quarter position (1–4).
-		All quarters with the same repo scroll together.
+		Tap the strip to refresh. Place multiple instances on adjacent dials for a wider view.
 	</span>
 
 	<script>
@@ -316,6 +305,8 @@
 			const isUser = value === "user";
 			repoSection.style.display = isUser ? "none" : "";
 			userModeHint.style.display = isUser ? "block" : "none";
+			// Refresh repo list when switching to repo mode
+			if (!isUser) repoFS.refresh();
 		}
 
 		// Listen for sdpi-components change events (fires on the <sdpi-select> element)

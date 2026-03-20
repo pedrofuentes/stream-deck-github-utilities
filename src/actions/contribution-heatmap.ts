@@ -117,9 +117,13 @@ export class ContributionHeatmapAction extends SingletonAction<ContributionHeatm
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		this.polling.start(ev.action.id, () => this.refreshHeatmap(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 		await this.refreshHeatmap(ev.action.id);
+		// Re-render existing siblings so they recalculate offsets with the new instance
+		const scrollKey = this.getScrollKey(settings);
+		if (scrollKey) this.renderAllForScrollKey(scrollKey).catch(() => {});
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<ContributionHeatmapSettings>): void {
+		const scrollKey = this.getScrollKey(this.actionSettings.get(ev.action.id));
 		this.polling.stop(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
 		this.actionContexts.delete(ev.action.id);
@@ -128,6 +132,8 @@ export class ContributionHeatmapAction extends SingletonAction<ContributionHeatm
 		this.totalCommitsCache.delete(ev.action.id);
 		this.dialColumn.delete(ev.action.id);
 		if (this.renderTimeout) { clearTimeout(this.renderTimeout); this.renderTimeout = null; }
+		// Re-render remaining siblings so they recalculate their offsets
+		if (scrollKey) this.renderAllForScrollKey(scrollKey).catch(() => {});
 	}
 
 	override async onDialRotate(ev: DialRotateEvent<ContributionHeatmapSettings>): Promise<void> {
@@ -178,8 +184,18 @@ export class ContributionHeatmapAction extends SingletonAction<ContributionHeatm
 		this.actionContexts.set(ev.action.id, ev.action);
 		const incoming = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
+		const oldScrollKey = this.getScrollKey(cached);
 		const settings: ContributionHeatmapSettings = { ...cached, ...incoming };
 		this.actionSettings.set(ev.action.id, settings);
+		const newScrollKey = this.getScrollKey(settings);
+
+		streamDeck.logger.debug(`Heatmap settings: action=${ev.action.id} dataSource=${settings.dataSource} repo=${settings.repo} oldKey=${oldScrollKey} newKey=${newScrollKey}`);
+
+		// Clear stale cached data when data source or repo changes
+		if (oldScrollKey !== newScrollKey) {
+			this.weeklyCache.delete(ev.action.id);
+			this.totalCommitsCache.delete(ev.action.id);
+		}
 
 		if (ev.action.isDial()) {
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
@@ -187,6 +203,8 @@ export class ContributionHeatmapAction extends SingletonAction<ContributionHeatm
 			if ((needsRepo && !settings.repo) || !globalSettings.githubToken) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 				this.polling.stop(ev.action.id);
+				// Re-render old siblings — this instance left the group
+				if (oldScrollKey) this.renderAllForScrollKey(oldScrollKey).catch(() => {});
 				return;
 			}
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
@@ -195,6 +213,9 @@ export class ContributionHeatmapAction extends SingletonAction<ContributionHeatm
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		this.polling.restart(ev.action.id, () => this.refreshHeatmap(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 		await this.refreshHeatmap(ev.action.id);
+		// Re-render siblings for both old and new scroll keys
+		if (oldScrollKey && oldScrollKey !== newScrollKey) this.renderAllForScrollKey(oldScrollKey).catch(() => {});
+		if (newScrollKey) this.renderAllForScrollKey(newScrollKey).catch(() => {});
 	}
 
 	/** Re-render all instances that share the same scroll key */
@@ -221,11 +242,19 @@ export class ContributionHeatmapAction extends SingletonAction<ContributionHeatm
 		const dataSource = settings?.dataSource ?? "repo";
 
 		// In repo mode, repo is required; in user mode it's optional
-		if (dataSource === "repo" && !settings?.repo) return;
+		if (dataSource === "repo" && !settings?.repo) {
+			streamDeck.logger.debug(`Heatmap refresh skipped: action=${actionId} dataSource=${dataSource} repo=${settings?.repo} (no repo)`);
+			return;
+		}
 
 		const gen = this.polling.incrementGeneration(actionId);
 		const actionContext = this.actionContexts.get(actionId);
-		if (!actionContext) return;
+		if (!actionContext) {
+			streamDeck.logger.debug(`Heatmap refresh skipped: action=${actionId} (no context)`);
+			return;
+		}
+
+		streamDeck.logger.debug(`Heatmap refresh starting: action=${actionId} dataSource=${dataSource} repo=${settings?.repo} gen=${gen}`);
 
 		// Validate repo format when in repo mode
 		let parsed: { owner: string; repo: string } | null = null;
@@ -245,6 +274,7 @@ export class ContributionHeatmapAction extends SingletonAction<ContributionHeatm
 			if (this.getScrollKey(otherSettings) === scrollKey) {
 				const cached = this.weeklyCache.get(otherAction.id);
 				if (cached && cached.length > 0) {
+					streamDeck.logger.debug(`Heatmap refresh: reusing sibling cache from ${otherAction.id} scrollKey=${scrollKey}`);
 					const totalCommits = this.totalCommitsCache.get(otherAction.id) ?? 0;
 					this.weeklyCache.set(actionId, cached);
 					this.totalCommitsCache.set(actionId, totalCommits);
@@ -298,12 +328,18 @@ export class ContributionHeatmapAction extends SingletonAction<ContributionHeatm
 
 			// REST: per-repo commit activity
 			const weeks = await fetchCommitActivityWeeks(parsed!.owner, parsed!.repo, token);
-			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
+			if (!this.polling.isCurrentGeneration(actionId, gen)) {
+				streamDeck.logger.debug(`Heatmap refresh: stale generation action=${actionId} gen=${gen} (current=${this.polling.getGeneration(actionId)})`);
+				return;
+			}
 
 			if (weeks === null) {
+				streamDeck.logger.debug(`Heatmap refresh: API returned 202 (computing) for ${settings?.repo}, retrying in 5s`);
 				if (actionContext.isDial()) {
 					await actionContext.setFeedback({ canvas: renderStripLoading("Computing…") });
 				}
+				// GitHub Stats API returns 202 on first request — retry quickly
+				setTimeout(() => this.refreshHeatmap(actionId).catch(() => {}), 5000);
 				return;
 			}
 

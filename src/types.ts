@@ -367,8 +367,6 @@ export interface BranchNetworkSettings {
 	repo?: string;
 	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
 	refreshInterval?: number;
-	/** Quarter position for multi-quarter layout (1-4, default: 1). Set to 1 for standalone. */
-	quarterPosition?: number;
 	[key: string]: JsonValue;
 }
 
@@ -380,8 +378,6 @@ export interface ContributionHeatmapSettings {
 	dataSource?: "repo" | "user";
 	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
 	refreshInterval?: number;
-	/** Quarter position for multi-quarter layout (1-4, default: 1). Set to 1 for standalone. */
-	quarterPosition?: number;
 	[key: string]: JsonValue;
 }
 

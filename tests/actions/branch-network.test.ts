@@ -484,8 +484,8 @@ describe("BranchNetworkAction", () => {
 		});
 	});
 
-	describe("multi-quarter quarterPosition", () => {
-		it("renders with default quarterPosition 1 (no offset)", async () => {
+	describe("multi-quarter auto-positioning", () => {
+		it("renders with default position (no offset)", async () => {
 			const mockAction = createMockDialAction("bn-mq-1");
 			const settings = { repo: "owner/repo" };
 
@@ -505,9 +505,9 @@ describe("BranchNetworkAction", () => {
 			expect(svg).toContain("main");
 		});
 
-		it("renders with quarterPosition 2 (200px offset applied)", async () => {
+		it("renders with column 1 offset (200px offset applied)", async () => {
 			const mockAction = createMockDialAction("bn-mq-2");
-			const settings = { repo: "owner/repo", quarterPosition: 2 };
+			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
@@ -527,8 +527,8 @@ describe("BranchNetworkAction", () => {
 		it("syncs scroll across instances with the same repo", async () => {
 			const mockAction1 = createMockDialAction("bn-mq-sync1");
 			const mockAction2 = createMockDialAction("bn-mq-sync2");
-			const settings1 = { repo: "owner/repo", quarterPosition: 1 };
-			const settings2 = { repo: "owner/repo", quarterPosition: 2 };
+			const settings1 = { repo: "owner/repo" };
+			const settings2 = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction1, mockAction2],
@@ -558,8 +558,8 @@ describe("BranchNetworkAction", () => {
 		it("shares API data across instances with the same repo", async () => {
 			const mockAction1 = createMockDialAction("bn-mq-share1");
 			const mockAction2 = createMockDialAction("bn-mq-share2");
-			const settings1 = { repo: "owner/repo", quarterPosition: 1 };
-			const settings2 = { repo: "owner/repo", quarterPosition: 2 };
+			const settings1 = { repo: "owner/repo" };
+			const settings2 = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction1, mockAction2],
@@ -580,8 +580,8 @@ describe("BranchNetworkAction", () => {
 		it("does not share data between different repos", async () => {
 			const mockAction1 = createMockDialAction("bn-mq-diff1");
 			const mockAction2 = createMockDialAction("bn-mq-diff2");
-			const settings1 = { repo: "owner/repo-a", quarterPosition: 1 };
-			const settings2 = { repo: "owner/repo-b", quarterPosition: 1 };
+			const settings1 = { repo: "owner/repo-a" };
+			const settings2 = { repo: "owner/repo-b" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction1, mockAction2],
@@ -601,7 +601,7 @@ describe("BranchNetworkAction", () => {
 
 		it("cleans up on disappear without affecting shared scroll", async () => {
 			const mockAction = createMockDialAction("bn-mq-4");
-			const settings = { repo: "owner/repo", quarterPosition: 2 };
+			const settings = { repo: "owner/repo" };
 
 			Object.defineProperty(action, "actions", {
 				get: () => [mockAction],
@@ -616,6 +616,60 @@ describe("BranchNetworkAction", () => {
 			action.onWillDisappear?.(createWillDisappearEvent(mockAction) as never);
 
 			// No error should occur after cleanup
+		});
+
+		it("re-renders remaining sibling when one instance disappears", async () => {
+			const mockAction1 = createMockDialAction("bn-mq-rerender1");
+			const mockAction2 = createMockDialAction("bn-mq-rerender2");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction1, mockAction2],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([{ name: "main" }, { name: "develop" }]),
+			);
+
+			// Appear at column 0 and column 1
+			await action.onWillAppear?.({ action: mockAction1, payload: { settings, coordinates: { column: 0, row: 0 } } } as never);
+			await action.onWillAppear?.({ action: mockAction2, payload: { settings, coordinates: { column: 1, row: 0 } } } as never);
+
+			mockAction2.setFeedback.mockClear();
+
+			// Remove instance 1 — instance 2 should re-render with recalculated offset
+			action.onWillDisappear?.(createWillDisappearEvent(mockAction1) as never);
+
+			// Allow the async re-render to complete
+			await vi.waitFor(() => {
+				expect(mockAction2.setFeedback).toHaveBeenCalled();
+			});
+		});
+
+		it("re-renders existing siblings when a new instance appears", async () => {
+			const mockAction1 = createMockDialAction("bn-mq-appear1");
+			const mockAction2 = createMockDialAction("bn-mq-appear2");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction1, mockAction2],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockResolvedValue(
+				branchResult([{ name: "main" }, { name: "develop" }]),
+			);
+
+			// First instance appears at column 2
+			await action.onWillAppear?.({ action: mockAction1, payload: { settings, coordinates: { column: 2, row: 0 } } } as never);
+
+			mockAction1.setFeedback.mockClear();
+
+			// Second instance appears at column 0 — first should re-render with updated offset
+			await action.onWillAppear?.({ action: mockAction2, payload: { settings, coordinates: { column: 0, row: 0 } } } as never);
+
+			expect(mockAction1.setFeedback).toHaveBeenCalled();
 		});
 	});
 });

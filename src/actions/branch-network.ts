@@ -100,9 +100,12 @@ export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> 
 
 		this.polling.start(ev.action.id, () => this.refreshNetwork(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 		await this.refreshNetwork(ev.action.id);
+		// Re-render existing siblings so they recalculate offsets with the new instance
+		if (settings.repo) this.renderAllSiblings(settings.repo).catch(() => {});
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<BranchNetworkSettings>): void {
+		const repo = this.actionSettings.get(ev.action.id)?.repo;
 		this.polling.stop(ev.action.id);
 		coordinator.unsubscribe(ev.action.id);
 		this.actionSettings.delete(ev.action.id);
@@ -111,6 +114,8 @@ export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> 
 		this.branchCache.delete(ev.action.id);
 		this.dialColumn.delete(ev.action.id);
 		if (this.renderTimeout) { clearTimeout(this.renderTimeout); this.renderTimeout = null; }
+		// Re-render remaining siblings so they recalculate their offsets
+		if (repo) this.renderAllSiblings(repo).catch(() => {});
 	}
 
 	override async onDialRotate(ev: DialRotateEvent<BranchNetworkSettings>): Promise<void> {
@@ -178,6 +183,7 @@ export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> 
 		this.actionContexts.set(ev.action.id, ev.action);
 		const incoming = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
+		const oldRepo = cached?.repo;
 		const settings: BranchNetworkSettings = { ...cached, ...incoming };
 		this.actionSettings.set(ev.action.id, settings);
 
@@ -188,6 +194,8 @@ export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> 
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 				this.polling.stop(ev.action.id);
 				coordinator.unsubscribe(ev.action.id);
+				// Re-render old siblings — this instance left the group
+				if (oldRepo) this.renderAllSiblings(oldRepo).catch(() => {});
 				return;
 			}
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
@@ -206,6 +214,9 @@ export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> 
 
 		this.polling.restart(ev.action.id, () => this.refreshNetwork(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 		await this.refreshNetwork(ev.action.id);
+		// Re-render siblings for both old and new repos
+		if (oldRepo && oldRepo !== settings.repo) this.renderAllSiblings(oldRepo).catch(() => {});
+		if (settings.repo) this.renderAllSiblings(settings.repo).catch(() => {});
 	}
 
 	private async refreshNetwork(actionId: string): Promise<void> {
