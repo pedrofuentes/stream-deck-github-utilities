@@ -131,7 +131,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			repo: settings.repo!,
 			fragments: ["repoMetadata", "prCount"],
 			maxAgeSec: intervalSec,
-		});
+		}, () => this.refreshStats(ev.action.id));
 
 		// Start polling (creates state for generation counter)
 		this.polling.start(ev.action.id, () => this.refreshStats(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
@@ -272,7 +272,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 		this.actionSettings.set(ev.action.id, newSettings);
 
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshStats(ev.action.id);
+		await this.refreshStats(ev.action.id, true);
 	}
 
 	/**
@@ -313,7 +313,7 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 	 */
 	override async onTouchTap(ev: TouchTapEvent<RepoStatsSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshStats(ev.action.id);
+		await this.refreshStats(ev.action.id, true);
 	}
 
 	/**
@@ -381,9 +381,9 @@ export class RepoStatsAction extends SingletonAction<RepoStatsSettings> {
 			repo: settings.repo!,
 			fragments: ["repoMetadata", "prCount"],
 			maxAgeSec: intervalSec,
-		});
+		}, () => this.refreshStats(ev.action.id));
 
-		// Restart timer with potentially new interval (creates fresh state for generation counter)
+		// Restart timer with potentially new interval(creates fresh state for generation counter)
 		this.polling.restart(ev.action.id, () => this.refreshStats(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		// Re-fetch with new settings

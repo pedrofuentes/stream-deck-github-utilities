@@ -103,7 +103,7 @@ export class DiscussionsMonitorAction extends SingletonAction<DiscussionsMonitor
 				repo: settings.repo,
 				fragments: ["discussions"],
 				maxAgeSec: intervalSec,
-			});
+			}, () => this.refreshCount(ev.action.id));
 		}
 
 		this.polling.start(ev.action.id, () => this.refreshCount(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
@@ -131,7 +131,7 @@ export class DiscussionsMonitorAction extends SingletonAction<DiscussionsMonitor
 		if (now - lastUp < 400) {
 			this.lastKeyUpTime.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
-			await this.forceRefresh(ev.action.id);
+			await this.refreshCount(ev.action.id, true);
 			return;
 		}
 
@@ -175,7 +175,7 @@ export class DiscussionsMonitorAction extends SingletonAction<DiscussionsMonitor
 	 */
 	override async onDialRotate(ev: DialRotateEvent<DiscussionsMonitorSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshCount(ev.action.id);
+		await this.refreshCount(ev.action.id, true);
 	}
 
 	/**
@@ -184,7 +184,7 @@ export class DiscussionsMonitorAction extends SingletonAction<DiscussionsMonitor
 	 */
 	override async onTouchTap(ev: TouchTapEvent<DiscussionsMonitorSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshCount(ev.action.id);
+		await this.refreshCount(ev.action.id, true);
 	}
 
 	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, DiscussionsMonitorSettings>): Promise<void> {
@@ -250,7 +250,7 @@ export class DiscussionsMonitorAction extends SingletonAction<DiscussionsMonitor
 				repo: settings.repo,
 				fragments: ["discussions"],
 				maxAgeSec: intervalSec,
-			});
+			}, () => this.refreshCount(ev.action.id));
 		}
 
 		this.polling.restart(ev.action.id, () => this.refreshCount(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
@@ -258,7 +258,7 @@ export class DiscussionsMonitorAction extends SingletonAction<DiscussionsMonitor
 		await this.refreshCount(ev.action.id);
 	}
 
-	private async refreshCount(actionId: string): Promise<void> {
+	private async refreshCount(actionId: string, force = false): Promise<void> {
 		const settings = this.actionSettings.get(actionId);
 		if (!settings?.repo) return;
 
@@ -291,7 +291,9 @@ export class DiscussionsMonitorAction extends SingletonAction<DiscussionsMonitor
 				return;
 			}
 
-			const result = await coordinator.fetchData(actionId, token);
+			const result = force
+				? await coordinator.invalidateAndFetch(actionId, token)
+				: await coordinator.fetchData(actionId, token);
 			const discussions = result.discussions;
 			const totalCount = discussions?.totalCount ?? 0;
 			const answeredCount = discussions?.answeredCount ?? 0;
@@ -341,26 +343,6 @@ export class DiscussionsMonitorAction extends SingletonAction<DiscussionsMonitor
 			}
 			if (isDial) await actionContext.setFeedback({ canvas: renderStripError(errorLabel) });
 		}
-	}
-
-	private async forceRefresh(actionId: string): Promise<void> {
-		const settings = this.actionSettings.get(actionId);
-		if (!settings?.repo) return;
-
-		const actionContext = this.actionContexts.get(actionId);
-		if (!actionContext) return;
-
-		try {
-			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
-			const token = globalSettings.githubToken;
-			if (!token) return;
-
-			await coordinator.invalidateAndFetch(actionId, token);
-		} catch {
-			// Errors will be handled in refreshCount's catch block on next poll
-		}
-
-		await this.refreshCount(actionId);
 	}
 
 	private getOrCreateMarquee(actionId: string): DiscussionsMarqueeData {

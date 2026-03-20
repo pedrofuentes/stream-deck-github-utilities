@@ -111,6 +111,31 @@ function createWillDisappearEvent(actionMock: ReturnType<typeof createMockKeyAct
 	return { action: actionMock, payload: {} };
 }
 
+function createMockDialAction(id: string, settings: Record<string, unknown> = {}) {
+	return {
+		id,
+		manifestId: "com.pedrofuentes.github-utilities.issue-counter",
+		isKey: () => false,
+		isDial: () => true,
+		setImage: vi.fn().mockResolvedValue(undefined),
+		setTitle: vi.fn().mockResolvedValue(undefined),
+		setFeedback: vi.fn().mockResolvedValue(undefined),
+		setFeedbackLayout: vi.fn().mockResolvedValue(undefined),
+		showAlert: vi.fn().mockResolvedValue(undefined),
+		showOk: vi.fn().mockResolvedValue(undefined),
+		getSettings: vi.fn().mockResolvedValue(settings),
+		setSettings: vi.fn().mockResolvedValue(undefined),
+	};
+}
+
+function createTouchTapEvent(actionMock: ReturnType<typeof createMockDialAction>, settings: Record<string, unknown> = {}) {
+	return { action: actionMock, payload: { settings, hold: false, position: { x: 0, y: 0 } } };
+}
+
+function createDialRotateEvent(actionMock: ReturnType<typeof createMockDialAction>, ticks: number, settings: Record<string, unknown> = {}) {
+	return { action: actionMock, payload: { settings, ticks, pressed: false } };
+}
+
 function decodeSvg(dataUri: string): string {
 	return decodeURIComponent(dataUri.replace(/^data:image\/svg\+xml,/, ""));
 }
@@ -287,7 +312,7 @@ describe("IssueCounterAction", () => {
 				fragments: ["issueCount"],
 				maxAgeSec: 120,
 				params: { issueState: "closed" },
-			});
+			}, expect.any(Function));
 		});
 
 		it("defaults issueState param to open when stateFilter is not set", async () => {
@@ -308,6 +333,7 @@ describe("IssueCounterAction", () => {
 				expect.objectContaining({
 					params: { issueState: "open" },
 				}),
+				expect.any(Function),
 			);
 		});
 
@@ -375,6 +401,76 @@ describe("IssueCounterAction", () => {
 			await action.onKeyDown?.(ev as never);
 
 			expect(mockOpenUrl).not.toHaveBeenCalled();
+		});
+
+		it("force-refreshes on double-click using invalidateAndFetch", async () => {
+			const mockAction = createMockKeyAction("issue-dbl-click");
+			const settings = { repo: "owner/repo", stateFilter: "open" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({ issueCount: 10 });
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({ issueCount: 42 });
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			mockCoordinator.invalidateAndFetch.mockClear();
+
+			// Simulate double-click: two keyDown events within 400ms
+			const ev1 = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev1 as never);
+			const ev2 = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev2 as never);
+
+			expect(mockCoordinator.invalidateAndFetch).toHaveBeenCalledWith("issue-dbl-click", "ghp_test123");
+		});
+	});
+
+	describe("onTouchTap", () => {
+		it("force-refreshes using invalidateAndFetch", async () => {
+			const dialAction = createMockDialAction("issue-touch-1");
+			const settings = { repo: "owner/repo", stateFilter: "open" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [dialAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({ issueCount: 5 });
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({ issueCount: 15 });
+
+			await action.onWillAppear?.({ action: dialAction, payload: { settings } } as never);
+			mockCoordinator.invalidateAndFetch.mockClear();
+
+			const ev = createTouchTapEvent(dialAction, settings);
+			await action.onTouchTap?.(ev as never);
+
+			expect(mockCoordinator.invalidateAndFetch).toHaveBeenCalledWith("issue-touch-1", "ghp_test123");
+		});
+	});
+
+	describe("onDialRotate", () => {
+		it("force-refreshes using invalidateAndFetch after cycling state", async () => {
+			const dialAction = createMockDialAction("issue-dial-1");
+			const settings = { repo: "owner/repo", stateFilter: "open" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [dialAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({ issueCount: 5 });
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({ issueCount: 20 });
+
+			await action.onWillAppear?.({ action: dialAction, payload: { settings } } as never);
+			mockCoordinator.invalidateAndFetch.mockClear();
+
+			const ev = createDialRotateEvent(dialAction, 1, settings);
+			await action.onDialRotate?.(ev as never);
+
+			expect(mockCoordinator.invalidateAndFetch).toHaveBeenCalledWith("issue-dial-1", "ghp_test123");
 		});
 	});
 
@@ -454,7 +550,7 @@ describe("IssueCounterAction", () => {
 				fragments: ["issueCount"],
 				maxAgeSec: 60,
 				params: { issueState: "all" },
-			});
+			}, expect.any(Function));
 		});
 
 		it("unsubscribes when repo is cleared", async () => {

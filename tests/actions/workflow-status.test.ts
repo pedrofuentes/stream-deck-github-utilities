@@ -593,6 +593,7 @@ describe("WorkflowStatusAction", () => {
 			expect(mockFetchData).toHaveBeenCalled();
 			expect(mockSubscribe).toHaveBeenCalledWith(
 				expect.objectContaining({ repo: "new-owner/new-repo" }),
+				expect.any(Function),
 			);
 		});
 
@@ -621,6 +622,7 @@ describe("WorkflowStatusAction", () => {
 						branch: "develop",
 					}),
 				}),
+				expect.any(Function),
 			);
 		});
 	});

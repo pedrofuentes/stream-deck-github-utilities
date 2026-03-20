@@ -107,7 +107,7 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 				fragments: ["latestRelease"],
 				maxAgeSec: intervalSec,
 				params: { includePreReleases: settings.includePreReleases ?? false },
-			});
+			}, () => this.refreshRelease(ev.action.id));
 		}
 
 		this.polling.start(ev.action.id, () => this.refreshRelease(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
@@ -176,7 +176,7 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 				fragments: ["latestRelease"],
 				maxAgeSec: newSettings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL,
 				params: { includePreReleases: !current },
-			});
+			}, () => this.refreshRelease(ev.action.id));
 		}
 
 		this.polling.resetBackoff(ev.action.id);
@@ -284,7 +284,7 @@ export class ReleaseMonitorAction extends SingletonAction<ReleaseMonitorSettings
 				fragments: ["latestRelease"],
 				maxAgeSec: intervalSec,
 				params: { includePreReleases: settings.includePreReleases ?? false },
-			});
+			}, () => this.refreshRelease(ev.action.id));
 		}
 
 		this.polling.restart(ev.action.id, () => this.refreshRelease(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);

@@ -226,6 +226,7 @@ function makeCoordinatorResult(overrides: Record<string, unknown> = {}) {
  */
 function setupCoordinatorMock(overrides: Record<string, unknown> = {}): void {
 	mockFetchData.mockResolvedValue(makeCoordinatorResult(overrides));
+	mockInvalidateAndFetch.mockResolvedValue(makeCoordinatorResult(overrides));
 }
 
 // ──────────────────────────────────────────────
@@ -296,7 +297,7 @@ describe("FleetMonitorAction", () => {
 				repo: "owner/myrepo",
 				fragments: ["prCount", "workflowRuns", "commitActivity"],
 				maxAgeSec: 300,
-			});
+			}, expect.any(Function));
 			expect(mockFetchData).toHaveBeenCalledWith("fm-3", "ghp_test123");
 			expect(mockAction.setImage).toHaveBeenCalled();
 			const svg = lastImage(mockAction);
@@ -458,6 +459,28 @@ describe("FleetMonitorAction", () => {
 
 			expect(mockOpenUrl).toHaveBeenCalledWith("https://github.com/facebook/react");
 		});
+
+		it("force refreshes on double-click", async () => {
+			const mockAction = createMockKeyAction("fm-k-3");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			setupCoordinatorMock({ prCount: 3 });
+
+			// Simulate double-click: two key-downs within 400ms
+			const ev1 = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev1 as never);
+
+			const ev2 = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev2 as never);
+
+			expect(mockInvalidateAndFetch).toHaveBeenCalledWith("fm-k-3", "ghp_test123");
+		});
 	});
 
 	// ── Encoder: onDialDown ─────────────────────
@@ -497,7 +520,7 @@ describe("FleetMonitorAction", () => {
 	// ── Encoder: onDialRotate ───────────────────
 
 	describe("onDialRotate", () => {
-		it("triggers a refresh on dial rotate", async () => {
+		it("triggers a force refresh on dial rotate", async () => {
 			const mockAction = createMockDialAction("fm-dr-1");
 			const settings = { repo: "owner/repo" };
 
@@ -512,6 +535,7 @@ describe("FleetMonitorAction", () => {
 			const ev = createDialRotateEvent(mockAction, settings);
 			await action.onDialRotate?.(ev as never);
 
+			expect(mockInvalidateAndFetch).toHaveBeenCalledWith("fm-dr-1", "ghp_test123");
 			const lastCall = mockAction.setFeedback.mock.calls[mockAction.setFeedback.mock.calls.length - 1][0] as { canvas: string };
 			expect(decodeSvg(lastCall.canvas)).toContain("9 PRs");
 		});
@@ -520,7 +544,7 @@ describe("FleetMonitorAction", () => {
 	// ── Encoder: onTouchTap ─────────────────────
 
 	describe("onTouchTap", () => {
-		it("triggers a refresh on touch tap", async () => {
+		it("triggers a force refresh on touch tap", async () => {
 			const mockAction = createMockDialAction("fm-tt-1");
 			const settings = { repo: "owner/repo" };
 
@@ -535,6 +559,7 @@ describe("FleetMonitorAction", () => {
 			const ev = createTouchTapEvent(mockAction, settings);
 			await action.onTouchTap?.(ev as never);
 
+			expect(mockInvalidateAndFetch).toHaveBeenCalledWith("fm-tt-1", "ghp_test123");
 			const lastCall = mockAction.setFeedback.mock.calls[mockAction.setFeedback.mock.calls.length - 1][0] as { canvas: string };
 			expect(decodeSvg(lastCall.canvas)).toContain("6 PRs");
 		});
@@ -578,7 +603,7 @@ describe("FleetMonitorAction", () => {
 				actionId: "fm-s-1",
 				repo: "owner/repo",
 				fragments: ["prCount", "workflowRuns", "commitActivity"],
-			}));
+			}), expect.any(Function));
 			expect(mockAction.setImage).toHaveBeenCalled();
 			const svg = lastImage(mockAction);
 			expect(svg).toContain("Failed");

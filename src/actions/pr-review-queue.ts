@@ -88,7 +88,7 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		const maxAgeSec = intervalSec;
-		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo ?? "", fragments: ["reviewRequestedPRs"], maxAgeSec });
+		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo ?? "", fragments: ["reviewRequestedPRs"], maxAgeSec }, () => this.refreshQueue(ev.action.id));
 
 		this.polling.start(ev.action.id, () => this.refreshQueue(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -216,7 +216,7 @@ export class PRReviewQueueAction extends SingletonAction<PRReviewQueueSettings> 
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		const maxAgeSec = intervalSec;
-		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo ?? "", fragments: ["reviewRequestedPRs"], maxAgeSec });
+		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo ?? "", fragments: ["reviewRequestedPRs"], maxAgeSec }, () => this.refreshQueue(ev.action.id));
 
 		this.polling.restart(ev.action.id, () => this.refreshQueue(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 

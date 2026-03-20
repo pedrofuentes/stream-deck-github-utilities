@@ -144,7 +144,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 				workflowFile: settings.workflowFile,
 				environment: settings.environment,
 			},
-		});
+		}, () => this.refreshStatus(ev.action.id));
 		this.polling.start(ev.action.id, () => this.refreshStatus(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshStatus(ev.action.id);
@@ -307,7 +307,7 @@ export class WorkflowStatusAction extends SingletonAction<WorkflowStatusSettings
 				workflowFile: settings.workflowFile,
 				environment: settings.environment,
 			},
-		});
+		}, () => this.refreshStatus(ev.action.id));
 		this.polling.restart(ev.action.id, () => this.refreshStatus(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshStatus(ev.action.id);

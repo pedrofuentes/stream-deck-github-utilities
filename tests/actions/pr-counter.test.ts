@@ -253,7 +253,7 @@ describe("PRCounterAction", () => {
 				fragments: ["prCount"],
 				maxAgeSec: 120,
 				params: { prState: "closed" },
-			});
+			}, expect.any(Function));
 		});
 
 		it("defaults prState param to open when stateFilter is not set", async () => {
@@ -274,6 +274,7 @@ describe("PRCounterAction", () => {
 				expect.objectContaining({
 					params: { prState: "open" },
 				}),
+				expect.any(Function),
 			);
 		});
 
@@ -430,7 +431,7 @@ describe("PRCounterAction", () => {
 				fragments: ["prCount"],
 				maxAgeSec: 60,
 				params: { prState: "all" },
-			});
+			}, expect.any(Function));
 		});
 
 		it("unsubscribes when repo is cleared", async () => {
@@ -516,6 +517,101 @@ describe("PRCounterAction", () => {
 			expect(mockAction.setImage).toHaveBeenCalled();
 			const svg = lastImage(mockAction);
 			expect(svg).toContain("0");
+		});
+	});
+
+	// ── onKeyDown double-click force refresh ────
+
+	describe("onKeyDown double-click", () => {
+		it("calls invalidateAndFetch on double-click", async () => {
+			const mockAction = createMockKeyAction("pr-dbl-1");
+			const settings = { repo: "owner/repo", stateFilter: "open" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({ prCount: 5 });
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({ prCount: 10 });
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			vi.clearAllMocks();
+			mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
+			mockCoordinator.fetchData.mockResolvedValue({ prCount: 5 });
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({ prCount: 10 });
+
+			// First press
+			const ev1 = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev1 as never);
+
+			// Second press within 400ms → double-click
+			const ev2 = createKeyDownEvent(mockAction, settings);
+			await action.onKeyDown?.(ev2 as never);
+
+			expect(mockCoordinator.invalidateAndFetch).toHaveBeenCalledWith("pr-dbl-1", "ghp_test123");
+			expect(mockCoordinator.fetchData).not.toHaveBeenCalled();
+		});
+	});
+
+	// ── onTouchTap force refresh ────────────────
+
+	describe("onTouchTap", () => {
+		it("calls invalidateAndFetch on touch tap", async () => {
+			const mockAction = createMockKeyAction("pr-tap-1");
+			const settings = { repo: "owner/repo", stateFilter: "open" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({ prCount: 5 });
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({ prCount: 20 });
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			vi.clearAllMocks();
+			mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
+			mockCoordinator.fetchData.mockResolvedValue({ prCount: 5 });
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({ prCount: 20 });
+
+			const tapEv = { action: mockAction, payload: { settings } };
+			await action.onTouchTap?.(tapEv as never);
+
+			expect(mockCoordinator.invalidateAndFetch).toHaveBeenCalledWith("pr-tap-1", "ghp_test123");
+			expect(mockCoordinator.fetchData).not.toHaveBeenCalled();
+		});
+	});
+
+	// ── onDialRotate force refresh ──────────────
+
+	describe("onDialRotate", () => {
+		it("calls invalidateAndFetch after cycling state filter", async () => {
+			const mockAction = createMockKeyAction("pr-rot-1");
+			const settings = { repo: "owner/repo", stateFilter: "open" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({ prCount: 5 });
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({ prCount: 15 });
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			vi.clearAllMocks();
+			mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
+			mockCoordinator.fetchData.mockResolvedValue({ prCount: 5 });
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({ prCount: 15 });
+
+			const rotateEv = {
+				action: mockAction,
+				payload: { settings, ticks: 1, pressed: false },
+			};
+			await action.onDialRotate?.(rotateEv as never);
+
+			expect(mockCoordinator.invalidateAndFetch).toHaveBeenCalledWith("pr-rot-1", "ghp_test123");
+			expect(mockCoordinator.fetchData).not.toHaveBeenCalled();
 		});
 	});
 

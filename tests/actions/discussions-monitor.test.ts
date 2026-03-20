@@ -127,6 +127,37 @@ function createWillDisappearEvent(actionMock: ReturnType<typeof createMockKeyAct
 	};
 }
 
+function createMockDialAction(id: string, settings: Record<string, unknown> = {}) {
+	return {
+		id,
+		manifestId: "com.pedrofuentes.github-utilities.discussions-monitor",
+		isKey: () => false,
+		isDial: () => true,
+		setImage: vi.fn().mockResolvedValue(undefined),
+		setTitle: vi.fn().mockResolvedValue(undefined),
+		setFeedback: vi.fn().mockResolvedValue(undefined),
+		setFeedbackLayout: vi.fn().mockResolvedValue(undefined),
+		showAlert: vi.fn().mockResolvedValue(undefined),
+		showOk: vi.fn().mockResolvedValue(undefined),
+		getSettings: vi.fn().mockResolvedValue(settings),
+		setSettings: vi.fn().mockResolvedValue(undefined),
+	};
+}
+
+function createTouchTapEvent(actionMock: ReturnType<typeof createMockKeyAction> | ReturnType<typeof createMockDialAction>, settings: Record<string, unknown> = {}) {
+	return {
+		action: actionMock,
+		payload: { settings, position: { x: 0, y: 0 }, hold: false },
+	};
+}
+
+function createDialRotateEvent(actionMock: ReturnType<typeof createMockDialAction>, settings: Record<string, unknown> = {}) {
+	return {
+		action: actionMock,
+		payload: { settings, ticks: 1, pressed: false },
+	};
+}
+
 function createSendToPluginEvent(actionMock: ReturnType<typeof createMockKeyAction>, payload: Record<string, unknown>) {
 	return {
 		action: actionMock,
@@ -255,7 +286,7 @@ describe("DiscussionsMonitorAction", () => {
 				repo: "owner/repo",
 				fragments: ["discussions"],
 				maxAgeSec: 120,
-			});
+			}, expect.any(Function));
 		});
 
 		it("does not subscribe when repo is not set", async () => {
@@ -401,6 +432,78 @@ describe("DiscussionsMonitorAction", () => {
 		});
 	});
 
+	// ── onTouchTap ─────────────────────────────
+
+	describe("onTouchTap", () => {
+		it("calls invalidateAndFetch to force refresh", async () => {
+			const mockAction = createMockDialAction("disc-touch-1");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({
+				discussions: { totalCount: 5, answeredCount: 0, items: [] },
+			});
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({
+				discussions: { totalCount: 10, answeredCount: 2, items: [] },
+			});
+
+			const appearEv = createWillAppearEvent(mockAction as any, settings);
+			await action.onWillAppear?.(appearEv as never);
+
+			vi.clearAllMocks();
+			mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({
+				discussions: { totalCount: 10, answeredCount: 2, items: [] },
+			});
+
+			const ev = createTouchTapEvent(mockAction, settings);
+			await action.onTouchTap?.(ev as never);
+
+			expect(mockCoordinator.invalidateAndFetch).toHaveBeenCalledWith("disc-touch-1", "ghp_test123");
+			expect(mockCoordinator.fetchData).not.toHaveBeenCalled();
+		});
+	});
+
+	// ── onDialRotate ────────────────────────────
+
+	describe("onDialRotate", () => {
+		it("calls invalidateAndFetch to force refresh", async () => {
+			const mockAction = createMockDialAction("disc-dial-1");
+			const settings = { repo: "owner/repo" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({
+				discussions: { totalCount: 5, answeredCount: 0, items: [] },
+			});
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({
+				discussions: { totalCount: 10, answeredCount: 2, items: [] },
+			});
+
+			const appearEv = createWillAppearEvent(mockAction as any, settings);
+			await action.onWillAppear?.(appearEv as never);
+
+			vi.clearAllMocks();
+			mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({
+				discussions: { totalCount: 10, answeredCount: 2, items: [] },
+			});
+
+			const ev = createDialRotateEvent(mockAction, settings);
+			await action.onDialRotate?.(ev as never);
+
+			expect(mockCoordinator.invalidateAndFetch).toHaveBeenCalledWith("disc-dial-1", "ghp_test123");
+			expect(mockCoordinator.fetchData).not.toHaveBeenCalled();
+		});
+	});
+
 	// ── onDidReceiveSettings ────────────────────
 
 	describe("onDidReceiveSettings", () => {
@@ -464,7 +567,7 @@ describe("DiscussionsMonitorAction", () => {
 				repo: "owner/new-repo",
 				fragments: ["discussions"],
 				maxAgeSec: 60,
-			});
+			}, expect.any(Function));
 		});
 
 		it("unsubscribes when repo is cleared", async () => {

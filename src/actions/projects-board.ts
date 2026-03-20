@@ -100,7 +100,7 @@ export class ProjectsBoardAction extends SingletonAction<ProjectsBoardSettings> 
 				repo: settings.repo,
 				fragments: ["projectsV2"],
 				maxAgeSec: intervalSec,
-			});
+			}, () => this.refreshData(ev.action.id));
 		}
 
 		this.polling.start(ev.action.id, () => this.refreshData(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
@@ -127,7 +127,7 @@ export class ProjectsBoardAction extends SingletonAction<ProjectsBoardSettings> 
 		if (now - lastUp < 400) {
 			this.lastKeyUpTime.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
-			await this.forceRefresh(ev.action.id);
+			await this.refreshData(ev.action.id, true);
 			return;
 		}
 
@@ -162,13 +162,13 @@ export class ProjectsBoardAction extends SingletonAction<ProjectsBoardSettings> 
 	/** Forces a data refresh on dial rotate (Stream Deck+). */
 	override async onDialRotate(ev: DialRotateEvent<ProjectsBoardSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshData(ev.action.id);
+		await this.refreshData(ev.action.id, true);
 	}
 
 	/** Forces a data refresh on touch strip tap (Stream Deck+). */
 	override async onTouchTap(ev: TouchTapEvent<ProjectsBoardSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshData(ev.action.id);
+		await this.refreshData(ev.action.id, true);
 	}
 
 	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, ProjectsBoardSettings>): Promise<void> {
@@ -234,7 +234,7 @@ export class ProjectsBoardAction extends SingletonAction<ProjectsBoardSettings> 
 				repo: settings.repo,
 				fragments: ["projectsV2"],
 				maxAgeSec: intervalSec,
-			});
+			}, () => this.refreshData(ev.action.id));
 		}
 
 		this.polling.restart(ev.action.id, () => this.refreshData(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
@@ -242,7 +242,7 @@ export class ProjectsBoardAction extends SingletonAction<ProjectsBoardSettings> 
 		await this.refreshData(ev.action.id);
 	}
 
-	private async refreshData(actionId: string): Promise<void> {
+	private async refreshData(actionId: string, force = false): Promise<void> {
 		const settings = this.actionSettings.get(actionId);
 		if (!settings?.repo) return;
 
@@ -275,7 +275,9 @@ export class ProjectsBoardAction extends SingletonAction<ProjectsBoardSettings> 
 				return;
 			}
 
-			const result = await coordinator.fetchData(actionId, token);
+			const result = force
+				? await coordinator.invalidateAndFetch(actionId, token)
+				: await coordinator.fetchData(actionId, token);
 			const projectsData = result.projectsV2;
 
 			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
@@ -324,26 +326,6 @@ export class ProjectsBoardAction extends SingletonAction<ProjectsBoardSettings> 
 			}
 			if (isDial) await actionContext.setFeedback({ canvas: renderStripError(errorLabel) });
 		}
-	}
-
-	private async forceRefresh(actionId: string): Promise<void> {
-		const settings = this.actionSettings.get(actionId);
-		if (!settings?.repo) return;
-
-		const actionContext = this.actionContexts.get(actionId);
-		if (!actionContext) return;
-
-		try {
-			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
-			const token = globalSettings.githubToken;
-			if (!token) return;
-
-			await coordinator.invalidateAndFetch(actionId, token);
-		} catch {
-			// Errors will be handled in refreshData's catch block on next poll
-		}
-
-		await this.refreshData(actionId);
 	}
 
 	private getOrCreateMarquee(actionId: string): ProjectsMarqueeData {

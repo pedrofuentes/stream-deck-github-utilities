@@ -95,7 +95,7 @@ export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> 
 				repo: settings.repo,
 				fragments: ["branches"],
 				maxAgeSec: intervalSec,
-			});
+			}, () => this.refreshNetwork(ev.action.id));
 		}
 
 		this.polling.start(ev.action.id, () => this.refreshNetwork(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
@@ -201,7 +201,7 @@ export class BranchNetworkAction extends SingletonAction<BranchNetworkSettings> 
 				repo: settings.repo,
 				fragments: ["branches"],
 				maxAgeSec: intervalSec,
-			});
+			}, () => this.refreshNetwork(ev.action.id));
 		}
 
 		this.polling.restart(ev.action.id, () => this.refreshNetwork(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);

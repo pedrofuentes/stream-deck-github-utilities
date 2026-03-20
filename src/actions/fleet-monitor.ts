@@ -86,7 +86,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 				repo: settings.repo,
 				fragments: ["prCount", "workflowRuns", "commitActivity"],
 				maxAgeSec: intervalSec,
-			});
+			}, () => this.refreshFleet(ev.action.id));
 		}
 
 		this.polling.start(ev.action.id, () => this.refreshFleet(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
@@ -113,7 +113,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 		if (now - lastUp < 400) {
 			this.lastKeyUpTime.delete(ev.action.id);
 			this.polling.resetBackoff(ev.action.id);
-			await this.forceRefresh(ev.action.id);
+			await this.refreshFleet(ev.action.id, true);
 			return;
 		}
 
@@ -137,7 +137,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 	 */
 	override async onDialRotate(ev: DialRotateEvent<FleetMonitorSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshFleet(ev.action.id);
+		await this.refreshFleet(ev.action.id, true);
 	}
 
 	/**
@@ -164,7 +164,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 	 */
 	override async onTouchTap(ev: TouchTapEvent<FleetMonitorSettings>): Promise<void> {
 		this.polling.resetBackoff(ev.action.id);
-		await this.refreshFleet(ev.action.id);
+		await this.refreshFleet(ev.action.id, true);
 	}
 
 	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, FleetMonitorSettings>): Promise<void> {
@@ -219,7 +219,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 				repo: settings.repo,
 				fragments: ["prCount", "workflowRuns", "commitActivity"],
 				maxAgeSec: intervalSec,
-			});
+			}, () => this.refreshFleet(ev.action.id));
 		} else {
 			coordinator.unsubscribe(ev.action.id);
 		}
@@ -229,7 +229,7 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 		await this.refreshFleet(ev.action.id);
 	}
 
-	private async refreshFleet(actionId: string): Promise<void> {
+	private async refreshFleet(actionId: string, force = false): Promise<void> {
 		const settings = this.actionSettings.get(actionId);
 		const gen = this.polling.incrementGeneration(actionId);
 
@@ -272,7 +272,9 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 			}
 
 			// Fetch all data points via the coordinator (batched GraphQL + REST)
-			const result = await coordinator.fetchData(actionId, token);
+			const result = force
+				? await coordinator.invalidateAndFetch(actionId, token)
+				: await coordinator.fetchData(actionId, token);
 			const workflowInfo = result.workflowRuns;
 			const prCount = result.prCount ?? 0;
 			const commitWeeks = result.commitActivity ?? [];
@@ -337,23 +339,4 @@ export class FleetMonitorAction extends SingletonAction<FleetMonitorSettings> {
 		}
 	}
 
-	private async forceRefresh(actionId: string): Promise<void> {
-		const settings = this.actionSettings.get(actionId);
-		if (!settings?.repo) return;
-
-		const actionContext = this.actionContexts.get(actionId);
-		if (!actionContext) return;
-
-		try {
-			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
-			const token = globalSettings.githubToken;
-			if (!token) return;
-
-			await coordinator.invalidateAndFetch(actionId, token);
-		} catch {
-			// Errors will be handled in refreshFleet's catch block on next poll
-		}
-
-		await this.refreshFleet(actionId);
-	}
 }

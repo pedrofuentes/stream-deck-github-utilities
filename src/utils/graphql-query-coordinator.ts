@@ -59,18 +59,29 @@ import { parseRepoIdentifier } from "./github";
 export class GraphQLQueryCoordinator {
 	private cache: RepoDataCache;
 	private subscriptions: Map<string, DataSubscription>;
+	private refreshCallbacks: Map<string, () => Promise<void>>;
 
 	constructor(cache?: RepoDataCache) {
 		this.cache = cache ?? new RepoDataCache();
 		this.subscriptions = new Map();
+		this.refreshCallbacks = new Map();
 	}
 
 	/**
 	 * Register an action's data needs.
 	 * Call in onWillAppear.
+	 *
+	 * @param subscription - The action's data subscription.
+	 * @param onSiblingRefresh - Optional callback fired when a sibling action
+	 *   (same repo) force-refreshes. Use to re-render with fresh cached data.
 	 */
-	subscribe(subscription: DataSubscription): void {
+	subscribe(subscription: DataSubscription, onSiblingRefresh?: () => Promise<void>): void {
 		this.subscriptions.set(subscription.actionId, subscription);
+		if (onSiblingRefresh) {
+			this.refreshCallbacks.set(subscription.actionId, onSiblingRefresh);
+		} else {
+			this.refreshCallbacks.delete(subscription.actionId);
+		}
 	}
 
 	/**
@@ -79,6 +90,7 @@ export class GraphQLQueryCoordinator {
 	 */
 	unsubscribe(actionId: string): void {
 		this.subscriptions.delete(actionId);
+		this.refreshCallbacks.delete(actionId);
 		this.cache.cleanup(this.getActiveRepos());
 	}
 
@@ -109,7 +121,9 @@ export class GraphQLQueryCoordinator {
 
 	/**
 	 * Invalidate cached data for an action's fragments and fetch fresh.
-	 * Used for force-refresh (double-click).
+	 * Used for force-refresh (double-click, touch tap, dial rotate).
+	 * After fetching, notifies sibling actions watching the same repo
+	 * so they can re-render with the fresh cached data.
 	 */
 	async invalidateAndFetch(actionId: string, token: string): Promise<CoordinatorResult> {
 		const subscription = this.subscriptions.get(actionId);
@@ -119,7 +133,29 @@ export class GraphQLQueryCoordinator {
 
 		this.cache.invalidate(subscription.repo, subscription.fragments);
 
-		return this.fetchData(actionId, token);
+		const result = await this.fetchData(actionId, token);
+
+		this.notifySiblings(actionId);
+
+		return result;
+	}
+
+	/**
+	 * Notify sibling actions watching the same repo to re-render.
+	 * Called after invalidateAndFetch so siblings pick up fresh cached data.
+	 */
+	private notifySiblings(triggerActionId: string): void {
+		const subscription = this.subscriptions.get(triggerActionId);
+		if (!subscription) return;
+
+		for (const [otherId, otherSub] of this.subscriptions) {
+			if (otherId !== triggerActionId && otherSub.repo === subscription.repo) {
+				const callback = this.refreshCallbacks.get(otherId);
+				if (callback) {
+					callback().catch(() => {});
+				}
+			}
+		}
 	}
 
 	/**

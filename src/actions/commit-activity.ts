@@ -107,7 +107,7 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 			fragments: ["commitActivity"],
 			maxAgeSec: intervalSec,
 			params: { timeRange: settings.timeRange ?? "7d" },
-		});
+		}, () => this.refreshActivity(ev.action.id));
 		this.polling.start(ev.action.id, () => this.refreshActivity(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshActivity(ev.action.id);
@@ -267,7 +267,7 @@ export class CommitActivityAction extends SingletonAction<CommitActivitySettings
 			fragments: ["commitActivity"],
 			maxAgeSec: intervalSec,
 			params: { timeRange: settings.timeRange ?? "7d" },
-		});
+		}, () => this.refreshActivity(ev.action.id));
 		this.polling.restart(ev.action.id, () => this.refreshActivity(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshActivity(ev.action.id);

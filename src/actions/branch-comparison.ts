@@ -92,7 +92,7 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 				baseBranch: settings.baseBranch,
 				headBranch: settings.headBranch,
 			},
-		});
+		}, () => this.refreshComparison(ev.action.id));
 		this.polling.start(ev.action.id, () => this.refreshComparison(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshComparison(ev.action.id);
@@ -238,7 +238,7 @@ export class BranchComparisonAction extends SingletonAction<BranchComparisonSett
 				baseBranch: settings.baseBranch,
 				headBranch: settings.headBranch,
 			},
-		});
+		}, () => this.refreshComparison(ev.action.id));
 		this.polling.restart(ev.action.id, () => this.refreshComparison(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshComparison(ev.action.id);

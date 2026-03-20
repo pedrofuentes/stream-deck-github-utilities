@@ -614,6 +614,7 @@ describe("RepoStatsAction", () => {
 			expect(mockCoordinatorFetchData).toHaveBeenCalled();
 			expect(mockCoordinatorSubscribe).toHaveBeenCalledWith(
 				expect.objectContaining({ repo: "new-owner/new-repo" }),
+				expect.any(Function),
 			);
 		});
 	});
@@ -899,7 +900,7 @@ describe("RepoStatsAction", () => {
 				repo: "owner/repo",
 				fragments: ["repoMetadata", "prCount"],
 				maxAgeSec: 120,
-			});
+			}, expect.any(Function));
 		});
 
 		it("uses default refresh interval when not set", async () => {
@@ -917,6 +918,7 @@ describe("RepoStatsAction", () => {
 
 			expect(mockCoordinatorSubscribe).toHaveBeenCalledWith(
 				expect.objectContaining({ maxAgeSec: 300 }),
+				expect.any(Function),
 			);
 		});
 
@@ -974,6 +976,7 @@ describe("RepoStatsAction", () => {
 			expect(mockCoordinatorUnsubscribe).toHaveBeenCalledWith("coord-resub-1");
 			expect(mockCoordinatorSubscribe).toHaveBeenCalledWith(
 				expect.objectContaining({ repo: "owner/new-repo" }),
+				expect.any(Function),
 			);
 		});
 
@@ -1027,6 +1030,56 @@ describe("RepoStatsAction", () => {
 
 			// Should have used invalidateAndFetch for the force refresh
 			expect(mockCoordinatorInvalidateAndFetch).toHaveBeenCalled();
+		});
+
+		it("uses invalidateAndFetch on touch tap", async () => {
+			const mockAction = createMockKeyAction("coord-touchtap-1");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
+			mockCoordinatorInvalidateAndFetch.mockResolvedValue(makeCoordinatorResult());
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			mockCoordinatorFetchData.mockClear();
+			mockCoordinatorInvalidateAndFetch.mockClear();
+
+			// Simulate touch tap
+			await (action as any).onTouchTap?.({
+				action: mockAction,
+				payload: { settings },
+			});
+
+			expect(mockCoordinatorInvalidateAndFetch).toHaveBeenCalled();
+			expect(mockCoordinatorFetchData).not.toHaveBeenCalled();
+		});
+
+		it("uses invalidateAndFetch on dial rotate", async () => {
+			const mockAction = createMockKeyAction("coord-dialrotate-1");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+			mockCoordinatorFetchData.mockResolvedValue(makeCoordinatorResult());
+			mockCoordinatorInvalidateAndFetch.mockResolvedValue(makeCoordinatorResult());
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			mockCoordinatorFetchData.mockClear();
+			mockCoordinatorInvalidateAndFetch.mockClear();
+
+			// Simulate dial rotate (clockwise)
+			await (action as any).onDialRotate?.({
+				action: mockAction,
+				payload: { settings, ticks: 1 },
+			});
+
+			expect(mockCoordinatorInvalidateAndFetch).toHaveBeenCalled();
+			expect(mockCoordinatorFetchData).not.toHaveBeenCalled();
 		});
 
 		it("calls fetchData on normal poll tick", async () => {

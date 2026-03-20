@@ -127,6 +127,31 @@ function createWillDisappearEvent(actionMock: ReturnType<typeof createMockKeyAct
 	};
 }
 
+function createMockDialAction(id: string, settings: Record<string, unknown> = {}) {
+	return {
+		id,
+		manifestId: "com.pedrofuentes.github-utilities.projects-board",
+		isKey: () => false,
+		isDial: () => true,
+		setImage: vi.fn().mockResolvedValue(undefined),
+		setTitle: vi.fn().mockResolvedValue(undefined),
+		setFeedback: vi.fn().mockResolvedValue(undefined),
+		setFeedbackLayout: vi.fn().mockResolvedValue(undefined),
+		showAlert: vi.fn().mockResolvedValue(undefined),
+		showOk: vi.fn().mockResolvedValue(undefined),
+		getSettings: vi.fn().mockResolvedValue(settings),
+		setSettings: vi.fn().mockResolvedValue(undefined),
+	};
+}
+
+function createDialRotateEvent(actionMock: ReturnType<typeof createMockDialAction>, ticks: number, settings: Record<string, unknown> = {}) {
+	return { action: actionMock, payload: { settings, ticks, pressed: false } };
+}
+
+function createTouchTapEvent(actionMock: ReturnType<typeof createMockDialAction>, settings: Record<string, unknown> = {}) {
+	return { action: actionMock, payload: { settings, tapPos: [100, 50], hold: false } };
+}
+
 function createSendToPluginEvent(actionMock: ReturnType<typeof createMockKeyAction>, payload: Record<string, unknown>) {
 	return {
 		action: actionMock,
@@ -271,7 +296,7 @@ describe("ProjectsBoardAction", () => {
 				repo: "owner/repo",
 				fragments: ["projectsV2"],
 				maxAgeSec: 120,
-			});
+			}, expect.any(Function));
 		});
 
 		it("does not subscribe when repo is not set", async () => {
@@ -380,6 +405,60 @@ describe("ProjectsBoardAction", () => {
 		});
 	});
 
+	// ── onTouchTap ─────────────────────────────
+
+	describe("onTouchTap", () => {
+		it("force-refreshes data via invalidateAndFetch", async () => {
+			const mockAction = createMockDialAction("proj-touch-1");
+			const settings = { repo: "owner/repo" };
+
+			(action as any).actionContexts.set("proj-touch-1", mockAction);
+			(action as any).actionSettings.set("proj-touch-1", settings);
+
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({
+				projectsV2: { projects: [] },
+			});
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			mockCoordinator.invalidateAndFetch.mockClear();
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({
+				projectsV2: { projects: [] },
+			});
+
+			const ev = createTouchTapEvent(mockAction, settings);
+			await action.onTouchTap?.(ev as never);
+
+			expect(mockCoordinator.invalidateAndFetch).toHaveBeenCalled();
+		});
+	});
+
+	// ── onDialRotate ───────────────────────────
+
+	describe("onDialRotate", () => {
+		it("force-refreshes data via invalidateAndFetch", async () => {
+			const mockAction = createMockDialAction("proj-rotate-1");
+			const settings = { repo: "owner/repo" };
+
+			(action as any).actionContexts.set("proj-rotate-1", mockAction);
+			(action as any).actionSettings.set("proj-rotate-1", settings);
+
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({
+				projectsV2: { projects: [] },
+			});
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+			mockCoordinator.invalidateAndFetch.mockClear();
+			mockCoordinator.invalidateAndFetch.mockResolvedValue({
+				projectsV2: { projects: [] },
+			});
+
+			const ev = createDialRotateEvent(mockAction, 1, settings);
+			await action.onDialRotate?.(ev as never);
+
+			expect(mockCoordinator.invalidateAndFetch).toHaveBeenCalled();
+		});
+	});
+
 	// ── onDidReceiveSettings ────────────────────
 
 	describe("onDidReceiveSettings", () => {
@@ -445,7 +524,7 @@ describe("ProjectsBoardAction", () => {
 				repo: "owner/new-repo",
 				fragments: ["projectsV2"],
 				maxAgeSec: 60,
-			});
+			}, expect.any(Function));
 		});
 
 		it("unsubscribes when repo is cleared", async () => {

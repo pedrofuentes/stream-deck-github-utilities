@@ -732,6 +732,101 @@ describe("GraphQLQueryCoordinator", () => {
 		});
 	});
 
+	// ── Sibling notification ────────────────────────────────────────────
+
+	describe("Sibling notification", () => {
+		it("should store callback when subscribing with onSiblingRefresh", () => {
+			const callback = vi.fn().mockResolvedValue(undefined);
+			coordinator.subscribe(baseSub({ actionId: "a1" }), callback);
+
+			// Subscribe a second action to the same repo and trigger refresh
+			coordinator.subscribe(baseSub({ actionId: "a2" }));
+			// The callback being stored is validated by the notification tests below;
+			// here we just verify subscribe doesn't throw
+			expect(coordinator.isSubscribed("a1")).toBe(true);
+		});
+
+		it("should remove previous callback when re-subscribing without one", async () => {
+			const callback = vi.fn().mockResolvedValue(undefined);
+			coordinator.subscribe(baseSub({ actionId: "a1" }), callback);
+
+			// Re-subscribe WITHOUT a callback — should clear the old one
+			coordinator.subscribe(baseSub({ actionId: "a1" }));
+
+			// Subscribe a2 to trigger from, and force-refresh
+			coordinator.subscribe(baseSub({ actionId: "a2" }));
+			await coordinator.invalidateAndFetch("a2", TOKEN);
+
+			expect(callback).not.toHaveBeenCalled();
+		});
+
+		it("should not fire callback for unsubscribed action", async () => {
+			const callback = vi.fn().mockResolvedValue(undefined);
+			coordinator.subscribe(baseSub({ actionId: "a1" }), callback);
+			coordinator.subscribe(baseSub({ actionId: "a2" }));
+
+			coordinator.unsubscribe("a1");
+
+			await coordinator.invalidateAndFetch("a2", TOKEN);
+
+			expect(callback).not.toHaveBeenCalled();
+		});
+
+		it("should notify sibling but not the trigger action", async () => {
+			const callbackA = vi.fn().mockResolvedValue(undefined);
+			const callbackB = vi.fn().mockResolvedValue(undefined);
+
+			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo" }), callbackA);
+			coordinator.subscribe(baseSub({ actionId: "a2", repo: "owner/repo" }), callbackB);
+
+			await coordinator.invalidateAndFetch("a1", TOKEN);
+
+			// a1 triggered the refresh — its callback should NOT fire
+			expect(callbackA).not.toHaveBeenCalled();
+			// a2 is a sibling on the same repo — its callback SHOULD fire
+			expect(callbackB).toHaveBeenCalledTimes(1);
+		});
+
+		it("should not notify actions watching a different repo", async () => {
+			const callbackB = vi.fn().mockResolvedValue(undefined);
+
+			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo" }));
+			coordinator.subscribe(baseSub({ actionId: "a2", repo: "other/repo" }), callbackB);
+
+			await coordinator.invalidateAndFetch("a1", TOKEN);
+
+			expect(callbackB).not.toHaveBeenCalled();
+		});
+
+		it("should not break invalidateAndFetch when a sibling callback throws", async () => {
+			const throwingCallback = vi.fn().mockRejectedValue(new Error("callback boom"));
+			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo" }));
+			coordinator.subscribe(baseSub({ actionId: "a2", repo: "owner/repo" }), throwingCallback);
+
+			// invalidateAndFetch should still resolve successfully
+			const result = await coordinator.invalidateAndFetch("a1", TOKEN);
+
+			expect(throwingCallback).toHaveBeenCalledTimes(1);
+			expect(result.prCount).toBe(5);
+		});
+
+		it("should notify all siblings when multiple actions watch the same repo", async () => {
+			const callbackA = vi.fn().mockResolvedValue(undefined);
+			const callbackB = vi.fn().mockResolvedValue(undefined);
+			const callbackC = vi.fn().mockResolvedValue(undefined);
+
+			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo", fragments: ["prCount"] }), callbackA);
+			coordinator.subscribe(baseSub({ actionId: "a2", repo: "owner/repo", fragments: ["issueCount"] }), callbackB);
+			coordinator.subscribe(baseSub({ actionId: "a3", repo: "owner/repo", fragments: ["branches"] }), callbackC);
+
+			await coordinator.invalidateAndFetch("a1", TOKEN);
+
+			expect(callbackA).not.toHaveBeenCalled();
+			expect(callbackB).toHaveBeenCalledTimes(1);
+			expect(callbackC).toHaveBeenCalledTimes(1);
+		});
+	});
+
 	// ── Error handling ───────────────────────────────────────────────────
 
 	describe("Error handling", () => {

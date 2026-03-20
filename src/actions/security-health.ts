@@ -101,7 +101,7 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		const maxAgeSec = intervalSec;
-		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo!, fragments: ["vulnerabilityAlerts"], maxAgeSec });
+		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo!, fragments: ["vulnerabilityAlerts"], maxAgeSec }, () => this.refreshHealth(ev.action.id));
 
 		this.polling.start(ev.action.id, () => this.refreshHealth(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -227,7 +227,7 @@ export class SecurityHealthAction extends SingletonAction<SecurityHealthSettings
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		const maxAgeSec = intervalSec;
-		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo!, fragments: ["vulnerabilityAlerts"], maxAgeSec });
+		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo!, fragments: ["vulnerabilityAlerts"], maxAgeSec }, () => this.refreshHealth(ev.action.id));
 
 		this.polling.restart(ev.action.id, () => this.refreshHealth(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
