@@ -1,6 +1,6 @@
 <!-- 
   Marketplace Description — Stream Deck GitHub Utilities
-  Last Updated: v2.2.0
+  Last Updated: v2.2.1
   Character Limit: 4,000
   Current Count: ~4,000 characters
 -->
@@ -127,7 +127,7 @@ Monitor GitHub Projects V2 boards.
 
 ## 🎛️ Stream Deck+ Everywhere
 
-Every action supports the encoder. Rotate dials to cycle data, tap to refresh, push to open GitHub. Visualizations include sparklines, arc gauges, heatmaps, and more.
+Every action supports the encoder. Rotate dials to cycle data, tap to refresh, push to open GitHub. Multiple instances of the same action stay in sync — refresh one and they all update. Visualizations include sparklines, arc gauges, heatmaps, and more.
 
 ---
 
