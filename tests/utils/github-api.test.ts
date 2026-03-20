@@ -14,6 +14,11 @@ import {
 	fetchOpenPullRequestCount,
 	fetchReviewRequestedPRs,
 	fetchBranchNetwork,
+	fetchPullRequestCount,
+	fetchIssueCount,
+	fetchCommitActivity,
+	fetchBranchComparison,
+	fetchLatestRelease,
 	getStatValue,
 	getStatLabel,
 	getStatUrl,
@@ -24,6 +29,8 @@ import {
 	GitHubApiError,
 	type RepoStats,
 	type StatType,
+	type BranchComparison,
+	type ReleaseInfo,
 } from "../../src/utils/github-api";
 
 // ──────────────────────────────────────────────
@@ -793,5 +800,503 @@ describe("fetchBranchNetwork", () => {
 				}),
 			}),
 		);
+	});
+});
+
+// ──────────────────────────────────────────────
+// fetchPullRequestCount
+// ──────────────────────────────────────────────
+
+describe("fetchPullRequestCount", () => {
+	let originalFetch: typeof globalThis.fetch;
+
+	beforeEach(() => {
+		originalFetch = globalThis.fetch;
+		globalThis.fetch = vi.fn();
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	it("returns total_count from search results", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse({ total_count: 17 }));
+
+		const result = await fetchPullRequestCount("owner", "repo", "ghp_test");
+		expect(result).toBe(17);
+	});
+
+	it("includes is:open in query for open state", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse({ total_count: 5 }));
+
+		await fetchPullRequestCount("owner", "repo", "ghp_test", "open");
+
+		const url = vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
+		expect(decodeURIComponent(url)).toContain("is:open");
+	});
+
+	it("includes is:closed in query for closed state", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse({ total_count: 3 }));
+
+		await fetchPullRequestCount("owner", "repo", "ghp_test", "closed");
+
+		const url = vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
+		expect(decodeURIComponent(url)).toContain("is:closed");
+	});
+
+	it("has no state qualifier for all state", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse({ total_count: 10 }));
+
+		await fetchPullRequestCount("owner", "repo", "ghp_test", "all");
+
+		const url = vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
+		const decoded = decodeURIComponent(url);
+		expect(decoded).not.toContain("is:open");
+		expect(decoded).not.toContain("is:closed");
+		expect(decoded).toContain("type:pr");
+	});
+
+	it("throws GitHubApiError on 401", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(
+			{ message: "Bad credentials" },
+			401,
+		));
+
+		await expect(fetchPullRequestCount("owner", "repo", "bad_token")).rejects.toThrow(GitHubApiError);
+		await expect(fetchPullRequestCount("owner", "repo", "bad_token")).rejects.toThrow(/Invalid or expired/);
+	});
+
+	it("throws GitHubApiError on 404", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(
+			{ message: "Not Found" },
+			404,
+		));
+
+		await expect(fetchPullRequestCount("owner", "repo", "ghp_test")).rejects.toThrow(GitHubApiError);
+		await expect(fetchPullRequestCount("owner", "repo", "ghp_test")).rejects.toThrow(/not found/);
+	});
+});
+
+// ──────────────────────────────────────────────
+// fetchIssueCount
+// ──────────────────────────────────────────────
+
+describe("fetchIssueCount", () => {
+	let originalFetch: typeof globalThis.fetch;
+
+	beforeEach(() => {
+		originalFetch = globalThis.fetch;
+		globalThis.fetch = vi.fn();
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	it("open state: subtracts PR count from open_issues_count", async () => {
+		vi.mocked(globalThis.fetch).mockImplementation(async (url) => {
+			const urlStr = url as string;
+			if (urlStr.includes("/search/issues")) {
+				return mockFetchResponse({ total_count: 5 });
+			}
+			// repo stats
+			return mockFetchResponse(mockRawApiResponse({ open_issues_count: 20 }));
+		});
+
+		const result = await fetchIssueCount("owner", "repo", "ghp_test", "open");
+		expect(result).toBe(15);
+	});
+
+	it("open state: never goes negative", async () => {
+		vi.mocked(globalThis.fetch).mockImplementation(async (url) => {
+			const urlStr = url as string;
+			if (urlStr.includes("/search/issues")) {
+				return mockFetchResponse({ total_count: 30 });
+			}
+			return mockFetchResponse(mockRawApiResponse({ open_issues_count: 10 }));
+		});
+
+		const result = await fetchIssueCount("owner", "repo", "ghp_test", "open");
+		expect(result).toBe(0);
+	});
+
+	it("closed state: uses search API and returns total_count", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse({ total_count: 42 }));
+
+		const result = await fetchIssueCount("owner", "repo", "ghp_test", "closed");
+		expect(result).toBe(42);
+
+		const url = vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
+		const decoded = decodeURIComponent(url);
+		expect(decoded).toContain("type:issue");
+		expect(decoded).toContain("is:closed");
+	});
+
+	it("all state: uses search API with no state qualifier", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse({ total_count: 100 }));
+
+		const result = await fetchIssueCount("owner", "repo", "ghp_test", "all");
+		expect(result).toBe(100);
+
+		const url = vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
+		const decoded = decodeURIComponent(url);
+		expect(decoded).toContain("type:issue");
+		expect(decoded).not.toContain("is:open");
+		expect(decoded).not.toContain("is:closed");
+	});
+
+	it("throws GitHubApiError on 401 for search API", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(
+			{ message: "Bad credentials" },
+			401,
+		));
+
+		await expect(fetchIssueCount("owner", "repo", "bad_token", "closed")).rejects.toThrow(GitHubApiError);
+		await expect(fetchIssueCount("owner", "repo", "bad_token", "closed")).rejects.toThrow(/Invalid or expired/);
+	});
+});
+
+// ──────────────────────────────────────────────
+// fetchCommitActivity
+// ──────────────────────────────────────────────
+
+describe("fetchCommitActivity", () => {
+	let originalFetch: typeof globalThis.fetch;
+
+	beforeEach(() => {
+		originalFetch = globalThis.fetch;
+		globalThis.fetch = vi.fn();
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	it("returns -1 on 202 (computing)", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: true,
+			status: 202,
+			headers: mockHeaders(),
+			json: () => Promise.resolve(null),
+			text: () => Promise.resolve(""),
+		} as unknown as Response);
+
+		const result = await fetchCommitActivity("owner", "repo", "ghp_test");
+		expect(result).toBe(-1);
+	});
+
+	it("returns 0 on 204 (empty repo)", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue({
+			ok: true,
+			status: 204,
+			headers: mockHeaders(),
+			json: () => Promise.resolve(null),
+			text: () => Promise.resolve(""),
+		} as unknown as Response);
+
+		const result = await fetchCommitActivity("owner", "repo", "ghp_test");
+		expect(result).toBe(0);
+	});
+
+	it("7d returns latest week total", async () => {
+		const weeks = Array.from({ length: 52 }, (_, i) => ({
+			total: i === 51 ? 42 : 5,
+			days: i === 51 ? [6, 6, 6, 6, 6, 6, 6] : [1, 0, 1, 1, 0, 1, 1],
+			week: Math.floor(Date.now() / 1000) - (51 - i) * 604800,
+		}));
+
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(weeks));
+
+		const result = await fetchCommitActivity("owner", "repo", "ghp_test", "7d");
+		expect(result).toBe(42);
+	});
+
+	it("30d sums last 4 weeks", async () => {
+		const weeks = Array.from({ length: 52 }, (_, i) => ({
+			total: 10,
+			days: [1, 1, 2, 2, 1, 2, 1],
+			week: Math.floor(Date.now() / 1000) - (51 - i) * 604800,
+		}));
+
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(weeks));
+
+		const result = await fetchCommitActivity("owner", "repo", "ghp_test", "30d");
+		expect(result).toBe(40);
+	});
+
+	it("24h returns today's commit count from latest week", async () => {
+		// Build weeks so the latest week starts at the beginning of the current week
+		const now = new Date();
+		const dayOfWeek = now.getUTCDay(); // Sunday = 0
+		const weekStartMs = now.getTime() - dayOfWeek * 86400000;
+		const weekStartSec = Math.floor(weekStartMs / 1000);
+
+		const dailyCounts = [10, 20, 30, 40, 50, 60, 70];
+		const weeks = Array.from({ length: 52 }, (_, i) => ({
+			total: i === 51 ? 280 : 5,
+			days: i === 51 ? dailyCounts : [1, 0, 1, 1, 0, 1, 1],
+			week: i === 51 ? weekStartSec : weekStartSec - (51 - i) * 604800,
+		}));
+
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(weeks));
+
+		const result = await fetchCommitActivity("owner", "repo", "ghp_test", "24h");
+		expect(result).toBe(dailyCounts[dayOfWeek]);
+	});
+
+	it("returns 0 on empty array", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse([]));
+
+		const result = await fetchCommitActivity("owner", "repo", "ghp_test");
+		expect(result).toBe(0);
+	});
+
+	it("throws GitHubApiError on 401", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(
+			{ message: "Bad credentials" },
+			401,
+		));
+
+		await expect(fetchCommitActivity("owner", "repo", "bad_token")).rejects.toThrow(GitHubApiError);
+		await expect(fetchCommitActivity("owner", "repo", "bad_token")).rejects.toThrow(/Invalid or expired/);
+	});
+});
+
+// ──────────────────────────────────────────────
+// fetchBranchComparison
+// ──────────────────────────────────────────────
+
+describe("fetchBranchComparison", () => {
+	let originalFetch: typeof globalThis.fetch;
+
+	beforeEach(() => {
+		originalFetch = globalThis.fetch;
+		globalThis.fetch = vi.fn();
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	it("returns comparison data on success", async () => {
+		const data = {
+			ahead_by: 3,
+			behind_by: 1,
+			total_commits: 4,
+			html_url: "https://github.com/owner/repo/compare/main...develop",
+			status: "ahead",
+		};
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(data));
+
+		const result = await fetchBranchComparison("owner", "repo", "main", "develop", "ghp_test");
+		expect(result).toEqual({
+			ahead_by: 3,
+			behind_by: 1,
+			total_commits: 4,
+			html_url: "https://github.com/owner/repo/compare/main...develop",
+			status: "ahead",
+		});
+	});
+
+	it("URL contains base...head pattern", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse({
+			ahead_by: 0,
+			behind_by: 0,
+			total_commits: 0,
+			html_url: "",
+			status: "identical",
+		}));
+
+		await fetchBranchComparison("owner", "repo", "main", "develop", "ghp_test");
+
+		const url = vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
+		expect(url).toContain("main...develop");
+	});
+
+	it("missing fields default to 0 or identical", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse({}));
+
+		const result = await fetchBranchComparison("owner", "repo", "main", "develop", "ghp_test");
+		expect(result.ahead_by).toBe(0);
+		expect(result.behind_by).toBe(0);
+		expect(result.total_commits).toBe(0);
+		expect(result.status).toBe("identical");
+	});
+
+	it("throws GitHubApiError on 404", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(
+			{ message: "Not Found" },
+			404,
+		));
+
+		await expect(fetchBranchComparison("owner", "repo", "main", "nonexistent", "ghp_test")).rejects.toThrow(GitHubApiError);
+		await expect(fetchBranchComparison("owner", "repo", "main", "nonexistent", "ghp_test")).rejects.toThrow(/not found/);
+	});
+
+	it("throws GitHubApiError on 401", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(
+			{ message: "Bad credentials" },
+			401,
+		));
+
+		await expect(fetchBranchComparison("owner", "repo", "main", "develop", "bad_token")).rejects.toThrow(GitHubApiError);
+		await expect(fetchBranchComparison("owner", "repo", "main", "develop", "bad_token")).rejects.toThrow(/Invalid or expired/);
+	});
+});
+
+// ──────────────────────────────────────────────
+// fetchLatestRelease
+// ──────────────────────────────────────────────
+
+describe("fetchLatestRelease", () => {
+	let originalFetch: typeof globalThis.fetch;
+
+	beforeEach(() => {
+		originalFetch = globalThis.fetch;
+		globalThis.fetch = vi.fn();
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	it("returns release info on success", async () => {
+		const data = {
+			tag_name: "v1.2.0",
+			name: "Version 1.2.0",
+			html_url: "https://github.com/owner/repo/releases/tag/v1.2.0",
+			published_at: "2024-01-15T10:00:00Z",
+			prerelease: false,
+			draft: false,
+		};
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(data));
+
+		const result = await fetchLatestRelease("owner", "repo", "ghp_test");
+		expect(result).toEqual({
+			tag_name: "v1.2.0",
+			name: "Version 1.2.0",
+			html_url: "https://github.com/owner/repo/releases/tag/v1.2.0",
+			published_at: "2024-01-15T10:00:00Z",
+			prerelease: false,
+			draft: false,
+		});
+	});
+
+	it("returns null on 404 (no releases)", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(
+			{ message: "Not Found" },
+			404,
+		));
+
+		const result = await fetchLatestRelease("owner", "repo", "ghp_test");
+		expect(result).toBeNull();
+	});
+
+	it("includePreReleases=true uses /releases?per_page=1", async () => {
+		const data = [{
+			tag_name: "v2.0.0-beta.1",
+			name: "Beta Release",
+			html_url: "https://github.com/owner/repo/releases/tag/v2.0.0-beta.1",
+			published_at: "2024-02-01T10:00:00Z",
+			prerelease: true,
+			draft: false,
+		}];
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(data));
+
+		const result = await fetchLatestRelease("owner", "repo", "ghp_test", true);
+
+		const url = vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
+		expect(url).toContain("/releases?per_page=1");
+		expect(url).not.toContain("/releases/latest");
+		expect(result).toEqual({
+			tag_name: "v2.0.0-beta.1",
+			name: "Beta Release",
+			html_url: "https://github.com/owner/repo/releases/tag/v2.0.0-beta.1",
+			published_at: "2024-02-01T10:00:00Z",
+			prerelease: true,
+			draft: false,
+		});
+	});
+
+	it("includePreReleases=true returns null on empty array", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse([]));
+
+		const result = await fetchLatestRelease("owner", "repo", "ghp_test", true);
+		expect(result).toBeNull();
+	});
+
+	it("throws GitHubApiError on 401", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse(
+			{ message: "Bad credentials" },
+			401,
+		));
+
+		await expect(fetchLatestRelease("owner", "repo", "bad_token")).rejects.toThrow(GitHubApiError);
+		await expect(fetchLatestRelease("owner", "repo", "bad_token")).rejects.toThrow(/Invalid or expired/);
+	});
+
+	it("missing fields default to empty string or false", async () => {
+		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse({}));
+
+		const result = await fetchLatestRelease("owner", "repo", "ghp_test");
+		expect(result).not.toBeNull();
+		expect(result!.tag_name).toBe("");
+		expect(result!.name).toBe("");
+		expect(result!.html_url).toBe("");
+		expect(result!.published_at).toBe("");
+		expect(result!.prerelease).toBe(false);
+		expect(result!.draft).toBe(false);
+	});
+
+	// ── fetchWithTimeout (network resilience) ──────
+
+	describe("fetchWithTimeout network resilience", () => {
+		it("converts network failure (TypeError) to GitHubApiError with status 0", async () => {
+			vi.mocked(globalThis.fetch).mockRejectedValue(new TypeError("fetch failed"));
+
+			try {
+				await fetchRepoStats("owner", "repo", "ghp_test");
+				expect.unreachable("should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(GitHubApiError);
+				const apiErr = err as InstanceType<typeof GitHubApiError>;
+				expect(apiErr.status).toBe(0);
+				expect(apiErr.message).toContain("Network error");
+				expect(apiErr.message).toContain("fetch failed");
+				expect(apiErr.message).toContain("fetchRepoStats");
+			}
+		});
+
+		it("converts AbortError (timeout) to GitHubApiError with 'timed out' message", async () => {
+			const abortError = new DOMException("The operation was aborted", "AbortError");
+			vi.mocked(globalThis.fetch).mockRejectedValue(abortError);
+
+			try {
+				await fetchRepoStats("owner", "repo", "ghp_test");
+				expect.unreachable("should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(GitHubApiError);
+				const apiErr = err as InstanceType<typeof GitHubApiError>;
+				expect(apiErr.status).toBe(0);
+				expect(apiErr.message).toContain("timed out");
+				expect(apiErr.message).toContain("30s");
+				expect(apiErr.message).toContain("fetchRepoStats");
+			}
+		});
+
+		it("converts non-Error throw to GitHubApiError with 'unknown' message", async () => {
+			vi.mocked(globalThis.fetch).mockRejectedValue("string error");
+
+			try {
+				await fetchRepoStats("owner", "repo", "ghp_test");
+				expect.unreachable("should have thrown");
+			} catch (err) {
+				expect(err).toBeInstanceOf(GitHubApiError);
+				const apiErr = err as InstanceType<typeof GitHubApiError>;
+				expect(apiErr.status).toBe(0);
+				expect(apiErr.message).toContain("Network error");
+				expect(apiErr.message).toContain("unknown");
+			}
+		});
 	});
 });

@@ -360,5 +360,69 @@ describe("CommitActivityAction", () => {
 			expect(mockAction.setImage).toHaveBeenCalled();
 			expect(lastImage(mockAction)).toContain("Not Found");
 		});
+
+		it("shows 'Auth Error' for invalid token", async () => {
+			const mockAction = createMockKeyAction("commit-err-auth");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			setupCoordinatorError("Invalid or expired GitHub token");
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Auth Error");
+		});
+
+		it("shows 'Rate Limited' for rate limit exceeded", async () => {
+			const mockAction = createMockKeyAction("commit-err-rate");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			setupCoordinatorError("GitHub API rate limit exceeded");
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Rate Limited");
+		});
+
+		it("shows 'No Access' for access denied", async () => {
+			const mockAction = createMockKeyAction("commit-err-access");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			setupCoordinatorError("Access denied");
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("No Access");
+		});
+
+		it("shows 'Error' for generic errors", async () => {
+			const mockAction = createMockKeyAction("commit-err-generic");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			setupCoordinatorError("Network error: connection refused");
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Error");
+		});
 	});
 });

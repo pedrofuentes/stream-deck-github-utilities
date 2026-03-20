@@ -195,7 +195,7 @@ export function renderStatStrip(
 	badge?: string,
 ): string {
 	const accent = getStatAccent(statType);
-	const label = STAT_LABELS[statType] ?? statType.toUpperCase();
+	const label = STAT_LABELS[statType as StatType | TouchStripExtraKey] ?? statType.toUpperCase();
 	const safeValue = escapeXml(value);
 	const safeLabel = escapeXml(label);
 	const safeRepo = repoName ? escapeXml(repoName) : "";

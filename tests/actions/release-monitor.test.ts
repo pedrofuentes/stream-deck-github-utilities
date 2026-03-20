@@ -372,5 +372,69 @@ describe("ReleaseMonitorAction", () => {
 			expect(mockAction.setImage).toHaveBeenCalled();
 			expect(lastImage(mockAction)).toContain("Auth Error");
 		});
+
+		it("shows 'Rate Limited' for rate limit exceeded", async () => {
+			const mockAction = createMockKeyAction("rel-err-rate");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockRejectedValue(new Error("GitHub API rate limit exceeded"));
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Rate Limited");
+		});
+
+		it("shows 'Not Found' for missing repository", async () => {
+			const mockAction = createMockKeyAction("rel-err-notfound");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Repository not found"));
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Not Found");
+		});
+
+		it("shows 'No Access' for access denied", async () => {
+			const mockAction = createMockKeyAction("rel-err-access");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Access denied"));
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("No Access");
+		});
+
+		it("shows 'Error' for generic errors", async () => {
+			const mockAction = createMockKeyAction("rel-err-generic");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Network error: connection refused"));
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Error");
+		});
 	});
 });

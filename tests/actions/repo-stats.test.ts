@@ -659,6 +659,78 @@ describe("RepoStatsAction", () => {
 			expect(lastImage(mockAction)).toContain("Invalid");
 			expect(mockCoordinatorFetchData).not.toHaveBeenCalled();
 		});
+
+		it("shows 'Auth Error' for invalid token", async () => {
+			const mockAction = createMockKeyAction("action-err-auth");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Invalid or expired GitHub token"));
+
+			const ev = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(ev as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Auth Error");
+		});
+
+		it("shows 'Rate Limited' for rate limit exceeded", async () => {
+			const mockAction = createMockKeyAction("action-err-rate");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockRejectedValue(new Error("GitHub API rate limit exceeded"));
+
+			const ev = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(ev as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Rate Limited");
+		});
+
+		it("shows 'No Access' for access denied", async () => {
+			const mockAction = createMockKeyAction("action-err-access");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Access denied"));
+
+			const ev = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(ev as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("No Access");
+		});
+
+		it("shows 'Error' for generic errors", async () => {
+			const mockAction = createMockKeyAction("action-err-generic");
+			const settings = { repo: "owner/repo", statType: "stars" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Network error: connection refused"));
+
+			const ev = createWillAppearEvent(mockAction, settings);
+			await action.onWillAppear?.(ev as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Error");
+		});
 	});
 
 	// ── Multi-button cycling (issue #1) ─────────

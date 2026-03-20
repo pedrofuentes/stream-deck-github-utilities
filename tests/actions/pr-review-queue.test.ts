@@ -594,6 +594,57 @@ describe("PRReviewQueueAction", () => {
 			const lastCall = mockAction.setFeedback.mock.calls[mockAction.setFeedback.mock.calls.length - 1][0] as { canvas: string };
 			expect(decodeSvg(lastCall.canvas)).toContain("Auth Error");
 		});
+
+		it("shows 'Not Found' for missing repository", async () => {
+			const mockAction = createMockKeyAction("prq-err-notfound");
+			const settings = {};
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Repository not found"));
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Not Found");
+		});
+
+		it("shows 'No Access' for access denied", async () => {
+			const mockAction = createMockKeyAction("prq-err-access");
+			const settings = {};
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Access denied"));
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("No Access");
+		});
+
+		it("shows 'Error' for generic errors", async () => {
+			const mockAction = createMockKeyAction("prq-err-generic");
+			const settings = {};
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockRejectedValue(new Error("Network error: connection refused"));
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Error");
+		});
 	});
 
 	// ── onSendToPlugin ──────────────────────────

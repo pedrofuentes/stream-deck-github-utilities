@@ -618,5 +618,73 @@ describe("IssueCounterAction", () => {
 			const svg = lastImage(mockAction);
 			expect(svg).toContain("0");
 		});
+
+		it("shows 'Auth Error' for invalid token", async () => {
+			const mockAction = createMockKeyAction("issue-err-auth");
+			const settings = { repo: "owner/repo", stateFilter: "open" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockRejectedValue(new Error("Invalid or expired GitHub token"));
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Auth Error");
+		});
+
+		it("shows 'Rate Limited' for rate limit exceeded", async () => {
+			const mockAction = createMockKeyAction("issue-err-rate");
+			const settings = { repo: "owner/repo", stateFilter: "open" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockRejectedValue(new Error("GitHub API rate limit exceeded"));
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Rate Limited");
+		});
+
+		it("shows 'No Access' for access denied", async () => {
+			const mockAction = createMockKeyAction("issue-err-access");
+			const settings = { repo: "owner/repo", stateFilter: "open" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockRejectedValue(new Error("Access denied"));
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("No Access");
+		});
+
+		it("shows 'Error' for generic errors", async () => {
+			const mockAction = createMockKeyAction("issue-err-generic");
+			const settings = { repo: "owner/repo", stateFilter: "open" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockRejectedValue(new Error("Network error: connection refused"));
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
+
+			expect(mockAction.setImage).toHaveBeenCalled();
+			expect(lastImage(mockAction)).toContain("Error");
+		});
 	});
 });

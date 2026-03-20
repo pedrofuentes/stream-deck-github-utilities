@@ -99,6 +99,33 @@ function buildHeaders(token?: string): Record<string, string> {
 }
 
 /**
+ * Fetch with timeout and network error handling.
+ * Wraps fetch() with a 30-second AbortSignal timeout and converts
+ * network errors into GitHubApiError with context.
+ */
+async function fetchWithTimeout(url: string, options: RequestInit = {}, context?: string): Promise<Response> {
+	const controller = new AbortController();
+	const timeoutId = setTimeout(() => controller.abort(), 30000);
+	try {
+		const response = await fetch(url, { ...options, signal: controller.signal });
+		return response;
+	} catch (err) {
+		if (err instanceof Error && err.name === "AbortError") {
+			throw new GitHubApiError(
+				`Request timed out after 30s${context ? ` (${context})` : ""}`,
+				0,
+			);
+		}
+		throw new GitHubApiError(
+			`Network error: ${err instanceof Error ? err.message : "unknown"}${context ? ` (${context})` : ""}`,
+			0,
+		);
+	} finally {
+		clearTimeout(timeoutId);
+	}
+}
+
+/**
  * Fetches repository statistics from the GitHub API.
  *
  * @deprecated Use coordinator.fetchData() with "repoMetadata" fragment instead.
@@ -117,7 +144,7 @@ export async function fetchRepoStats(
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
 	const headers = buildHeaders(token);
 
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchRepoStats");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -317,7 +344,7 @@ export async function fetchOpenPullRequestCount(
 	const url = `${GITHUB_API_BASE}/search/issues?q=${encodeURIComponent(query)}&per_page=1`;
 	const headers = buildHeaders(token);
 
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchOpenPullRequestCount");
 
 	if (!response.ok) {
 		return 0; // Graceful fallback — PR count is supplementary data
@@ -351,7 +378,7 @@ export async function fetchPullRequestCount(
 	const url = `${GITHUB_API_BASE}/search/issues?q=${encodeURIComponent(query)}&per_page=1`;
 	const headers = buildHeaders(token);
 
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchPullRequestCount");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -385,7 +412,7 @@ export async function fetchReviewRequestedPRs(
 	const url = `${GITHUB_API_BASE}/search/issues?q=${encodeURIComponent(query)}&per_page=10&sort=created&order=desc`;
 	const headers = buildHeaders(token);
 
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchReviewRequestedPRs");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -476,7 +503,7 @@ export async function fetchIssueCount(
 	const url = `${GITHUB_API_BASE}/search/issues?q=${encodeURIComponent(query)}&per_page=1`;
 	const headers = buildHeaders(token);
 
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchIssueCount");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -520,7 +547,7 @@ export async function fetchLatestRelease(
 	if (!includePreReleases) {
 		// GET /repos/{owner}/{repo}/releases/latest — skips pre-releases and drafts
 		const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases/latest`;
-		const response = await fetch(url, { headers });
+		const response = await fetchWithTimeout(url, { headers }, "fetchLatestRelease");
 		const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 		if (response.status === 404) {
@@ -544,7 +571,7 @@ export async function fetchLatestRelease(
 
 	// Include pre-releases: get the first release (most recent)
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases?per_page=1`;
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchLatestRelease");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -651,7 +678,7 @@ export async function fetchCommitActivity(
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/stats/commit_activity`;
 	const headers = buildHeaders(token);
 
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchCommitActivity");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	// Stats endpoints return 202 while computing — treat as "data not ready"
@@ -722,7 +749,7 @@ export async function fetchCommitActivityWeeks(
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/stats/commit_activity`;
 	const headers = buildHeaders(token);
 
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchCommitActivityWeeks");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	// Stats endpoints return 202 while computing — data not ready yet
@@ -777,7 +804,7 @@ export async function fetchBranchComparison(
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`;
 	const headers = buildHeaders(token);
 
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchBranchComparison");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -822,7 +849,7 @@ export async function fetchBranchNetwork(
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=10`;
 	const headers = buildHeaders(token);
 
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchBranchNetwork");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -940,7 +967,7 @@ export async function fetchLatestWorkflowRun(
 	}
 
 	const headers = buildHeaders(token);
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchLatestWorkflowRun");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -995,7 +1022,7 @@ export async function fetchLatestDeploymentStatus(
 	}
 
 	const headers = buildHeaders(token);
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchLatestDeploymentStatus");
 	const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
 	if (!response.ok) {
@@ -1013,7 +1040,7 @@ export async function fetchLatestDeploymentStatus(
 
 	// Fetch the latest status for this deployment
 	const statusUrl = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/deployments/${deploymentId}/statuses?per_page=1`;
-	const statusResponse = await fetch(statusUrl, { headers });
+	const statusResponse = await fetchWithTimeout(statusUrl, { headers }, "fetchLatestDeploymentStatus");
 	const statusRateLimitInfo = parseRateLimitHeaders(statusResponse.headers);
 
 	if (!statusResponse.ok) {
@@ -1088,7 +1115,7 @@ export async function triggerWorkflowDispatch(
 	token: string,
 ): Promise<void> {
 	const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
-	const response = await fetch(url, {
+	const response = await fetchWithTimeout(url, {
 		method: "POST",
 		headers: {
 			Accept: "application/vnd.github+json",
@@ -1096,7 +1123,7 @@ export async function triggerWorkflowDispatch(
 			"Content-Type": "application/json",
 		},
 		body: JSON.stringify({ ref }),
-	});
+	}, "triggerWorkflowDispatch");
 
 	if (!response.ok) {
 		const rateLimitInfo = parseRateLimitHeaders(response.headers);
@@ -1251,7 +1278,7 @@ export async function fetchDependabotAlerts(
 ): Promise<SecurityAlertSummary> {
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dependabot/alerts?state=open&per_page=100`;
 	const headers = buildHeaders(token);
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchDependabotAlerts");
 
 	if (!response.ok) {
 		const rateLimitInfo = parseRateLimitHeaders(response.headers);
@@ -1298,7 +1325,7 @@ export async function validateTokenStatus(token?: string): Promise<DataSourceIte
 
 	let response: Response;
 	try {
-		response = await fetch(`${GITHUB_API_BASE}/user`, { headers: buildHeaders(token) });
+		response = await fetchWithTimeout(`${GITHUB_API_BASE}/user`, { headers: buildHeaders(token) }, "validateTokenStatus");
 	} catch {
 		return [{ label: "⚠ Network error — check connection", value: "network-error", disabled: true }];
 	}
@@ -1395,7 +1422,7 @@ export async function fetchUserRepos(token?: string): Promise<DataSourceItem[]> 
 	while (url) {
 		let response: Response;
 		try {
-			response = await fetch(url, { headers });
+			response = await fetchWithTimeout(url, { headers }, "fetchUserRepos");
 		} catch {
 			if (allRepos.length > 0) break; // Return what we have so far
 			return [{ label: "⚠ Network error — check connection", value: "", disabled: true }];
@@ -1465,7 +1492,7 @@ export async function fetchRepoWorkflows(
 	const headers = buildHeaders(token);
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows?per_page=100`;
 
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchRepoWorkflows");
 
 	if (!response.ok) {
 		if (response.status === 401) {
@@ -1523,7 +1550,7 @@ export async function fetchRepoBranches(
 	const headers = buildHeaders(token);
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100`;
 
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchRepoBranches");
 
 	if (!response.ok) {
 		if (response.status === 401) {
@@ -1569,7 +1596,7 @@ export async function fetchRepoEnvironments(
 	const headers = buildHeaders(token);
 	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/environments`;
 
-	const response = await fetch(url, { headers });
+	const response = await fetchWithTimeout(url, { headers }, "fetchRepoEnvironments");
 
 	if (!response.ok) {
 		// 404 = no environments configured, 403 = no Environments permission
