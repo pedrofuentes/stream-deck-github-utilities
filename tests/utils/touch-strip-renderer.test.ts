@@ -10,6 +10,7 @@ import {
 	renderWorkflowStrip,
 	renderPRQueueStrip,
 	renderBranchNetworkStrip,
+	renderSecurityArcStrip,
 	renderStripLoading,
 	renderStripError,
 	renderStripUnconfigured,
@@ -386,5 +387,128 @@ describe("renderPRQueueStrip", () => {
 		expect(svg).not.toContain("<&");
 		expect(svg).toContain("&lt;");
 		expect(svg).toContain("&amp;");
+	});
+});
+
+// ── renderSecurityArcStrip ─────────────────────────────────────────────────
+
+describe("renderSecurityArcStrip", () => {
+	const noAlerts = { critical: 0, high: 0, medium: 0, low: 0 };
+	const mixedAlerts = { critical: 1, high: 2, medium: 3, low: 5 };
+	const highOnly = { critical: 0, high: 1, medium: 1, low: 0 };
+
+	it("should return a valid 200×100 SVG", () => {
+		const svg = renderSecurityArcStrip("A", 100, noAlerts);
+		assertValidSvg(svg);
+	});
+
+	it("should display the grade letter", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("A", 100, noAlerts));
+		expect(svg).toContain(">A<");
+	});
+
+	it("should use a large font for the grade letter (≥36px)", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("B", 90, highOnly));
+		expect(svg).toMatch(/font-size="3[6-9]"|font-size="[4-9]\d"/);
+	});
+
+	it("should display the Security label", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("C", 60, mixedAlerts));
+		expect(svg).toContain("Security");
+	});
+
+	it("should use a readable font for the Security label (≥14px)", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("A", 100, noAlerts));
+		expect(svg).toMatch(/font-size="1[4-9]"[^>]*>Security/);
+	});
+
+	it("should show green grade color for high scores (>80)", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("A", 100, noAlerts));
+		expect(svg).toContain("#3fb950");
+	});
+
+	it("should show amber grade color for medium scores (51-80)", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("C", 60, highOnly));
+		expect(svg).toContain("#d29922");
+	});
+
+	it("should show red grade color for low scores (≤50)", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("D", 25, { critical: 3, high: 0, medium: 0, low: 0 }));
+		expect(svg).toContain("#f85149");
+	});
+
+	it("should display severity counts for non-zero alerts", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("D", 25, mixedAlerts));
+		expect(svg).toContain(">1<");  // critical
+		expect(svg).toContain(">2<");  // high
+		expect(svg).toContain(">3<");  // medium
+		expect(svg).toContain(">5<");  // low
+	});
+
+	it("should display severity labels", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("A", 100, noAlerts));
+		expect(svg).toContain("crit");
+		expect(svg).toContain("high");
+		expect(svg).toContain("med");
+		expect(svg).toContain("low");
+	});
+
+	it("should use readable fonts for severity counts (≥16px)", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("C", 60, mixedAlerts));
+		// Severity count text should use font-size 16+
+		const countMatches = svg.match(/font-size="(\d+)" font-weight="700"/g) ?? [];
+		expect(countMatches.length).toBeGreaterThan(0);
+		for (const match of countMatches) {
+			const size = parseInt(match.match(/font-size="(\d+)"/)?.[1] ?? "0");
+			expect(size).toBeGreaterThanOrEqual(16);
+		}
+	});
+
+	it("should use readable fonts for severity labels (≥13px)", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("A", 100, noAlerts));
+		// Severity label text elements containing crit/high/med/low
+		for (const label of ["crit", "high", "med", "low"]) {
+			const pattern = new RegExp(`font-size="(\\d+)"[^>]*>${label}`);
+			const match = svg.match(pattern);
+			expect(match).not.toBeNull();
+			const size = parseInt(match?.[1] ?? "0");
+			expect(size).toBeGreaterThanOrEqual(13);
+		}
+	});
+
+	it("should render arc paths for the gauge", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("B", 85, highOnly));
+		// Background arc + fill arc
+		expect(svg).toContain("<path");
+		expect(svg).toContain("stroke-linecap=\"round\"");
+	});
+
+	it("should not render fill arc when score is 0", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("F", 0, { critical: 4, high: 0, medium: 0, low: 0 }));
+		// Only background arc, no fill stroke with grade color
+		const pathMatches = svg.match(/<path /g) ?? [];
+		expect(pathMatches.length).toBe(1); // just the background arc
+	});
+
+	it("should render severity dots as circles", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("C", 60, mixedAlerts));
+		const circles = svg.match(/<circle /g) ?? [];
+		expect(circles.length).toBe(4); // one dot per severity
+	});
+
+	it("should use severity-specific colors for non-zero counts", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("D", 25, mixedAlerts));
+		// Critical = red, high = amber, medium = blue, low = gray
+		expect(svg).toContain('fill="#f85149"');
+		expect(svg).toContain('fill="#d29922"');
+		expect(svg).toContain('fill="#58a6ff"');
+		expect(svg).toContain('fill="#555963"');
+	});
+
+	it("should dim severity dots when count is zero", () => {
+		const svg = decodeSvg(renderSecurityArcStrip("A", 100, noAlerts));
+		// All dots should use the dimmed color
+		const dotCircles = svg.match(/<circle[^/]*fill="#111"/g) ?? [];
+		expect(dotCircles.length).toBe(4);
 	});
 });

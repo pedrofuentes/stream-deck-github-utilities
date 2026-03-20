@@ -658,8 +658,8 @@ export function renderSecurityArcStrip(
 	else if (score > 50) gradeColor = "#d29922";
 	else gradeColor = "#f85149";
 
-	// Arc geometry (semicircle)
-	const cx = 55, cy = 55, r = 40;
+	// Arc geometry — vertically centered semicircle
+	const cx = 55, cy = 56, r = 42;
 	const startAngle = Math.PI;
 	const fillAngle = startAngle + Math.PI * (score / 100);
 
@@ -681,7 +681,7 @@ export function renderSecurityArcStrip(
 	const largeArc = (fillAngle - startAngle) > Math.PI ? 1 : 0;
 	const fillArcPath = score > 0 ? `M ${fillStart} A ${r} ${r} 0 ${largeArc} 1 ${fillEnd}` : "";
 
-	// Severity dots legend
+	// Severity dots legend — vertically centered
 	const sevs = [
 		{ label: "crit", count: alerts.critical, color: "#f85149" },
 		{ label: "high", count: alerts.high, color: "#d29922" },
@@ -690,22 +690,22 @@ export function renderSecurityArcStrip(
 	];
 	const dotsParts: string[] = [];
 	sevs.forEach((s, i) => {
-		const y = 12 + i * 20;
+		const y = 8 + i * 22;
 		const dotCol = s.count > 0 ? s.color : "#111";
 		const textCol = s.count > 0 ? s.color : "#282828";
-		dotsParts.push(`<circle cx="124" cy="${y + 5}" r="3" fill="${dotCol}"/>`);
-		dotsParts.push(`<text x="134" y="${y + 8}" fill="${textCol}" font-size="12" font-weight="700" font-family="${FONT}">${s.count}</text>`);
-		dotsParts.push(`<text x="155" y="${y + 8}" fill="#333" font-size="10" font-family="${FONT}">${s.label}</text>`);
+		dotsParts.push(`<circle cx="118" cy="${y + 8}" r="4" fill="${dotCol}"/>`);
+		dotsParts.push(`<text x="128" y="${y + 13}" fill="${textCol}" font-size="16" font-weight="700" font-family="${FONT}">${s.count}</text>`);
+		dotsParts.push(`<text x="152" y="${y + 13}" fill="#444" font-size="13" font-family="${FONT}">${s.label}</text>`);
 	});
 
 	return encodeSvgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
 	<rect width="${WIDTH}" height="${HEIGHT}" fill="${STRIP_BG}"/>
 	<rect width="${WIDTH}" height="${HEIGHT}" fill="${gradeColor}" fill-opacity="0.04"/>
-	<path d="${bgArc}" fill="none" stroke="#111" stroke-width="8" stroke-linecap="round"/>
+	<path d="${bgArc}" fill="none" stroke="#2a2d33" stroke-width="8" stroke-linecap="round"/>
 	${score > 0 ? `<path d="${fillArcPath}" fill="none" stroke="${gradeColor}" stroke-width="8" stroke-linecap="round"/>` : ""}
 	${score > 0 ? `<path d="${fillArcPath}" fill="none" stroke="${gradeColor}" stroke-opacity="0.15" stroke-width="16" stroke-linecap="round"/>` : ""}
-	<text x="${cx}" y="${cy - 8}" text-anchor="middle" fill="${gradeColor}" font-size="28" font-weight="800" font-family="${FONT}">${safeGrade}</text>
-	<text x="${cx}" y="${cy + 8}" text-anchor="middle" fill="#444" font-size="10" font-family="${FONT}">Security</text>
+	<text x="${cx}" y="${cy - 4}" text-anchor="middle" fill="${gradeColor}" font-size="36" font-weight="800" font-family="${FONT}">${safeGrade}</text>
+	<text x="${cx}" y="${cy + 16}" text-anchor="middle" fill="#555" font-size="14" font-family="${FONT}">Security</text>
 	${dotsParts.join("")}
 </svg>`);
 }
