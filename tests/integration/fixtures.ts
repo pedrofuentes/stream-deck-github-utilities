@@ -149,6 +149,25 @@ export function makeRESTRepoResponse(overrides?: Partial<RepoStats>): RepoStats 
 	};
 }
 
+/** Creates a raw GitHub API repo response (pre-processing shape with license as object). */
+export function makeRawAPIRepoResponse(overrides?: Record<string, unknown>): Record<string, unknown> {
+	return {
+		stargazers_count: 42000,
+		forks_count: 5200,
+		watchers_count: 1800,
+		open_issues_count: 850,
+		full_name: "facebook/react",
+		description: "The library for web and native user interfaces.",
+		visibility: "public",
+		html_url: "https://github.com/facebook/react",
+		language: "JavaScript",
+		size: 256000,
+		license: { spdx_id: "MIT" },
+		default_branch: "main",
+		...overrides,
+	};
+}
+
 /** Creates a realistic workflow run object. */
 export function makeWorkflowRun(overrides?: Partial<WorkflowRun>): WorkflowRun {
 	return {
@@ -156,6 +175,10 @@ export function makeWorkflowRun(overrides?: Partial<WorkflowRun>): WorkflowRun {
 		name: "CI",
 		status: "completed",
 		conclusion: "success",
+		head_branch: "main",
+		event: "push",
+		display_title: "CI",
+		run_number: 42,
 		html_url: "https://github.com/facebook/react/actions/runs/12345",
 		created_at: "2024-06-15T10:00:00Z",
 		updated_at: "2024-06-15T10:05:00Z",
@@ -211,6 +234,8 @@ export function makeBranchComparison(overrides?: Partial<BranchComparison>): Bra
 		ahead_by: 5,
 		behind_by: 3,
 		total_commits: 8,
+		html_url: "https://github.com/facebook/react/compare/main...develop",
+		status: "ahead",
 		...overrides,
 	};
 }

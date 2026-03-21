@@ -162,23 +162,10 @@ describe("github-api", () => {
 			expect(url).toBe("https://api.github.com/repos/my-org/my%20repo");
 		});
 
-		it("returns default values when API response fields are missing", async () => {
+		it("throws ZodError when API response fields are missing", async () => {
 			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse({}));
 
-			const result = await fetchRepoStats("owner", "repo");
-
-			expect(result.stargazers_count).toBe(0);
-			expect(result.open_issues_count).toBe(0);
-			expect(result.forks_count).toBe(0);
-			expect(result.watchers_count).toBe(0);
-			expect(result.full_name).toBe("owner/repo");
-			expect(result.description).toBeNull();
-			expect(result.visibility).toBe("unknown");
-			expect(result.html_url).toBe("https://github.com/owner/repo");
-			expect(result.language).toBeNull();
-			expect(result.size).toBe(0);
-			expect(result.license).toBeNull();
-			expect(result.default_branch).toBe("main");
+			await expect(fetchRepoStats("owner", "repo")).rejects.toThrow();
 		});
 
 		// ── Error handling ──────────────────────────
@@ -1121,14 +1108,10 @@ describe("fetchBranchComparison", () => {
 		expect(url).toContain("main...develop");
 	});
 
-	it("missing fields default to 0 or identical", async () => {
+	it("throws ZodError when response fields are missing", async () => {
 		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse({}));
 
-		const result = await fetchBranchComparison("owner", "repo", "main", "develop", "ghp_test");
-		expect(result.ahead_by).toBe(0);
-		expect(result.behind_by).toBe(0);
-		expect(result.total_commits).toBe(0);
-		expect(result.status).toBe("identical");
+		await expect(fetchBranchComparison("owner", "repo", "main", "develop", "ghp_test")).rejects.toThrow();
 	});
 
 	it("throws GitHubApiError on 404", async () => {
@@ -1243,17 +1226,10 @@ describe("fetchLatestRelease", () => {
 		await expect(fetchLatestRelease("owner", "repo", "bad_token")).rejects.toThrow(/Invalid or expired/);
 	});
 
-	it("missing fields default to empty string or false", async () => {
+	it("throws ZodError when response fields are missing", async () => {
 		vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse({}));
 
-		const result = await fetchLatestRelease("owner", "repo", "ghp_test");
-		expect(result).not.toBeNull();
-		expect(result!.tag_name).toBe("");
-		expect(result!.name).toBe("");
-		expect(result!.html_url).toBe("");
-		expect(result!.published_at).toBe("");
-		expect(result!.prerelease).toBe(false);
-		expect(result!.draft).toBe(false);
+		await expect(fetchLatestRelease("owner", "repo", "ghp_test")).rejects.toThrow();
 	});
 
 	// ── fetchWithTimeout (network resilience) ──────

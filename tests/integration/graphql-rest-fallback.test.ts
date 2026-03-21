@@ -15,6 +15,7 @@ import {
 	REPO,
 	makeGraphQLRepoResponse,
 	makeRESTRepoResponse,
+	makeRawAPIRepoResponse,
 	makeWorkflowInfo,
 	makeWorkflowRun,
 	makeBranchComparison,
@@ -63,7 +64,7 @@ describe("Coordinator: GraphQL failure → REST fallback", () => {
 	});
 
 	it("falls back to REST when GraphQL returns HTTP 403", async () => {
-		const restStats = makeRESTRepoResponse({ stargazers_count: 42500 });
+		const restStats = makeRawAPIRepoResponse({ stargazers_count: 42500 });
 
 		const fetchSpy = vi.spyOn(globalThis, "fetch")
 			// First call: GraphQL fails with 403
@@ -83,7 +84,7 @@ describe("Coordinator: GraphQL failure → REST fallback", () => {
 	});
 
 	it("falls back to REST when GraphQL returns network error", async () => {
-		const restStats = makeRESTRepoResponse({ stargazers_count: 99000 });
+		const restStats = makeRawAPIRepoResponse({ stargazers_count: 99000 });
 
 		vi.spyOn(globalThis, "fetch")
 			// GraphQL: network error
@@ -148,11 +149,16 @@ describe("Coordinator: GraphQL failure → REST fallback", () => {
 		// Workflow runs response (list)
 		const fetchSpy = vi.spyOn(globalThis, "fetch")
 			.mockResolvedValueOnce(mockResponse({
+				total_count: 1,
 				workflow_runs: [{
 					id: 12345,
 					name: "CI",
 					status: "completed",
 					conclusion: "success",
+					head_branch: "main",
+					event: "push",
+					display_title: "CI",
+					run_number: 42,
 					html_url: "https://github.com/facebook/react/actions/runs/12345",
 					created_at: "2024-06-15T10:00:00Z",
 					updated_at: "2024-06-15T10:05:00Z",
@@ -203,7 +209,7 @@ describe("Coordinator: GraphQL failure → REST fallback", () => {
 	});
 
 	it("mixed GraphQL + REST fragments: GraphQL fails, both get REST fallback", async () => {
-		const restStats = makeRESTRepoResponse();
+		const restStats = makeRawAPIRepoResponse();
 
 		vi.spyOn(globalThis, "fetch")
 			// GraphQL batch fails
@@ -214,11 +220,16 @@ describe("Coordinator: GraphQL failure → REST fallback", () => {
 			.mockResolvedValueOnce(mockResponse({ total_count: 120 }))
 			// REST for workflowRuns
 			.mockResolvedValueOnce(mockResponse({
+				total_count: 1,
 				workflow_runs: [{
 					id: 99,
 					name: "Deploy",
 					status: "completed",
 					conclusion: "failure",
+					head_branch: "main",
+					event: "push",
+					display_title: "Deploy",
+					run_number: 10,
 					html_url: "https://github.com/facebook/react/actions/runs/99",
 					created_at: "2024-06-15T10:00:00Z",
 					updated_at: "2024-06-15T10:05:00Z",
