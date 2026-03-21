@@ -71,7 +71,11 @@ const { mockCoordinator } = vi.hoisted(() => ({
 }));
 
 vi.mock("../../src/utils/graphql-query-coordinator", () => ({
-	coordinator: mockCoordinator,
+	GraphQLQueryCoordinator: vi.fn().mockImplementation(() => mockCoordinator),
+}));
+
+vi.mock("../../src/utils/repo-data-cache", () => ({
+	RepoDataCache: vi.fn(),
 }));
 
 import { IssueCounterAction } from "../../src/actions/issue-counter";

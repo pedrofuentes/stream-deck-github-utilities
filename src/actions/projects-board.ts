@@ -33,7 +33,6 @@ import { BaseGitHubAction } from "./base-github-action";
 import type { GlobalSettings, ProjectsBoardSettings, ProjectsV2Data } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { classifyErrorLabel } from "../utils/github-api";
-import { coordinator } from "../utils/graphql-query-coordinator";
 import { renderProjectsBoardImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
@@ -85,7 +84,7 @@ export class ProjectsBoardAction extends BaseGitHubAction<ProjectsBoardSettings>
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
 		if (settings.repo) {
-			coordinator.subscribe({
+			this.coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: settings.repo,
 				fragments: ["projectsV2"],
@@ -176,7 +175,7 @@ export class ProjectsBoardAction extends BaseGitHubAction<ProjectsBoardSettings>
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
 				this.polling.stop(ev.action.id);
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				return;
 			}
 
@@ -190,7 +189,7 @@ export class ProjectsBoardAction extends BaseGitHubAction<ProjectsBoardSettings>
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 				this.polling.stop(ev.action.id);
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				return;
 			}
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
@@ -199,7 +198,7 @@ export class ProjectsBoardAction extends BaseGitHubAction<ProjectsBoardSettings>
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
 		if (settings.repo) {
-			coordinator.subscribe({
+			this.coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: settings.repo,
 				fragments: ["projectsV2"],
@@ -246,8 +245,8 @@ export class ProjectsBoardAction extends BaseGitHubAction<ProjectsBoardSettings>
 			}
 
 			const result = force
-				? await coordinator.invalidateAndFetch(actionId, token)
-				: await coordinator.fetchData(actionId, token);
+				? await this.coordinator.invalidateAndFetch(actionId, token)
+				: await this.coordinator.fetchData(actionId, token);
 			const projectsData = result.projectsV2;
 
 			if (!this.polling.isCurrentGeneration(actionId, gen)) return;

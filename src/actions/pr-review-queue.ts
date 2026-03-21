@@ -31,7 +31,6 @@ import { BaseGitHubAction } from "./base-github-action";
 import type { GlobalSettings, PRReviewQueueSettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { classifyErrorLabel } from "../utils/github-api";
-import { coordinator } from "../utils/graphql-query-coordinator";
 import { renderPRCountImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderPRQueueStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
@@ -79,7 +78,7 @@ export class PRReviewQueueAction extends BaseGitHubAction<PRReviewQueueSettings>
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		const maxAgeSec = intervalSec;
-		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo ?? "", fragments: ["reviewRequestedPRs"], maxAgeSec }, () => this.refreshQueue(ev.action.id));
+		this.coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo ?? "", fragments: ["reviewRequestedPRs"], maxAgeSec }, () => this.refreshQueue(ev.action.id));
 
 		this.polling.start(ev.action.id, () => this.refreshQueue(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -178,7 +177,7 @@ export class PRReviewQueueAction extends BaseGitHubAction<PRReviewQueueSettings>
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 			}
 			this.polling.stop(ev.action.id);
-			coordinator.unsubscribe(ev.action.id);
+			this.coordinator.unsubscribe(ev.action.id);
 			return;
 		}
 
@@ -191,7 +190,7 @@ export class PRReviewQueueAction extends BaseGitHubAction<PRReviewQueueSettings>
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		const maxAgeSec = intervalSec;
-		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo ?? "", fragments: ["reviewRequestedPRs"], maxAgeSec }, () => this.refreshQueue(ev.action.id));
+		this.coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo ?? "", fragments: ["reviewRequestedPRs"], maxAgeSec }, () => this.refreshQueue(ev.action.id));
 
 		this.polling.restart(ev.action.id, () => this.refreshQueue(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -220,8 +219,8 @@ export class PRReviewQueueAction extends BaseGitHubAction<PRReviewQueueSettings>
 
 			const repo = settings?.repo || undefined;
 			const coordinatorResult = forceRefresh
-				? await coordinator.invalidateAndFetch(actionId, token)
-				: await coordinator.fetchData(actionId, token);
+				? await this.coordinator.invalidateAndFetch(actionId, token)
+				: await this.coordinator.fetchData(actionId, token);
 			const prData = coordinatorResult.reviewRequestedPRs;
 			if (!prData) {
 				const errorMsg = coordinatorResult.errors?.reviewRequestedPRs ?? "No data available";

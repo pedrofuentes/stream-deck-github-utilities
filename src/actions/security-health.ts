@@ -29,7 +29,6 @@ import streamDeck from "@elgato/streamdeck";
 import { BaseGitHubAction } from "./base-github-action";
 import type { GlobalSettings, SecurityHealthSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
-import { coordinator } from "../utils/graphql-query-coordinator";
 import { classifyErrorLabel } from "../utils/github-api";
 import type { SecurityAlertSummary } from "../utils/github-api";
 import { renderKeyImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
@@ -90,7 +89,7 @@ export class SecurityHealthAction extends BaseGitHubAction<SecurityHealthSetting
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		const maxAgeSec = intervalSec;
-		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo!, fragments: ["vulnerabilityAlerts"], maxAgeSec }, () => this.refreshHealth(ev.action.id));
+		this.coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo!, fragments: ["vulnerabilityAlerts"], maxAgeSec }, () => this.refreshHealth(ev.action.id));
 
 		this.polling.start(ev.action.id, () => this.refreshHealth(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -178,7 +177,7 @@ export class SecurityHealthAction extends BaseGitHubAction<SecurityHealthSetting
 			} else if (ev.action.isDial()) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 			}
-			coordinator.unsubscribe(ev.action.id);
+			this.coordinator.unsubscribe(ev.action.id);
 			this.polling.stop(ev.action.id);
 			return;
 		}
@@ -192,7 +191,7 @@ export class SecurityHealthAction extends BaseGitHubAction<SecurityHealthSetting
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		const maxAgeSec = intervalSec;
-		coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo!, fragments: ["vulnerabilityAlerts"], maxAgeSec }, () => this.refreshHealth(ev.action.id));
+		this.coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo!, fragments: ["vulnerabilityAlerts"], maxAgeSec }, () => this.refreshHealth(ev.action.id));
 
 		this.polling.restart(ev.action.id, () => this.refreshHealth(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -231,8 +230,8 @@ export class SecurityHealthAction extends BaseGitHubAction<SecurityHealthSetting
 			}
 
 			const result = forceRefresh
-				? await coordinator.invalidateAndFetch(actionId, token)
-				: await coordinator.fetchData(actionId, token);
+				? await this.coordinator.invalidateAndFetch(actionId, token)
+				: await this.coordinator.fetchData(actionId, token);
 			const alerts = result.vulnerabilityAlerts;
 			if (!alerts) {
 				const errorMsg = result.errors?.vulnerabilityAlerts ?? "No data available";

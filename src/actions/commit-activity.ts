@@ -32,7 +32,6 @@ import streamDeck from "@elgato/streamdeck";
 import type { GlobalSettings, CommitActivitySettings } from "../types";
 import { classifyErrorLabel } from "../utils/github-api";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
-import { coordinator } from "../utils/graphql-query-coordinator";
 import { renderCommitActivityImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
@@ -90,7 +89,7 @@ export class CommitActivityAction extends BaseGitHubAction<CommitActivitySetting
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		coordinator.subscribe({
+		this.coordinator.subscribe({
 			actionId: ev.action.id,
 			repo: settings.repo!,
 			fragments: ["commitActivity"],
@@ -208,7 +207,7 @@ export class CommitActivityAction extends BaseGitHubAction<CommitActivitySetting
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				this.polling.stop(ev.action.id);
 				return;
 			}
@@ -222,7 +221,7 @@ export class CommitActivityAction extends BaseGitHubAction<CommitActivitySetting
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				this.polling.stop(ev.action.id);
 				return;
 			}
@@ -230,7 +229,7 @@ export class CommitActivityAction extends BaseGitHubAction<CommitActivitySetting
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		coordinator.subscribe({
+		this.coordinator.subscribe({
 			actionId: ev.action.id,
 			repo: settings.repo!,
 			fragments: ["commitActivity"],
@@ -277,8 +276,8 @@ export class CommitActivityAction extends BaseGitHubAction<CommitActivitySetting
 
 			const timeRange = settings.timeRange ?? "7d";
 			const result = force
-				? await coordinator.invalidateAndFetch(actionId, token)
-				: await coordinator.fetchData(actionId, token);
+				? await this.coordinator.invalidateAndFetch(actionId, token)
+				: await this.coordinator.fetchData(actionId, token);
 			const weeks = result.commitActivity;
 			if (weeks === undefined) {
 				throw new Error(result.errors?.commitActivity ?? "No commit activity data available");

@@ -31,7 +31,6 @@ import { BaseGitHubAction } from "./base-github-action";
 import type { GlobalSettings, BranchComparisonSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
 import { classifyErrorLabel } from "../utils/github-api";
-import { coordinator } from "../utils/graphql-query-coordinator";
 import { renderBranchComparisonImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage, COLORS } from "../utils/button-renderer";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
@@ -74,7 +73,7 @@ export class BranchComparisonAction extends BaseGitHubAction<BranchComparisonSet
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		coordinator.subscribe({
+		this.coordinator.subscribe({
 			actionId: ev.action.id,
 			repo: settings.repo!,
 			fragments: ["branchComparison"],
@@ -182,7 +181,7 @@ export class BranchComparisonAction extends BaseGitHubAction<BranchComparisonSet
 			if (!settings.repo || !settings.baseBranch || !settings.headBranch || !globalSettings.githubToken) {
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				this.polling.stop(ev.action.id);
 				return;
 			}
@@ -196,7 +195,7 @@ export class BranchComparisonAction extends BaseGitHubAction<BranchComparisonSet
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			if (!settings.repo || !settings.baseBranch || !settings.headBranch || !globalSettings.githubToken) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				this.polling.stop(ev.action.id);
 				return;
 			}
@@ -204,7 +203,7 @@ export class BranchComparisonAction extends BaseGitHubAction<BranchComparisonSet
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		coordinator.subscribe({
+		this.coordinator.subscribe({
 			actionId: ev.action.id,
 			repo: settings.repo!,
 			fragments: ["branchComparison"],
@@ -253,8 +252,8 @@ export class BranchComparisonAction extends BaseGitHubAction<BranchComparisonSet
 			}
 
 			const result = force
-				? await coordinator.invalidateAndFetch(actionId, token)
-				: await coordinator.fetchData(actionId, token);
+				? await this.coordinator.invalidateAndFetch(actionId, token)
+				: await this.coordinator.fetchData(actionId, token);
 			const comparison = result.branchComparison;
 			if (!comparison) {
 				throw new Error(result.errors?.branchComparison ?? "No comparison data available");
