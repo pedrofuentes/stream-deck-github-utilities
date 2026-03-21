@@ -280,152 +280,91 @@ export interface GlobalSettings {
 	[key: string]: JsonValue;
 }
 
-/** Per-action settings for the Repo Stats action */
-export interface RepoStatsSettings {
+// ─── Base Settings Composition ───────────────────────────────────────
+
+/** Base settings shared by all repo-scoped actions. */
+export interface RepoActionSettings {
 	/** Repository in "owner/repo" format */
 	repo?: string;
-	/** Which stat to display on the button */
-	statType?: StatType;
-	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
+	/** Auto-refresh interval in seconds */
 	refreshInterval?: number;
 	[key: string]: JsonValue;
+}
+
+/** Settings for actions with open/closed/all state filtering. */
+export interface StateFilteredSettings extends RepoActionSettings {
+	/** State filter: open, closed, or all */
+	stateFilter?: "open" | "closed" | "all";
+}
+
+/** Settings for actions with branch filtering. */
+export interface BranchFilterSettings extends RepoActionSettings {
+	/** Optional branch filter */
+	branch?: string;
+}
+
+// ─── Action Settings (composed from base interfaces) ─────────────────
+
+/** Per-action settings for the Repo Stats action */
+export interface RepoStatsSettings extends RepoActionSettings {
+	/** Which stat to display on the button */
+	statType?: StatType;
 }
 
 /** Per-action settings for the Workflow Status action */
-export interface WorkflowStatusSettings {
-	/** Repository in "owner/repo" format */
-	repo?: string;
+export interface WorkflowStatusSettings extends BranchFilterSettings {
 	/** Optional workflow file name (e.g. "deploy.yml") to filter runs */
 	workflowFile?: string;
-	/** Optional branch to filter workflow runs */
-	branch?: string;
 	/** Optional deployment environment name (e.g. "production") */
 	environment?: string;
-	/** Auto-refresh interval in seconds (default: 60 = 1 min) */
-	refreshInterval?: number;
-	[key: string]: JsonValue;
 }
 
 /** Per-action settings for the PR Counter action */
-export interface PullRequestCounterSettings {
-	/** Repository in "owner/repo" format */
-	repo?: string;
-	/** PR state filter: open, closed, or all (default: open) */
-	stateFilter?: "open" | "closed" | "all";
-	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
-	refreshInterval?: number;
-	[key: string]: JsonValue;
-}
+export interface PullRequestCounterSettings extends StateFilteredSettings {}
 
-/** Per-action settings for the PR Review Queue action */
-export interface PRReviewQueueSettings {
-	/** Optional repository filter in "owner/repo" format (shows all repos if empty) */
-	repo?: string;
-	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
-	refreshInterval?: number;
-	[key: string]: JsonValue;
-}
+/** Per-action settings for the PR Review Queue action — cross-repo (searches by username) */
+export type PRReviewQueueSettings = RepoActionSettings;
 
 /** Per-action settings for the Issue Counter action */
-export interface IssueCounterSettings {
-	/** Repository in "owner/repo" format */
-	repo?: string;
-	/** Issue state filter: open, closed, or all (default: open) */
-	stateFilter?: "open" | "closed" | "all";
-	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
-	refreshInterval?: number;
-	[key: string]: JsonValue;
-}
+export interface IssueCounterSettings extends StateFilteredSettings {}
 
 /** Per-action settings for the Release Monitor action */
-export interface ReleaseMonitorSettings {
-	/** Repository in "owner/repo" format */
-	repo?: string;
+export interface ReleaseMonitorSettings extends RepoActionSettings {
 	/** Whether to include pre-releases (default: false) */
 	includePreReleases?: boolean;
-	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
-	refreshInterval?: number;
-	[key: string]: JsonValue;
 }
 
 /** Per-action settings for the Commit Activity action */
-export interface CommitActivitySettings {
-	/** Repository in "owner/repo" format */
-	repo?: string;
+export interface CommitActivitySettings extends BranchFilterSettings {
 	/** Time range for commit count: 24h, 7d, or 30d (default: 7d) */
 	timeRange?: "24h" | "7d" | "30d";
-	/** Optional branch filter */
-	branch?: string;
-	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
-	refreshInterval?: number;
-	[key: string]: JsonValue;
 }
 
 /** Per-action settings for the Branch Network action */
-export interface BranchNetworkSettings {
-	/** Repository in "owner/repo" format */
-	repo?: string;
-	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
-	refreshInterval?: number;
-	[key: string]: JsonValue;
-}
+export type BranchNetworkSettings = RepoActionSettings;
 
 /** Per-action settings for the Contribution Heatmap action */
-export interface ContributionHeatmapSettings {
-	/** Repository in "owner/repo" format (used for REST per-repo mode) */
-	repo?: string;
+export interface ContributionHeatmapSettings extends RepoActionSettings {
 	/** Data source: "repo" for per-repo commits, "user" for profile-level contributions */
 	dataSource?: "repo" | "user";
-	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
-	refreshInterval?: number;
-	[key: string]: JsonValue;
 }
 
 /** Per-action settings for the Fleet Monitor action */
-export interface FleetMonitorSettings {
-	/** Repository in "owner/repo" format */
-	repo?: string;
-	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
-	refreshInterval?: number;
-	[key: string]: JsonValue;
-}
+export type FleetMonitorSettings = RepoActionSettings;
 
 /** Per-action settings for the Branch Comparison action */
-export interface BranchComparisonSettings {
-	/** Repository in "owner/repo" format */
-	repo?: string;
+export interface BranchComparisonSettings extends RepoActionSettings {
 	/** Base branch (e.g. "main") */
 	baseBranch?: string;
 	/** Head branch to compare (e.g. "develop") */
 	headBranch?: string;
-	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
-	refreshInterval?: number;
-	[key: string]: JsonValue;
 }
 
 /** Per-action settings for the Security Health action */
-export interface SecurityHealthSettings {
-	/** Repository in "owner/repo" format */
-	repo?: string;
-	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
-	refreshInterval?: number;
-	[key: string]: JsonValue;
-}
+export type SecurityHealthSettings = RepoActionSettings;
 
 /** Per-action settings for the Discussions Monitor action */
-export interface DiscussionsMonitorSettings {
-	/** Repository in "owner/repo" format */
-	repo?: string;
-	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
-	refreshInterval?: number;
-	[key: string]: JsonValue;
-}
+export type DiscussionsMonitorSettings = RepoActionSettings;
 
 /** Per-action settings for the Projects Board action */
-export interface ProjectsBoardSettings {
-	/** Repository in "owner/repo" format */
-	repo?: string;
-	/** Auto-refresh interval in seconds (default: 300 = 5 min) */
-	refreshInterval?: number;
-	[key: string]: JsonValue;
-}
+export type ProjectsBoardSettings = RepoActionSettings;

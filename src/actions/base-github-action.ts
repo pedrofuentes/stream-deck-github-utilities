@@ -34,16 +34,13 @@ import { classifyErrorLabel } from "../utils/github-api";
 import { renderErrorImage } from "../utils/button-renderer";
 import { renderStripError } from "../utils/touch-strip-renderer";
 import type { JsonValue } from "@elgato/utils";
+import type { RepoActionSettings } from "../types";
 
 /**
  * Minimal settings shape that all GitHub action settings share.
- * Every action's settings interface includes at least these optional fields.
+ * Alias for RepoActionSettings — the canonical base defined in types.ts.
  */
-export interface BaseActionSettings {
-	repo?: string;
-	refreshInterval?: number;
-	[key: string]: JsonValue;
-}
+export type BaseActionSettings = RepoActionSettings;
 
 /**
  * Abstract base class for GitHub utility actions.
