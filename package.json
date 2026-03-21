@@ -43,7 +43,8 @@
   },
   "homepage": "https://github.com/pedrofuentes/stream-deck-github-utilities#readme",
   "dependencies": {
-    "@elgato/streamdeck": "^2.0.0"
+    "@elgato/streamdeck": "^2.0.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
