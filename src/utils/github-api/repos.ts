@@ -14,6 +14,7 @@ import {
 	fetchWithRetry,
 	parseRateLimitHeaders,
 } from "./core";
+import { RepoStatsResponseSchema } from "./schemas";
 
 /** Stat types supported by the plugin */
 export type StatType = "stars" | "issues" | "forks" | "watchers" | "pull_requests" | "language" | "size" | "license" | "default_branch" | "visibility";
@@ -115,25 +116,24 @@ export async function fetchRepoStats(
 		);
 	}
 
-	const data = (await response.json()) as Record<string, unknown>;
+	const data = RepoStatsResponseSchema.parse(await response.json());
 
-	// Extract license SPDX ID if available
-	const licenseObj = data.license as Record<string, unknown> | null;
-	const licenseId = licenseObj?.spdx_id as string | null;
+	const licenseObj = data.license;
+	const licenseId = licenseObj?.spdx_id ?? null;
 
 	return {
-		stargazers_count: (data.stargazers_count as number) ?? 0,
-		open_issues_count: (data.open_issues_count as number) ?? 0,
-		forks_count: (data.forks_count as number) ?? 0,
-		watchers_count: (data.watchers_count as number) ?? 0,
-		full_name: (data.full_name as string) ?? `${owner}/${repo}`,
-		description: (data.description as string | null) ?? null,
-		visibility: (data.visibility as string) ?? "unknown",
-		html_url: (data.html_url as string) ?? `https://github.com/${owner}/${repo}`,
-		language: (data.language as string | null) ?? null,
-		size: (data.size as number) ?? 0,
+		stargazers_count: data.stargazers_count,
+		open_issues_count: data.open_issues_count,
+		forks_count: data.forks_count,
+		watchers_count: data.watchers_count,
+		full_name: data.full_name,
+		description: data.description,
+		visibility: data.visibility,
+		html_url: data.html_url,
+		language: data.language,
+		size: data.size,
 		license: licenseId && licenseId !== "NOASSERTION" ? licenseId : null,
-		default_branch: (data.default_branch as string) ?? "main",
+		default_branch: data.default_branch,
 	};
 }
 
