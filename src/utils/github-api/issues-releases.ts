@@ -6,6 +6,8 @@
  * @license MIT
  */
 
+import { z } from "zod";
+
 import {
 	GITHUB_API_BASE,
 	buildHeaders,
@@ -14,6 +16,7 @@ import {
 	parseRateLimitHeaders,
 	parseRetryAfter,
 } from "./core";
+import { SearchCountResponseSchema, ReleaseResponseSchema } from "./schemas";
 import { fetchRepoStats } from "./repos";
 import { fetchPullRequestCount } from "./pull-requests";
 
@@ -74,7 +77,7 @@ export async function fetchIssueCount(
 		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
-	const data = (await response.json()) as { total_count: number };
+	const data = SearchCountResponseSchema.parse(await response.json());
 	return data.total_count;
 }
 
@@ -112,14 +115,14 @@ export async function fetchLatestRelease(
 			handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 		}
 
-		const data = (await response.json()) as Record<string, unknown>;
+		const data = ReleaseResponseSchema.parse(await response.json());
 		return {
-			tag_name: (data.tag_name as string) ?? "",
-			name: (data.name as string) ?? "",
-			html_url: (data.html_url as string) ?? "",
-			published_at: (data.published_at as string) ?? "",
-			prerelease: (data.prerelease as boolean) ?? false,
-			draft: (data.draft as boolean) ?? false,
+			tag_name: data.tag_name,
+			name: data.name ?? "",
+			html_url: data.html_url,
+			published_at: data.published_at ?? "",
+			prerelease: data.prerelease,
+			draft: data.draft,
 		};
 	}
 
@@ -132,19 +135,19 @@ export async function fetchLatestRelease(
 		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
-	const releases = (await response.json()) as Array<Record<string, unknown>>;
-	if (!releases || releases.length === 0) {
+	const releases = z.array(ReleaseResponseSchema).parse(await response.json());
+	if (releases.length === 0) {
 		return null;
 	}
 
 	const data = releases[0];
 	return {
-		tag_name: (data.tag_name as string) ?? "",
-		name: (data.name as string) ?? "",
-		html_url: (data.html_url as string) ?? "",
-		published_at: (data.published_at as string) ?? "",
-		prerelease: (data.prerelease as boolean) ?? false,
-		draft: (data.draft as boolean) ?? false,
+		tag_name: data.tag_name,
+		name: data.name ?? "",
+		html_url: data.html_url,
+		published_at: data.published_at ?? "",
+		prerelease: data.prerelease,
+		draft: data.draft,
 	};
 }
 
