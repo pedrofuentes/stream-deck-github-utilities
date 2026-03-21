@@ -101,16 +101,18 @@ Follow these steps and refer to the existing **Repo Stats** and **Workflow Statu
 1. **Define settings** in `src/types.ts` — must include `[key: string]: JsonValue` index signature
 2. **Create action class** in `src/actions/your-action.ts`:
    - Use `@action({ UUID: "com.pedrofuentes.github-utilities.your-action" })` decorator
-   - Extend `SingletonAction<YourSettings>`
-   - Handle `onWillAppear`, `onWillDisappear`, `onKeyDown`, `onDidReceiveSettings`
-   - For polling: use `Map<string, Timer>` keyed by `ev.action.id`
+   - Extend `BaseGitHubAction<YourSettings>` (from `./base-github-action.js`) — provides polling, URL debouncing, error handling, PI data requests, and cleanup
+   - Implement `onWillAppear`, `onKeyDown`, `onDidReceiveSettings`
+   - Override `onWillDisappear` — call `await super.onWillDisappear(ev)` then clean up action-specific state
+   - For double-click: use `this.urlOpener.handlePress()` + `this.urlOpener.scheduleOpen()` (inherited from base)
 3. **Integrate with GraphQL Coordinator** (for actions that query GitHub data):
    - Import `coordinator` from `src/utils/graphql-query-coordinator`
    - Subscribe in `onWillAppear` with the data fragments your action needs
-   - Unsubscribe in `onWillDisappear`
+   - Unsubscribe is handled by `BaseGitHubAction.onWillDisappear()`
    - Fetch data via `coordinator.fetchData()` instead of direct REST API calls
    - For force-refresh (double-click), use `coordinator.invalidateAndFetch()`
-   - Define new data fragments in `src/utils/data-fragments.ts` if your action needs new data
+   - Add a new `FragmentStrategy` in `src/utils/fragment-strategies.ts` if your action needs new data
+   - Register the strategy in the `fragmentRegistry` Map
    - See `src/actions/discussions-monitor.ts` or `src/actions/projects-board.ts` for examples
 4. **Register** in `src/plugin.ts`
 5. **Add manifest entry** in `plugin/manifest.json`
@@ -134,13 +136,16 @@ The plugin uses a **GraphQL Query Coordinator** layer between actions and the Gi
 - **Batches queries** — combines fragments from multiple actions into a single GraphQL request per repository
 - **Caches per-repo** — `repo-data-cache.ts` tracks field-level staleness so only stale fields are re-fetched
 - **Builds queries dynamically** — `graphql-query-builder.ts` composes the minimal GraphQL query for requested fields
-- **Extracts typed data** — `data-fragments.ts` maps GraphQL responses back to the interfaces each action expects
+- **Dispatches via strategies** — `fragment-strategies.ts` encapsulates each fragment's extraction, REST fallback, and result assignment
+- **Retries transient failures** — `fetchWithRetry()` in `github-api/core.ts` retries 429/502/503/504 with exponential backoff
 
 Key files:
 - `src/utils/graphql-query-coordinator.ts` — singleton coordinator (subscribe, fetch, invalidate)
+- `src/utils/fragment-strategies.ts` — strategy pattern with 12 fragment strategies
 - `src/utils/graphql-query-builder.ts` — dynamic query composition
 - `src/utils/repo-data-cache.ts` — per-repo cache with field-level TTL
 - `src/utils/data-fragments.ts` — GraphQL→REST interface extractors
+- `src/utils/github-api/` — domain-split API modules (core, repos, PRs, issues, workflows, security, datasources)
 
 ## Pull Request Process
 

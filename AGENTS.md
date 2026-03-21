@@ -17,9 +17,21 @@ This is a **Stream Deck plugin** built with TypeScript using the official **Elga
 src/
 ├── plugin.ts          # Entry point — registers actions and connects to Stream Deck
 ├── actions/           # One file per Stream Deck action (class-based)
+│   ├── base-github-action.ts  # Abstract base class (shared polling, cleanup, error handling)
 │   ├── repo-stats.ts      # Repository statistics display
 │   └── workflow-status.ts # Workflow run + deployment status display
 └── utils/             # Shared utilities (GitHub API, formatting, validation)
+    ├── github-api/        # Domain-split API modules (7 files + barrel)
+    │   ├── core.ts            # fetchWithRetry, error handling, HTTP helpers
+    │   ├── repos.ts           # Repository stats and metadata
+    │   ├── pull-requests.ts   # PR counting and review queue
+    │   ├── issues-releases.ts # Issue counts and release tracking
+    │   ├── workflows.ts       # CI/CD status and dispatch
+    │   ├── security-branches.ts # Dependabot alerts, branch ops
+    │   ├── datasources.ts     # PI dropdown data population
+    │   └── index.ts           # Barrel re-export
+    ├── fragment-strategies.ts # Strategy pattern for coordinator fragment dispatch
+    └── debounced-url-opener.ts # Shared double-click URL debounce utility
 
 plugin/                # Source plugin assets (tracked by git)
 ├── manifest.json      # Plugin metadata, action definitions, platform requirements
@@ -36,6 +48,9 @@ release/               # Assembled plugin directory (gitignored — build output
     └── logs/          # Runtime logs
 
 tests/                 # Test files mirroring src/ structure
+├── actions/           # Action unit tests
+├── utils/             # Utility unit tests
+└── integration/       # Cross-layer integration tests
 
 content/               # Elgato Marketplace listing content
 ├── CONTENT-GUIDE.md   # Agent instructions for marketplace content management
@@ -91,11 +106,13 @@ Before every release, the agent MUST verify that **all user-facing documentation
 ## How to Add a New Action
 
 1. **Create the action class** in `src/actions/<action-name>.ts`:
-   - Extend `SingletonAction<YourSettings>` from `@elgato/streamdeck` for single-instance actions.
+   - Extend `BaseGitHubAction<YourSettings>` from `./base-github-action.js` — provides polling, URL debouncing, error handling, and cleanup.
    - Settings interfaces **must** include `[key: string]: JsonValue` index signature (import from `@elgato/utils`).
    - Use the `@action` decorator with UUID pattern: `com.pedrofuentes.github-utilities.<action-name>`
-   - Implement `onWillAppear`, `onWillDisappear`, `onKeyDown`, `onDidReceiveSettings` as needed.
-   - For polling actions, use `setInterval` in `onWillAppear` and `clearInterval` in `onWillDisappear`, keyed by `ev.action.id`.
+   - Implement `onWillAppear`, `onKeyDown`, `onDidReceiveSettings` as needed.
+   - Override `onWillDisappear` by calling `await super.onWillDisappear(ev)` then cleaning up action-specific state.
+   - For polling, use `this.polling` (inherited from base) — no need to create your own PollingCoordinator.
+   - For double-click detection, use `this.urlOpener.handlePress()` + `this.urlOpener.scheduleOpen()` (inherited from base).
 
 2. **Register the action** in `src/plugin.ts`:
    ```typescript

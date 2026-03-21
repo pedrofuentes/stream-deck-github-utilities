@@ -3,8 +3,8 @@
 A [Stream Deck](https://www.elgato.com/stream-deck) plugin that provides utilities to display information from GitHub directly on your Stream Deck device.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities/releases)
-[![Tests](https://img.shields.io/badge/tests-1004%20passed-brightgreen.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities)
+[![Version](https://img.shields.io/badge/version-2.2.4-blue.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities/releases)
+[![Tests](https://img.shields.io/badge/tests-1373%20passed-brightgreen.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities)
 
 ## Overview
 
