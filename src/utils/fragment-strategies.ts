@@ -64,6 +64,7 @@ export interface FragmentStrategy {
 
 // ─── Strategy implementations ────────────────────────────────────────────────
 
+/** Strategy for fetching and extracting repository metadata (stars, forks, language, etc.). */
 class RepoMetadataStrategy implements FragmentStrategy {
 	readonly name = "repoMetadata" as const;
 	readonly supportsGraphQL = true;
@@ -88,6 +89,7 @@ class RepoMetadataStrategy implements FragmentStrategy {
 	}
 }
 
+/** Strategy for fetching and extracting open/closed/all pull request counts. */
 class PRCountStrategy implements FragmentStrategy {
 	readonly name = "prCount" as const;
 	readonly supportsGraphQL = true;
@@ -108,6 +110,7 @@ class PRCountStrategy implements FragmentStrategy {
 	}
 }
 
+/** Strategy for fetching and extracting open/closed/all issue counts (excluding PRs). */
 class IssueCountStrategy implements FragmentStrategy {
 	readonly name = "issueCount" as const;
 	readonly supportsGraphQL = true;
@@ -128,6 +131,7 @@ class IssueCountStrategy implements FragmentStrategy {
 	}
 }
 
+/** Strategy for fetching and extracting the latest release tag and metadata. */
 class LatestReleaseStrategy implements FragmentStrategy {
 	readonly name = "latestRelease" as const;
 	readonly supportsGraphQL = true;
@@ -148,6 +152,7 @@ class LatestReleaseStrategy implements FragmentStrategy {
 	}
 }
 
+/** Strategy for fetching and extracting repository branch list for network visualization. */
 class BranchesStrategy implements FragmentStrategy {
 	readonly name = "branches" as const;
 	readonly supportsGraphQL = true;
@@ -168,6 +173,7 @@ class BranchesStrategy implements FragmentStrategy {
 	}
 }
 
+/** Strategy for fetching and extracting Dependabot vulnerability alerts for security health. */
 class VulnerabilityAlertsStrategy implements FragmentStrategy {
 	readonly name = "vulnerabilityAlerts" as const;
 	readonly supportsGraphQL = true;
@@ -188,6 +194,7 @@ class VulnerabilityAlertsStrategy implements FragmentStrategy {
 	}
 }
 
+/** Strategy for fetching and extracting GitHub Discussions count and answered status. */
 class DiscussionsStrategy implements FragmentStrategy {
 	readonly name = "discussions" as const;
 	readonly supportsGraphQL = true;
@@ -205,6 +212,7 @@ class DiscussionsStrategy implements FragmentStrategy {
 	}
 }
 
+/** Strategy for fetching and extracting GitHub Projects V2 board data and item counts. */
 class ProjectsV2Strategy implements FragmentStrategy {
 	readonly name = "projectsV2" as const;
 	readonly supportsGraphQL = true;
@@ -222,6 +230,7 @@ class ProjectsV2Strategy implements FragmentStrategy {
 	}
 }
 
+/** Strategy for fetching workflow run status and deployment info (REST-only, no GraphQL). */
 class WorkflowRunsStrategy implements FragmentStrategy {
 	readonly name = "workflowRuns" as const;
 	readonly supportsGraphQL = false;
@@ -242,6 +251,7 @@ class WorkflowRunsStrategy implements FragmentStrategy {
 	}
 }
 
+/** Strategy for fetching weekly commit activity data (REST-only, no GraphQL). */
 class CommitActivityStrategy implements FragmentStrategy {
 	readonly name = "commitActivity" as const;
 	readonly supportsGraphQL = false;
@@ -258,6 +268,7 @@ class CommitActivityStrategy implements FragmentStrategy {
 	}
 }
 
+/** Strategy for fetching ahead/behind commit counts between two branches (REST-only). */
 class BranchComparisonStrategy implements FragmentStrategy {
 	readonly name = "branchComparison" as const;
 	readonly supportsGraphQL = false;
@@ -276,6 +287,7 @@ class BranchComparisonStrategy implements FragmentStrategy {
 	}
 }
 
+/** Strategy for fetching PRs requesting the current user's review (REST-only). */
 class ReviewRequestedPRsStrategy implements FragmentStrategy {
 	readonly name = "reviewRequestedPRs" as const;
 	readonly supportsGraphQL = false;

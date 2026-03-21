@@ -85,6 +85,16 @@ Types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `style`, `perf`, `ci`
 - Coverage thresholds (80% for branches, functions, lines, statements) are enforced.
 - **All tests must pass before a PR can be merged.**
 
+### Integration Tests
+
+Cross-layer tests live in `tests/integration/`. These mock only `globalThis.fetch` and let real coordinator, extractors, renderers, and strategies run. Add integration tests when:
+- Adding new data fragments (verify extraction → cache → result flow)
+- Changing API response handling (verify schema → transformation → rendering)
+
+### Snapshot Tests
+
+SVG renderer output is captured as golden master snapshots in `tests/renderers/`. After changing any render function, run `npx vitest run tests/renderers/ --update` to regenerate snapshots, then review the diff.
+
 Run tests:
 ```bash
 npm test                # Run all tests once
@@ -128,6 +138,7 @@ Follow these steps and refer to the existing **Repo Stats** and **Workflow Statu
 2. Export it from `src/utils/index.ts`
 3. Write tests covering all code paths and edge cases
 4. Document the function with JSDoc comments
+5. For new API functions that call GitHub endpoints, add a Zod schema in `src/utils/github-api/schemas.ts` and use `.parse()` instead of `as` type assertions on API responses.
 
 ### Architecture: GraphQL Query Coordinator
 

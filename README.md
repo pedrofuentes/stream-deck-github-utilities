@@ -4,7 +4,7 @@ A [Stream Deck](https://www.elgato.com/stream-deck) plugin that provides utiliti
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-2.2.4-blue.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities/releases)
-[![Tests](https://img.shields.io/badge/tests-1373%20passed-brightgreen.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities)
+[![Tests](https://img.shields.io/badge/tests-1562%20passed-brightgreen.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities)
 
 ## Overview
 
@@ -319,14 +319,36 @@ npm run watch
 │   │   └── index.ts                               # Barrel exports
 │   ├── types.ts                                   # Shared type definitions
 │   └── plugin.ts                                  # Plugin entry point
-├── tests/                                         # Test files (1004 tests across 30 files)
+├── tests/                                         # Test files (1562 tests across 44 files)
 │   ├── actions/                                   # Action tests
-│   └── utils/                                     # Utility tests
+│   ├── utils/                                     # Utility tests
+│   ├── integration/                               # Cross-layer integration tests
+│   └── renderers/                                 # SVG snapshot/golden master tests
 ├── rollup.config.mjs                              # Rollup bundler config
 ├── tsconfig.json                                  # TypeScript config
 ├── vitest.config.ts                               # Test runner config
 └── package.json
 ```
+
+### Key Architectural Components
+
+- **`BaseGitHubAction`** — Abstract base class all 14 actions extend. Provides shared polling, URL debouncing, error handling, and cleanup.
+- **`github-api/`** — Domain-split API modules (core, repos, PRs, issues, workflows, security, datasources) with `fetchWithRetry` and Zod schema validation.
+- **`FragmentStrategy`** — Strategy pattern for coordinator fragment dispatch. Each `DataFragmentName` has a strategy class encapsulating GraphQL extraction, REST fallback, and result assignment.
+- **`DebouncedUrlOpener`** — Shared utility for double-click detection (first click schedules URL open after 400ms; second click cancels and triggers refresh).
+- **`RenderDebouncer`** — Debounced render callbacks for dial rotation events.
+
+### Key Dependencies
+
+| Package | Purpose |
+|---|---|
+| `@elgato/streamdeck` | Stream Deck SDK — core plugin API |
+| `zod` | Runtime API response validation |
+| `rollup` | JavaScript bundler |
+| `@rollup/plugin-typescript` | TypeScript compilation in Rollup |
+| `@rollup/plugin-node-resolve` | Node module resolution for Rollup |
+| `vitest` | Test runner |
+| `@vitest/coverage-v8` | Code coverage |
 
 ### Testing
 

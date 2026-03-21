@@ -1,8 +1,8 @@
 # GitHub Utilities for Stream Deck — Roadmap
 
-> **Version**: v2.0.0 (current)
+> **Version**: v2.2.4 (current)
 > **Last Updated**: March 2026
-> **Status**: Active — Phases 1–5 complete, v2.1.0–v2.2.0 shipped; 14 actions with full Stream Deck+ support and GraphQL batch query coordinator
+> **Status**: Active — Phases 1–5 complete, v2.1.0–v2.2.4 shipped; 14 actions with full Stream Deck+ support and GraphQL batch query coordinator
 
 ---
 
@@ -29,7 +29,7 @@
 
 ## Current State
 
-### Existing Actions (v2.0.0)
+### Existing Actions (v2.2.4)
 
 | Action | Description | API Endpoints Used |
 |--------|-------------|-------------------|
@@ -70,7 +70,7 @@
 - Custom encoder layout (`layouts/github-full-canvas.json`) — 200×100 full-canvas pixmap
 - Multi-quarter contiguous rendering with shared scroll coordination
 - Double-click detection for instant refresh
-- 14 actions across 30 test files
+- 14 actions across 44 test files (1562 tests)
 
 ---
 
@@ -311,7 +311,7 @@ Compact per-repo summary designed to be placed across 4 encoder quarters for fle
 
 ---
 
-## Phase 6 — Profiles & Ecosystem (v2.0.0)
+## Phase 6 — Profiles & Ecosystem (v2.2.4)
 
 Pre-built configurations and ecosystem expansion for effortless setup.
 
@@ -467,7 +467,7 @@ Approved multi-quarter layouts for Stream Deck+ touch strip. Each layout documen
 5. **v1.6.0**: Stream Deck+ encoder foundation — `pixmap` layout, `touch-strip-renderer.ts`, Repo Stats encoder, Workflow Status encoder, remaining Phase 1 polish (run duration, error improvements)
 6. **v1.7.0**: Encoder for all remaining actions + PR Review Queue + Git Branch Network + Workflow Dispatch
 7. **v1.8.0**: Security Health gauge + Contribution Heatmap + Fleet Monitor
-8. **v2.0.0**: Bundled Profiles, ecosystem expansion
+8. **v2.2.4**: Bundled Profiles, ecosystem expansion
 9. ~~**v2.1.0**: GraphQL batched query coordinator — reduce API calls across all actions sharing the same repo~~ ✅ **Done**
 10. ~~**v2.2.0**: New GraphQL actions — Discussions Monitor, Projects V2 Board~~ ✅ **Done**
 11. **v2.3.0**: Discussions Monitor enhancements — category filtering (PI dropdown of available categories), state filter (open/closed/all), dial rotate to cycle through categories, short press to cycle display (count → latest topic → answered ratio). Projects V2 Board enhancements — filter by open/closed projects via PI dropdown.

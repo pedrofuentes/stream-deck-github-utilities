@@ -29,8 +29,10 @@ src/
     │   ├── workflows.ts       # CI/CD status and dispatch
     │   ├── security-branches.ts # Dependabot alerts, branch ops
     │   ├── datasources.ts     # PI dropdown data population
+    │   ├── schemas.ts         # Zod schemas for API response validation
     │   └── index.ts           # Barrel re-export
     ├── fragment-strategies.ts # Strategy pattern for coordinator fragment dispatch
+    ├── render-debouncer.ts    # Debounced render callbacks for dial events
     └── debounced-url-opener.ts # Shared double-click URL debounce utility
 
 plugin/                # Source plugin assets (tracked by git)
@@ -50,7 +52,8 @@ release/               # Assembled plugin directory (gitignored — build output
 tests/                 # Test files mirroring src/ structure
 ├── actions/           # Action unit tests
 ├── utils/             # Utility unit tests
-└── integration/       # Cross-layer integration tests
+├── integration/       # Cross-layer integration tests
+└── renderers/         # SVG snapshot/golden master tests
 
 content/               # Elgato Marketplace listing content
 ├── CONTENT-GUIDE.md   # Agent instructions for marketplace content management
@@ -173,6 +176,11 @@ Before every release, the agent MUST verify that **all user-facing documentation
 - Use `src/utils/github.ts` for token validation, repo parsing, count formatting.
 - Use `handleApiError()` for centralized error handling in new API functions.
 
+### Network Resilience
+- `fetchWithRetry()` in `github-api/core.ts` wraps all API calls with 3-attempt exponential backoff (1s, 2s, 4s) for transient errors (429, 502-504, network, timeout).
+- `fetchWithTimeout()` adds 30s AbortSignal timeout to all fetch calls.
+- `classifyErrorLabel()` maps errors to user-facing labels ("Rate Limited", "Auth Error", "Not Found", etc.) using structured `GitHubErrorCode` enum with string-matching fallback.
+
 ### Workflow Status Patterns
 - `fetchWorkflowInfo()` fetches both workflow runs and deployment status in parallel.
 - Workflow run errors propagate (for proper error display) while deployment errors are caught gracefully.
@@ -187,6 +195,11 @@ Before every release, the agent MUST verify that **all user-facing documentation
 - Define in `src/types.ts`.
 - Must extend `JsonObject` via index signature: `[key: string]: JsonValue`.
 - Import `JsonValue` from `@elgato/utils`.
+- Settings interfaces extend `RepoActionSettings` (base with `repo?`, `refreshInterval?`, index signature). Use `StateFilteredSettings` for actions with state filtering, `BranchFilterSettings` for branch-aware actions.
+
+### Action Utilities
+- `DebouncedUrlOpener` — Shared double-click detection. First click schedules URL open after 400ms; second click within the window cancels and triggers force refresh. All 12 key-press actions use this.
+- `RenderDebouncer` — Debounced render callbacks for dial rotation events. Replaces inline `setTimeout` patterns.
 
 ## How to Add Utility Functions
 
@@ -215,6 +228,7 @@ Before every release, the agent MUST verify that **all user-facing documentation
 | `@rollup/plugin-node-resolve` | Node module resolution for Rollup |
 | `vitest` | Test runner |
 | `@vitest/coverage-v8` | Code coverage |
+| `zod` | Runtime API response validation |
 
 ## npm Scripts Reference
 
