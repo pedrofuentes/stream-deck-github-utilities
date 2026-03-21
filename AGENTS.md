@@ -359,6 +359,7 @@ See [content/CONTENT-GUIDE.md](content/CONTENT-GUIDE.md) for full details.
 - **Plugin UUID format is strict** — lowercase alphanumeric, hyphens, periods only.
 - **The `manifest.json` must pass `streamdeck validate`** before packaging.
 - **GitHub tokens should never be logged in plaintext** — use `maskToken()` from utils.
+- **Always run `streamdeck link` + `streamdeck restart` after builds** — just restarting is not enough. The symlink can become stale after major changes, causing blank Property Inspector panels. Full deploy sequence: `npm run build && streamdeck link release/com.pedrofuentes.github-utilities.sdPlugin && streamdeck restart com.pedrofuentes.github-utilities`.
 
 ---
 
