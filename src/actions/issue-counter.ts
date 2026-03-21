@@ -32,7 +32,6 @@ import { BaseGitHubAction } from "./base-github-action";
 import type { GlobalSettings, IssueCounterSettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { classifyErrorLabel } from "../utils/github-api";
-import { coordinator } from "../utils/graphql-query-coordinator";
 import { renderIssueCountImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
@@ -93,7 +92,7 @@ export class IssueCounterAction extends BaseGitHubAction<IssueCounterSettings> {
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
 		if (settings.repo) {
-			coordinator.subscribe({
+			this.coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: settings.repo,
 				fragments: ["issueCount"],
@@ -215,7 +214,7 @@ export class IssueCounterAction extends BaseGitHubAction<IssueCounterSettings> {
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
 				this.polling.stop(ev.action.id);
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				return;
 			}
 
@@ -229,7 +228,7 @@ export class IssueCounterAction extends BaseGitHubAction<IssueCounterSettings> {
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 				this.polling.stop(ev.action.id);
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				return;
 			}
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
@@ -238,7 +237,7 @@ export class IssueCounterAction extends BaseGitHubAction<IssueCounterSettings> {
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
 		if (settings.repo) {
-			coordinator.subscribe({
+			this.coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: settings.repo,
 				fragments: ["issueCount"],
@@ -287,8 +286,8 @@ export class IssueCounterAction extends BaseGitHubAction<IssueCounterSettings> {
 
 			const stateFilter = settings.stateFilter ?? "open";
 			const result = force
-				? await coordinator.invalidateAndFetch(actionId, token)
-				: await coordinator.fetchData(actionId, token);
+				? await this.coordinator.invalidateAndFetch(actionId, token)
+				: await this.coordinator.fetchData(actionId, token);
 			const count = result.issueCount ?? 0;
 			const displayCount = formatCount(count);
 			const stateLabel = STATE_LABELS[stateFilter] ?? "Issues";

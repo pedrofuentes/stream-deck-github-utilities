@@ -34,7 +34,6 @@ import {
 	getWorkflowDisplayStatus,
 	getWorkflowStatusLabel,
 } from "../utils/github-api";
-import { coordinator } from "../utils/graphql-query-coordinator";
 import { renderKeyImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage, getWorkflowStatusColor } from "../utils/button-renderer";
 import { renderFleetStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { BaseGitHubAction } from "./base-github-action";
@@ -70,7 +69,7 @@ export class FleetMonitorAction extends BaseGitHubAction<FleetMonitorSettings> {
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
 		if (settings.repo) {
-			coordinator.subscribe({
+			this.coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: settings.repo,
 				fragments: ["prCount", "workflowRuns", "commitActivity"],
@@ -165,7 +164,7 @@ export class FleetMonitorAction extends BaseGitHubAction<FleetMonitorSettings> {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 			}
 			this.polling.stop(ev.action.id);
-			coordinator.unsubscribe(ev.action.id);
+			this.coordinator.unsubscribe(ev.action.id);
 			return;
 		}
 
@@ -179,14 +178,14 @@ export class FleetMonitorAction extends BaseGitHubAction<FleetMonitorSettings> {
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
 		if (settings.repo) {
-			coordinator.subscribe({
+			this.coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: settings.repo,
 				fragments: ["prCount", "workflowRuns", "commitActivity"],
 				maxAgeSec: intervalSec,
 			}, () => this.refreshFleet(ev.action.id));
 		} else {
-			coordinator.unsubscribe(ev.action.id);
+			this.coordinator.unsubscribe(ev.action.id);
 		}
 
 		this.polling.restart(ev.action.id, () => this.refreshFleet(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
@@ -238,8 +237,8 @@ export class FleetMonitorAction extends BaseGitHubAction<FleetMonitorSettings> {
 
 			// Fetch all data points via the coordinator (batched GraphQL + REST)
 			const result = force
-				? await coordinator.invalidateAndFetch(actionId, token)
-				: await coordinator.fetchData(actionId, token);
+				? await this.coordinator.invalidateAndFetch(actionId, token)
+				: await this.coordinator.fetchData(actionId, token);
 			const workflowInfo = result.workflowRuns;
 			const prCount = result.prCount ?? 0;
 			const commitWeeks = result.commitActivity ?? [];

@@ -33,7 +33,6 @@ import { BaseGitHubAction } from "./base-github-action";
 import type { GlobalSettings, ReleaseMonitorSettings } from "../types";
 import { parseRepoIdentifier } from "../utils/github";
 import { classifyErrorLabel, formatRelativeTime } from "../utils/github-api";
-import { coordinator } from "../utils/graphql-query-coordinator";
 import { renderReleaseImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
@@ -90,7 +89,7 @@ export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSetting
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
 		if (settings.repo) {
-			coordinator.subscribe({
+			this.coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: settings.repo,
 				fragments: ["latestRelease"],
@@ -155,7 +154,7 @@ export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSetting
 		this.actionSettings.set(ev.action.id, newSettings);
 
 		if (newSettings.repo) {
-			coordinator.subscribe({
+			this.coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: newSettings.repo,
 				fragments: ["latestRelease"],
@@ -228,7 +227,7 @@ export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSetting
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
 				this.polling.stop(ev.action.id);
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				return;
 			}
 
@@ -242,7 +241,7 @@ export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSetting
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 				this.polling.stop(ev.action.id);
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				return;
 			}
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
@@ -251,7 +250,7 @@ export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSetting
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
 		if (settings.repo) {
-			coordinator.subscribe({
+			this.coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: settings.repo,
 				fragments: ["latestRelease"],
@@ -299,8 +298,8 @@ export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSetting
 			}
 
 			const result = force
-				? await coordinator.invalidateAndFetch(actionId, token)
-				: await coordinator.fetchData(actionId, token);
+				? await this.coordinator.invalidateAndFetch(actionId, token)
+				: await this.coordinator.fetchData(actionId, token);
 
 			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
 

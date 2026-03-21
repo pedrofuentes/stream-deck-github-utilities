@@ -404,5 +404,4 @@ export class GraphQLQueryCoordinator {
 	}
 }
 
-/** Singleton coordinator instance */
-export const coordinator = new GraphQLQueryCoordinator();
+

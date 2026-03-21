@@ -28,7 +28,8 @@ import streamDeck from "@elgato/streamdeck";
 
 import { PollingCoordinator } from "../utils/polling-coordinator";
 import { DebouncedUrlOpener } from "../utils/debounced-url-opener";
-import { coordinator } from "../utils/graphql-query-coordinator";
+import { GraphQLQueryCoordinator } from "../utils/graphql-query-coordinator";
+import { RepoDataCache } from "../utils/repo-data-cache";
 import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provider";
 import { classifyErrorLabel } from "../utils/github-api";
 import { renderErrorImage } from "../utils/button-renderer";
@@ -51,6 +52,13 @@ export type BaseActionSettings = RepoActionSettings;
  * @typeParam TSettings - The action's settings interface (must extend BaseActionSettings)
  */
 export abstract class BaseGitHubAction<TSettings extends BaseActionSettings> extends SingletonAction<TSettings> {
+	private static _coordinator = new GraphQLQueryCoordinator(new RepoDataCache());
+
+	/** Access the shared coordinator instance. */
+	protected get coordinator(): GraphQLQueryCoordinator {
+		return BaseGitHubAction._coordinator;
+	}
+
 	/** Centralized polling coordinator with error backoff */
 	protected polling = new PollingCoordinator();
 
@@ -71,7 +79,7 @@ export abstract class BaseGitHubAction<TSettings extends BaseActionSettings> ext
 	override onWillDisappear(ev: WillDisappearEvent<TSettings>): void {
 		const actionId = ev.action.id;
 		this.polling.stop(actionId);
-		coordinator.unsubscribe(actionId);
+		this.coordinator.unsubscribe(actionId);
 		this.urlOpener.cleanup(actionId);
 		this.actionSettings.delete(actionId);
 		this.actionContexts.delete(actionId);

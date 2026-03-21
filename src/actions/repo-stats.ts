@@ -33,7 +33,6 @@ import { BaseGitHubAction } from "./base-github-action";
 import type { GlobalSettings, RepoStatsSettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { classifyErrorLabel, getStatDisplay, getStatUrl, STAT_TYPES, type StatType } from "../utils/github-api";
-import { coordinator } from "../utils/graphql-query-coordinator";
 import { renderStatImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
@@ -110,7 +109,7 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 
 		// Subscribe to coordinator for data fetching
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		coordinator.subscribe({
+		this.coordinator.subscribe({
 			actionId: ev.action.id,
 			repo: settings.repo!,
 			fragments: ["repoMetadata", "prCount"],
@@ -301,7 +300,7 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 		if (ev.action.isKey()) {
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			if (!settings.repo || !globalSettings.githubToken) {
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
 				this.polling.stop(ev.action.id);
@@ -316,7 +315,7 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			if (!settings.repo || !globalSettings.githubToken) {
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 				this.polling.stop(ev.action.id);
 				return;
@@ -326,8 +325,8 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 
 		// Re-subscribe with updated settings
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		coordinator.unsubscribe(ev.action.id);
-		coordinator.subscribe({
+		this.coordinator.unsubscribe(ev.action.id);
+		this.coordinator.subscribe({
 			actionId: ev.action.id,
 			repo: settings.repo!,
 			fragments: ["repoMetadata", "prCount"],
@@ -387,8 +386,8 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 
 			// Fetch data via coordinator (GraphQL with REST fallback)
 			const result = forceRefresh
-				? await coordinator.invalidateAndFetch(actionId, token)
-				: await coordinator.fetchData(actionId, token);
+				? await this.coordinator.invalidateAndFetch(actionId, token)
+				: await this.coordinator.fetchData(actionId, token);
 			const stats = result.repoMetadata;
 			if (!stats) {
 				const errorMsg = result.errors?.repoMetadata ?? "Failed to fetch data";

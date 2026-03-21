@@ -31,7 +31,6 @@ import streamDeck from "@elgato/streamdeck";
 import type { GlobalSettings, PullRequestCounterSettings } from "../types";
 import { parseRepoIdentifier, formatCount } from "../utils/github";
 import { classifyErrorLabel } from "../utils/github-api";
-import { coordinator } from "../utils/graphql-query-coordinator";
 import { renderPRCountImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
 import { renderStatStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
@@ -92,7 +91,7 @@ export class PRCounterAction extends BaseGitHubAction<PullRequestCounterSettings
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
 		if (settings.repo) {
-			coordinator.subscribe({
+			this.coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: settings.repo,
 				fragments: ["prCount"],
@@ -214,7 +213,7 @@ export class PRCounterAction extends BaseGitHubAction<PullRequestCounterSettings
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
 				this.polling.stop(ev.action.id);
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				return;
 			}
 
@@ -228,7 +227,7 @@ export class PRCounterAction extends BaseGitHubAction<PullRequestCounterSettings
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 				this.polling.stop(ev.action.id);
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				return;
 			}
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
@@ -237,7 +236,7 @@ export class PRCounterAction extends BaseGitHubAction<PullRequestCounterSettings
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
 		if (settings.repo) {
-			coordinator.subscribe({
+			this.coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: settings.repo,
 				fragments: ["prCount"],
@@ -286,8 +285,8 @@ export class PRCounterAction extends BaseGitHubAction<PullRequestCounterSettings
 
 			const stateFilter = settings.stateFilter ?? "open";
 			const result = force
-				? await coordinator.invalidateAndFetch(actionId, token)
-				: await coordinator.fetchData(actionId, token);
+				? await this.coordinator.invalidateAndFetch(actionId, token)
+				: await this.coordinator.fetchData(actionId, token);
 			const count = result.prCount ?? 0;
 			const displayCount = formatCount(count);
 			const stateLabel = STATE_LABELS[stateFilter] ?? "PRs";

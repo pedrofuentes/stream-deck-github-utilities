@@ -25,7 +25,6 @@ import type { GlobalSettings, BranchNetworkSettings } from "../types";
 import { BaseGitHubAction } from "./base-github-action";
 import { parseRepoIdentifier } from "../utils/github";
 import { classifyErrorLabel } from "../utils/github-api";
-import { coordinator } from "../utils/graphql-query-coordinator";
 import { RenderDebouncer } from "../utils/render-debouncer";
 import { renderBranchNetworkStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 
@@ -83,7 +82,7 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
 		if (settings.repo) {
-			coordinator.subscribe({
+			this.coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: settings.repo,
 				fragments: ["branches"],
@@ -170,7 +169,7 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 				this.polling.stop(ev.action.id);
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				// Re-render old siblings — this instance left the group
 				if (oldRepo) this.renderAllSiblings(oldRepo).catch(() => {});
 				return;
@@ -181,7 +180,7 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
 		if (settings.repo) {
-			coordinator.subscribe({
+			this.coordinator.subscribe({
 				actionId: ev.action.id,
 				repo: settings.repo,
 				fragments: ["branches"],
@@ -218,7 +217,7 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 				return;
 			}
 
-			const result = await coordinator.fetchData(actionId, token);
+			const result = await this.coordinator.fetchData(actionId, token);
 			if (!this.polling.isCurrentGeneration(actionId, gen)) return;
 
 			if (result.errors?.branches && result.branches === undefined) {

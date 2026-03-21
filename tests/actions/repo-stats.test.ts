@@ -75,13 +75,17 @@ vi.mock("@elgato/streamdeck", () => {
 });
 
 vi.mock("../../src/utils/graphql-query-coordinator", () => ({
-	coordinator: {
+	GraphQLQueryCoordinator: vi.fn().mockImplementation(() => ({
 		subscribe: mockCoordinatorSubscribe,
 		unsubscribe: mockCoordinatorUnsubscribe,
 		fetchData: mockCoordinatorFetchData,
 		invalidateAndFetch: mockCoordinatorInvalidateAndFetch,
 		isSubscribed: vi.fn().mockReturnValue(true),
-	},
+	})),
+}));
+
+vi.mock("../../src/utils/repo-data-cache", () => ({
+	RepoDataCache: vi.fn(),
 }));
 
 import { RepoStatsAction } from "../../src/actions/repo-stats";

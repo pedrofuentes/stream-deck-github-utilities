@@ -39,7 +39,6 @@ import {
 	formatRunDuration,
 	type DeploymentState,
 } from "../utils/github-api";
-import { coordinator } from "../utils/graphql-query-coordinator";
 import {
 	renderWorkflowImage,
 	renderDeployingImage,
@@ -122,7 +121,7 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		coordinator.subscribe({
+		this.coordinator.subscribe({
 			actionId: ev.action.id,
 			repo: settings.repo!,
 			fragments: ["workflowRuns"],
@@ -242,7 +241,7 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setImage(renderUnconfiguredImage());
 				await ev.action.setTitle("");
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				this.polling.stop(ev.action.id);
 				return;
 			}
@@ -256,7 +255,7 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			if (!settings.repo || !globalSettings.githubToken) {
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
-				coordinator.unsubscribe(ev.action.id);
+				this.coordinator.unsubscribe(ev.action.id);
 				this.polling.stop(ev.action.id);
 				return;
 			}
@@ -264,7 +263,7 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		coordinator.subscribe({
+		this.coordinator.subscribe({
 			actionId: ev.action.id,
 			repo: settings.repo!,
 			fragments: ["workflowRuns"],
@@ -323,8 +322,8 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 			}
 
 			const result = force
-				? await coordinator.invalidateAndFetch(actionId, token)
-				: await coordinator.fetchData(actionId, token);
+				? await this.coordinator.invalidateAndFetch(actionId, token)
+				: await this.coordinator.fetchData(actionId, token);
 			const info = result.workflowRuns;
 			if (!info) {
 				throw new Error(result.errors?.workflowRuns ?? "No workflow data available");

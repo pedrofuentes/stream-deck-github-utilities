@@ -116,7 +116,6 @@ export {
 	type ContributionWeek,
 } from "./github-graphql";
 export {
-	coordinator,
 	GraphQLQueryCoordinator,
 } from "./graphql-query-coordinator";
 export {
