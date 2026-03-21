@@ -15,6 +15,7 @@ import {
 	parseRateLimitHeaders,
 	parseRetryAfter,
 } from "./core";
+import { SearchCountResponseSchema, ReviewSearchResponseSchema } from "./schemas";
 
 /** Summary of a PR requesting the user's review */
 export interface ReviewRequestedPR {
@@ -51,7 +52,7 @@ export async function fetchOpenPullRequestCount(
 		return 0; // Graceful fallback — PR count is supplementary data
 	}
 
-	const data = (await response.json()) as { total_count: number };
+	const data = SearchCountResponseSchema.parse(await response.json());
 	return data.total_count;
 }
 
@@ -86,7 +87,7 @@ export async function fetchPullRequestCount(
 		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
-	const data = (await response.json()) as { total_count: number };
+	const data = SearchCountResponseSchema.parse(await response.json());
 	return data.total_count;
 }
 
@@ -149,17 +150,17 @@ export async function fetchReviewRequestedPRs(
 		throw new GitHubApiError(`GitHub API error (${response.status})`, response.status, rateLimitInfo);
 	}
 
-	const data = (await response.json()) as Record<string, unknown>;
-	const items = (data.items as Record<string, unknown>[] ?? []).map((item) => ({
-		number: item.number as number,
-		title: item.title as string,
-		user_login: ((item.user as Record<string, unknown>)?.login as string) ?? "",
-		html_url: item.html_url as string,
-		created_at: item.created_at as string,
+	const data = ReviewSearchResponseSchema.parse(await response.json());
+	const items = data.items.map((item) => ({
+		number: item.number,
+		title: item.title,
+		user_login: item.user?.login ?? "",
+		html_url: item.html_url,
+		created_at: item.created_at,
 	}));
 
 	return {
-		total_count: (data.total_count as number) ?? 0,
+		total_count: data.total_count,
 		items,
 	};
 }
