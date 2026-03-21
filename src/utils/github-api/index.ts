@@ -13,3 +13,4 @@ export * from "./issues-releases";
 export * from "./workflows";
 export * from "./security-branches";
 export * from "./datasources";
+export * from "./schemas";
