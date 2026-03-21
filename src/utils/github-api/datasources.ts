@@ -7,6 +7,7 @@
  */
 
 import type { JsonValue } from "@elgato/utils";
+import { z } from "zod";
 
 import {
 	GITHUB_API_BASE,
@@ -14,6 +15,12 @@ import {
 	fetchWithRetry,
 	parseRateLimitHeaders,
 } from "./core";
+import {
+	UserResponseSchema,
+	UserRepoResponseSchema,
+	WorkflowListResponseSchema,
+	EnvironmentListResponseSchema,
+} from "./schemas";
 
 /** Item shape expected by sdpi-components datasource */
 export interface DataSourceItem {
@@ -65,7 +72,7 @@ export async function validateTokenStatus(token?: string): Promise<DataSourceIte
 
 	let user: { login: string };
 	try {
-		user = (await response.json()) as { login: string };
+		user = UserResponseSchema.parse(await response.json());
 	} catch {
 		return [{ label: "⚠ Invalid response from GitHub", value: "parse-error", disabled: true }];
 	}
@@ -157,7 +164,7 @@ export async function fetchUserRepos(token?: string): Promise<DataSourceItem[]> 
 
 		let repos: Array<{ full_name: string; private: boolean; description: string | null }>;
 		try {
-			repos = (await response.json()) as typeof repos;
+			repos = z.array(UserRepoResponseSchema).parse(await response.json());
 		} catch {
 			if (allRepos.length > 0) break;
 			return [{ label: "⚠ Invalid response from GitHub", value: "", disabled: true }];
@@ -223,10 +230,7 @@ export async function fetchRepoWorkflows(
 		return [{ label: `⚠ Could not load workflows (${response.status})`, value: "", disabled: true }];
 	}
 
-	const data = (await response.json()) as {
-		total_count: number;
-		workflows: Array<{ id: number; name: string; path: string; state: string }>;
-	};
+	const data = WorkflowListResponseSchema.parse(await response.json());
 
 	if (data.workflows.length === 0) {
 		return [{ label: "No workflows found", value: "", disabled: true }];
@@ -281,7 +285,7 @@ export async function fetchRepoBranches(
 		return [{ label: `⚠ Could not load branches (${response.status})`, value: "", disabled: true }];
 	}
 
-	const branches = (await response.json()) as Array<{ name: string }>;
+	const branches = z.array(z.object({ name: z.string() }).passthrough()).parse(await response.json());
 
 	// First item: "All branches" option (no filter)
 	const items: DataSourceItem[] = [
@@ -325,10 +329,7 @@ export async function fetchRepoEnvironments(
 		return [{ label: "All Environments", value: "" }];
 	}
 
-	const data = (await response.json()) as {
-		total_count: number;
-		environments: Array<{ name: string; id: number }>;
-	};
+	const data = EnvironmentListResponseSchema.parse(await response.json());
 
 	// First item: "All environments" option (no filter)
 	const items: DataSourceItem[] = [
