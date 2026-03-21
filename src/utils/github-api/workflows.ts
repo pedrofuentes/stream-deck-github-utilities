@@ -6,6 +6,8 @@
  * @license MIT
  */
 
+import { z } from "zod";
+
 import {
 	GITHUB_API_BASE,
 	GitHubApiError,
@@ -15,6 +17,11 @@ import {
 	parseRateLimitHeaders,
 	parseRetryAfter,
 } from "./core";
+import {
+	WorkflowRunsResponseSchema,
+	DeploymentResponseSchema,
+	DeploymentStatusResponseSchema,
+} from "./schemas";
 
 /** Possible workflow run statuses from the GitHub API */
 export type WorkflowRunStatus =
@@ -125,26 +132,26 @@ export async function fetchLatestWorkflowRun(
 		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
-	const data = (await response.json()) as Record<string, unknown>;
-	const runs = data.workflow_runs as Record<string, unknown>[];
+	const data = WorkflowRunsResponseSchema.parse(await response.json());
+	const runs = data.workflow_runs;
 
-	if (!runs || runs.length === 0) {
+	if (runs.length === 0) {
 		return null;
 	}
 
 	const run = runs[0];
 	return {
-		id: (run.id as number) ?? 0,
-		name: (run.name as string) ?? "Unknown",
+		id: run.id,
+		name: run.name,
 		status: (run.status as WorkflowRunStatus) ?? "completed",
 		conclusion: (run.conclusion as WorkflowRunConclusion) ?? null,
-		head_branch: (run.head_branch as string) ?? "",
-		event: (run.event as string) ?? "",
-		display_title: (run.display_title as string) ?? "",
-		run_number: (run.run_number as number) ?? 0,
-		html_url: (run.html_url as string) ?? "",
-		created_at: (run.created_at as string) ?? "",
-		updated_at: (run.updated_at as string) ?? "",
+		head_branch: run.head_branch,
+		event: run.event,
+		display_title: run.display_title,
+		run_number: run.run_number,
+		html_url: run.html_url,
+		created_at: run.created_at,
+		updated_at: run.updated_at,
 	};
 }
 
@@ -180,14 +187,14 @@ export async function fetchLatestDeploymentStatus(
 		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
-	const deployments = (await response.json()) as Record<string, unknown>[];
+	const deployments = z.array(DeploymentResponseSchema).parse(await response.json());
 
-	if (!deployments || deployments.length === 0) {
+	if (deployments.length === 0) {
 		return null;
 	}
 
 	const deployment = deployments[0];
-	const deploymentId = deployment.id as number;
+	const deploymentId = deployment.id;
 
 	// Fetch the latest status for this deployment
 	const statusUrl = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/deployments/${deploymentId}/statuses?per_page=1`;
@@ -198,15 +205,15 @@ export async function fetchLatestDeploymentStatus(
 		handleApiError(statusResponse.status, statusRateLimitInfo, owner, repo, parseRetryAfter(statusResponse.headers));
 	}
 
-	const statuses = (await statusResponse.json()) as Record<string, unknown>[];
+	const statuses = z.array(DeploymentStatusResponseSchema).parse(await statusResponse.json());
 
-	if (!statuses || statuses.length === 0) {
+	if (statuses.length === 0) {
 		return {
 			id: deploymentId,
 			state: "pending",
-			description: (deployment.description as string) ?? "",
-			environment: (deployment.environment as string) ?? "",
-			created_at: (deployment.created_at as string) ?? "",
+			description: deployment.description ?? "",
+			environment: deployment.environment,
+			created_at: deployment.created_at,
 			log_url: "",
 		};
 	}
@@ -215,10 +222,10 @@ export async function fetchLatestDeploymentStatus(
 	return {
 		id: deploymentId,
 		state: (status.state as DeploymentState) ?? "pending",
-		description: (status.description as string) ?? "",
-		environment: (status.environment as string) ?? (deployment.environment as string) ?? "",
-		created_at: (status.created_at as string) ?? "",
-		log_url: (status.log_url as string) ?? "",
+		description: status.description ?? "",
+		environment: status.environment ?? deployment.environment,
+		created_at: status.created_at,
+		log_url: status.log_url ?? "",
 	};
 }
 
