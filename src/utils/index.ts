@@ -158,3 +158,6 @@ export {
 export {
 	DebouncedUrlOpener,
 } from "./debounced-url-opener";
+export {
+	RenderDebouncer,
+} from "./render-debouncer";

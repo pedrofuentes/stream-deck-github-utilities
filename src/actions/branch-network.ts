@@ -26,6 +26,7 @@ import { BaseGitHubAction } from "./base-github-action";
 import { parseRepoIdentifier } from "../utils/github";
 import { classifyErrorLabel } from "../utils/github-api";
 import { coordinator } from "../utils/graphql-query-coordinator";
+import { RenderDebouncer } from "../utils/render-debouncer";
 import { renderBranchNetworkStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 
 const DEFAULT_REFRESH_INTERVAL = 300;
@@ -33,7 +34,7 @@ const MIN_REFRESH_INTERVAL = 30;
 
 @action({ UUID: "com.pedrofuentes.github-utilities.branch-network" })
 export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings> {
-	private renderTimeout: ReturnType<typeof setTimeout> | null = null;
+	private renderDebouncer = new RenderDebouncer();
 	private lastUrl = new Map<string, string>();
 	private branchCache = new Map<string, string[]>();
 	/** Dial column position per action (0-3) */
@@ -102,7 +103,7 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 		this.lastUrl.delete(ev.action.id);
 		this.branchCache.delete(ev.action.id);
 		this.dialColumn.delete(ev.action.id);
-		if (this.renderTimeout) { clearTimeout(this.renderTimeout); this.renderTimeout = null; }
+		this.renderDebouncer.cleanup(ev.action.id);
 		// Re-render remaining siblings so they recalculate their offsets
 		if (repo) this.renderAllSiblings(repo).catch(() => {});
 	}
@@ -120,8 +121,7 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 			BranchNetworkAction.sharedScrollH.set(repo, Math.max(0, hOff + ev.payload.ticks * 10));
 		}
 
-		if (this.renderTimeout) clearTimeout(this.renderTimeout);
-		this.renderTimeout = setTimeout(() => {
+		this.renderDebouncer.schedule(ev.action.id, () => {
 			this.renderAllSiblings(repo).catch(() => {});
 		}, 16);
 	}

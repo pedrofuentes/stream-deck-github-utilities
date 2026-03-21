@@ -26,6 +26,7 @@ import { BaseGitHubAction } from "./base-github-action";
 import { parseRepoIdentifier } from "../utils/github";
 import { classifyErrorLabel, fetchCommitActivityWeeks } from "../utils/github-api";
 import { fetchContributionCalendar, calendarToWeeklyData } from "../utils/github-graphql";
+import { RenderDebouncer } from "../utils/render-debouncer";
 import { renderHeatmapStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 
 const DEFAULT_REFRESH_INTERVAL = 300;
@@ -42,7 +43,7 @@ function reorderDays(apiDays: number[]): number[] {
 @action({ UUID: "com.pedrofuentes.github-utilities.contribution-heatmap" })
 export class ContributionHeatmapAction extends BaseGitHubAction<ContributionHeatmapSettings> {
 	private retryTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
-	private renderTimeout: ReturnType<typeof setTimeout> | null = null;
+	private renderDebouncer = new RenderDebouncer();
 	private lastUrl = new Map<string, string>();
 	/** Cached weekly data per action for rendering */
 	private weeklyCache = new Map<string, number[][]>();
@@ -127,7 +128,7 @@ export class ContributionHeatmapAction extends BaseGitHubAction<ContributionHeat
 		this.weeklyCache.delete(ev.action.id);
 		this.totalCommitsCache.delete(ev.action.id);
 		this.dialColumn.delete(ev.action.id);
-		if (this.renderTimeout) { clearTimeout(this.renderTimeout); this.renderTimeout = null; }
+		this.renderDebouncer.cleanup(ev.action.id);
 		// Re-render remaining siblings so they recalculate their offsets
 		if (scrollKey) this.renderAllForScrollKey(scrollKey).catch(() => {});
 	}
@@ -141,8 +142,7 @@ export class ContributionHeatmapAction extends BaseGitHubAction<ContributionHeat
 		const newH = Math.max(0, hOffset + ev.payload.ticks * 10);
 		ContributionHeatmapAction.sharedScrollH.set(scrollKey, newH);
 
-		if (this.renderTimeout) clearTimeout(this.renderTimeout);
-		this.renderTimeout = setTimeout(() => {
+		this.renderDebouncer.schedule(ev.action.id, () => {
 			this.renderAllForScrollKey(scrollKey).catch(() => {});
 		}, 16);
 	}
