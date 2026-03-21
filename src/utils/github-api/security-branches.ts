@@ -6,6 +6,8 @@
  * @license MIT
  */
 
+import { z } from "zod";
+
 import {
 	GITHUB_API_BASE,
 	buildHeaders,
@@ -14,6 +16,12 @@ import {
 	parseRateLimitHeaders,
 	parseRetryAfter,
 } from "./core";
+import {
+	DependabotAlertSchema,
+	BranchComparisonResponseSchema,
+	BranchListItemSchema,
+	CommitActivityWeekSchema,
+} from "./schemas";
 
 // ─── Security Alert APIs ────────────────────────────────────────────
 
@@ -55,7 +63,7 @@ export async function fetchDependabotAlerts(
 		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
-	const alerts = await response.json() as Array<{ security_advisory?: { severity?: string } }>;
+	const alerts = z.array(DependabotAlertSchema).parse(await response.json());
 	const summary: SecurityAlertSummary = { critical: 0, high: 0, medium: 0, low: 0, total: 0 };
 	for (const alert of alerts) {
 		const severity = alert.security_advisory?.severity ?? "low";
@@ -108,12 +116,12 @@ export async function fetchBranchComparison(
 		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
-	const data = (await response.json()) as Record<string, unknown>;
+	const data = BranchComparisonResponseSchema.parse(await response.json());
 	return {
-		ahead_by: (data.ahead_by as number) ?? 0,
-		behind_by: (data.behind_by as number) ?? 0,
-		total_commits: (data.total_commits as number) ?? 0,
-		html_url: (data.html_url as string) ?? `https://github.com/${owner}/${repo}/compare/${base}...${head}`,
+		ahead_by: data.ahead_by,
+		behind_by: data.behind_by,
+		total_commits: data.total_commits,
+		html_url: data.html_url,
 		status: (data.status as BranchComparison["status"]) ?? "identical",
 	};
 }
@@ -151,7 +159,7 @@ export async function fetchBranchNetwork(
 		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
-	const data = (await response.json()) as Array<{ name: string; commit: { sha: string } }>;
+	const data = z.array(BranchListItemSchema).parse(await response.json());
 	return data.map((b) => ({
 		name: b.name,
 		commitSha: b.commit.sha,
@@ -208,8 +216,8 @@ export async function fetchCommitActivity(
 		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
-	const weeks = (await response.json()) as CommitActivityWeek[];
-	if (!Array.isArray(weeks) || weeks.length === 0) {
+	const weeks = z.array(CommitActivityWeekSchema).parse(await response.json());
+	if (weeks.length === 0) {
 		return 0;
 	}
 
@@ -279,9 +287,6 @@ export async function fetchCommitActivityWeeks(
 		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
 	}
 
-	const weeks = (await response.json()) as CommitActivityWeek[];
-	if (!Array.isArray(weeks)) {
-		return [];
-	}
+	const weeks = z.array(CommitActivityWeekSchema).parse(await response.json());
 	return weeks;
 }
