@@ -106,7 +106,7 @@ Show how many commits one branch is ahead/behind another.
 Display a real git network graph on the Stream Deck+ touch strip, powered by [`git-network-graph`](https://github.com/pedrofuentes/git-network-graph).
 
 - Shows actual commit topology with branch lanes, merge points, and fork connections
-- Configurable orientation (horizontal or vertical), commit depth (10–50), and graph style
+- Configurable orientation (oldest→newest or newest→oldest), commit depth (10–50), and graph style
 - Scroll with the dial, hold-and-rotate for cross-axis pan
 - Span 2 or 4 adjacent encoder quarters for panoramic views
 - Touch to open the GitHub network graph

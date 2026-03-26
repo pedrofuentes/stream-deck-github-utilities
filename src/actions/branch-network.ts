@@ -143,22 +143,28 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 	/** Dial column position per action (0-3) */
 	private dialColumn = new Map<string, number>();
 
-	/** Shared horizontal scroll per repo (synced across siblings) */
+	/** Shared horizontal scroll per sibling group (synced across same repo+orientation) */
 	private static sharedScrollH = new Map<string, number>();
-	/** Shared vertical scroll per repo (synced across siblings) */
+	/** Shared vertical scroll per sibling group (synced across same repo+orientation) */
 	private static sharedScrollV = new Map<string, number>();
 
+	/** Composite key for linking siblings: only same repo + same orientation are linked */
+	private siblingKey(repo: string, orientation: string): string {
+		return `${repo}|${orientation}`;
+	}
+
 	/**
-	 * Compute base offset from relative position among siblings with same repo.
+	 * Compute base offset from relative position among siblings with same repo and orientation.
 	 */
 	private getBaseOffset(actionId: string): number {
 		const settings = this.actionSettings.get(actionId);
 		if (!settings?.repo) return 0;
+		const orientation = settings.orientation ?? "horizontal";
 		const myColumn = this.dialColumn.get(actionId) ?? 0;
 		const siblingColumns: number[] = [];
 		for (const a of this.actionContexts.values()) {
 			const s = this.actionSettings.get(a.id);
-			if (s?.repo === settings.repo && a.isDial()) {
+			if (s?.repo === settings.repo && (s.orientation ?? "horizontal") === orientation && a.isDial()) {
 				siblingColumns.push(this.dialColumn.get(a.id) ?? 0);
 			}
 		}
@@ -197,34 +203,41 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 
 		this.polling.start(ev.action.id, () => this.refreshNetwork(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 		await this.refreshNetwork(ev.action.id);
-		if (settings.repo) this.renderAllSiblings(settings.repo).catch(() => {});
+		if (settings.repo) {
+			const orientation = settings.orientation ?? "horizontal";
+			this.renderAllSiblings(settings.repo, orientation).catch(() => {});
+		}
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<BranchNetworkSettings>): void {
-		const repo = this.actionSettings.get(ev.action.id)?.repo;
+		const settings = this.actionSettings.get(ev.action.id);
+		const repo = settings?.repo;
+		const orientation = settings?.orientation ?? "horizontal";
 		super.onWillDisappear(ev);
 		this.lastUrl.delete(ev.action.id);
 		this.graphCache.delete(ev.action.id);
 		this.dialColumn.delete(ev.action.id);
 		this.renderDebouncer.cleanup(ev.action.id);
-		if (repo) this.renderAllSiblings(repo).catch(() => {});
+		if (repo) this.renderAllSiblings(repo, orientation).catch(() => {});
 	}
 
 	override async onDialRotate(ev: DialRotateEvent<BranchNetworkSettings>): Promise<void> {
 		const settings = this.actionSettings.get(ev.action.id);
 		const repo = settings?.repo;
 		if (!repo) return;
+		const orientation = settings.orientation ?? "horizontal";
+		const key = this.siblingKey(repo, orientation);
 
 		if (ev.payload.pressed) {
-			const vOff = BranchNetworkAction.sharedScrollV.get(repo) ?? 0;
-			BranchNetworkAction.sharedScrollV.set(repo, Math.max(-50, Math.min(100, vOff + ev.payload.ticks * 5)));
+			const vOff = BranchNetworkAction.sharedScrollV.get(key) ?? 0;
+			BranchNetworkAction.sharedScrollV.set(key, Math.max(-50, Math.min(100, vOff + ev.payload.ticks * 5)));
 		} else {
-			const hOff = BranchNetworkAction.sharedScrollH.get(repo) ?? 0;
-			BranchNetworkAction.sharedScrollH.set(repo, Math.max(0, hOff + ev.payload.ticks * 10));
+			const hOff = BranchNetworkAction.sharedScrollH.get(key) ?? 0;
+			BranchNetworkAction.sharedScrollH.set(key, Math.max(0, hOff + ev.payload.ticks * 10));
 		}
 
 		this.renderDebouncer.schedule(ev.action.id, () => {
-			this.renderAllSiblings(repo).catch(() => {});
+			this.renderAllSiblings(repo, orientation).catch(() => {});
 		}, 16);
 	}
 
@@ -239,22 +252,22 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 		}
 	}
 
-	/** Re-render all sibling instances for the same repo using cached graph data */
-	private async renderAllSiblings(repo: string): Promise<void> {
-		const hScroll = BranchNetworkAction.sharedScrollH.get(repo) ?? 0;
-		const vScroll = BranchNetworkAction.sharedScrollV.get(repo) ?? 0;
+	/** Re-render all sibling instances for the same repo and orientation using cached graph data */
+	private async renderAllSiblings(repo: string, orientation: string): Promise<void> {
+		const key = this.siblingKey(repo, orientation);
+		const hScroll = BranchNetworkAction.sharedScrollH.get(key) ?? 0;
+		const vScroll = BranchNetworkAction.sharedScrollV.get(key) ?? 0;
 
 		for (const ctx of this.actionContexts.values()) {
 			const s = this.actionSettings.get(ctx.id);
-			if (s?.repo !== repo || !ctx.isDial()) continue;
+			if (s?.repo !== repo || (s.orientation ?? "horizontal") !== orientation || !ctx.isDial()) continue;
 
 			const renderData = this.graphCache.get(ctx.id);
 			if (!renderData) continue;
 
 			const hOff = this.getBaseOffset(ctx.id) + hScroll;
-			const orientation = s.orientation ?? "horizontal";
 			await ctx.setFeedback({
-				canvas: renderNetworkGraphStrip(renderData, orientation, hOff, vScroll),
+				canvas: renderNetworkGraphStrip(renderData, orientation as "horizontal" | "horizontal-reverse", hOff, vScroll),
 			});
 		}
 	}
@@ -265,9 +278,13 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 		const cached = this.actionSettings.get(ev.action.id);
 		const oldRepo = cached?.repo;
 		const oldMaxCommits = Number(cached?.maxCommits) || 100;
+		const oldOrientation = cached?.orientation ?? "horizontal";
+		const oldBranchModel = cached?.branchModel ?? "gitflow";
 		const settings: BranchNetworkSettings = { ...cached, ...incoming };
 		this.actionSettings.set(ev.action.id, settings);
 		const newMaxCommits = Number(settings.maxCommits) || 100;
+		const newOrientation = settings.orientation ?? "horizontal";
+		const newBranchModel = settings.branchModel ?? "gitflow";
 
 		if (ev.action.isDial()) {
 			await ev.action.setFeedbackLayout("layouts/github-full-canvas.json");
@@ -276,7 +293,7 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 				await ev.action.setFeedback({ canvas: renderStripUnconfigured() });
 				this.polling.stop(ev.action.id);
 				this.coordinator.unsubscribe(ev.action.id);
-				if (oldRepo) this.renderAllSiblings(oldRepo).catch(() => {});
+				if (oldRepo) this.renderAllSiblings(oldRepo, oldOrientation).catch(() => {});
 				return;
 			}
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
@@ -284,8 +301,11 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
-		// Invalidate cached graph when maxCommits changes so it refetches
-		if (settings.repo && oldMaxCommits !== newMaxCommits) {
+		// Invalidate cached graph when graph-shaping settings change
+		const graphSettingsChanged = oldMaxCommits !== newMaxCommits
+			|| oldOrientation !== newOrientation
+			|| oldBranchModel !== newBranchModel;
+		if (settings.repo && graphSettingsChanged) {
 			this.graphCache.delete(ev.action.id);
 		}
 
@@ -309,8 +329,10 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 			}
 		}
 		await this.refreshNetwork(ev.action.id);
-		if (oldRepo && oldRepo !== settings.repo) this.renderAllSiblings(oldRepo).catch(() => {});
-		if (settings.repo) this.renderAllSiblings(settings.repo).catch(() => {});
+		if (oldRepo && (oldRepo !== settings.repo || oldOrientation !== newOrientation)) {
+			this.renderAllSiblings(oldRepo, oldOrientation).catch(() => {});
+		}
+		if (settings.repo) this.renderAllSiblings(settings.repo, newOrientation).catch(() => {});
 	}
 
 	private async refreshNetwork(actionId: string): Promise<void> {
@@ -373,10 +395,11 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 
 			this.graphCache.set(actionId, renderData);
 
-			const hScroll = BranchNetworkAction.sharedScrollH.get(settings.repo!) ?? 0;
-			const vScroll = BranchNetworkAction.sharedScrollV.get(settings.repo!) ?? 0;
-			const hOff = this.getBaseOffset(actionId) + hScroll;
 			const orientation = settings.orientation ?? "horizontal";
+			const key = this.siblingKey(settings.repo!, orientation);
+			const hScroll = BranchNetworkAction.sharedScrollH.get(key) ?? 0;
+			const vScroll = BranchNetworkAction.sharedScrollV.get(key) ?? 0;
+			const hOff = this.getBaseOffset(actionId) + hScroll;
 
 			if (actionContext.isDial()) {
 				await actionContext.setFeedback({

@@ -410,6 +410,33 @@ describe("BranchNetworkAction", () => {
 			expect(mockAction.setFeedback).toHaveBeenCalled();
 			expect(decodeSvg(lastFeedbackCanvas(mockAction))).toContain("Setup Required");
 		});
+
+		it("re-renders when orientation changes", async () => {
+			const mockAction = createMockDialAction("bn-orient-change");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockResolvedValue(
+				networkResult([{ name: "main" }, { name: "develop" }]),
+			);
+
+			// Initial render with default (horizontal)
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+			const svgBefore = decodeSvg(lastFeedbackCanvas(mockAction));
+			expect(svgBefore).toContain("<circle");
+
+			// Change to horizontal-reverse
+			mockAction.setFeedback.mockClear();
+			await action.onDidReceiveSettings?.(createDidReceiveSettingsEvent(mockAction, { repo: "owner/repo", orientation: "horizontal-reverse" }) as never);
+
+			expect(mockAction.setFeedback).toHaveBeenCalled();
+			const svgAfter = decodeSvg(lastFeedbackCanvas(mockAction));
+			expect(svgAfter).toContain("<circle");
+			expect(svgAfter).toContain("<svg");
+		});
 	});
 
 	describe("error handling", () => {
@@ -697,6 +724,37 @@ describe("BranchNetworkAction", () => {
 
 			expect(mockAction1.setFeedback).toHaveBeenCalled();
 		});
+
+		it("does not sync scroll between different orientations", async () => {
+			const mockAction1 = createMockDialAction("bn-mq-orient1");
+			const mockAction2 = createMockDialAction("bn-mq-orient2");
+			const settings1 = { repo: "owner/repo", orientation: "horizontal" };
+			const settings2 = { repo: "owner/repo", orientation: "horizontal-reverse" };
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction1, mockAction2],
+				configurable: true,
+			});
+
+			mockCoordinatorFetchData.mockResolvedValue(
+				networkResult([{ name: "main" }, { name: "develop" }]),
+			);
+
+			await action.onWillAppear?.(createWillAppearEvent(mockAction1, settings1) as never);
+			await action.onWillAppear?.(createWillAppearEvent(mockAction2, settings2) as never);
+
+			mockAction1.setFeedback.mockClear();
+			mockAction2.setFeedback.mockClear();
+
+			// Rotate dial 1 (horizontal) — only horizontal sibling should re-render
+			vi.useFakeTimers();
+			await action.onDialRotate?.(createDialRotateEvent(mockAction1, 3, settings1) as never);
+			await vi.advanceTimersByTimeAsync(16);
+			vi.useRealTimers();
+
+			expect(mockAction1.setFeedback).toHaveBeenCalled();
+			expect(mockAction2.setFeedback).not.toHaveBeenCalled();
+		});
 	});
 
 	describe("coordinator subscription", () => {
@@ -733,18 +791,6 @@ describe("BranchNetworkAction", () => {
 				networkResult([{ name: "main" }]),
 			);
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
-
-			const svg = decodeSvg(lastFeedbackCanvas(mockAction));
-			expect(svg).toContain("<svg");
-			expect(svg).toContain("<circle");
-		});
-
-		it("renders with vertical orientation", async () => {
-			const mockAction = createMockDialAction("bn-orient-2");
-			mockCoordinatorFetchData.mockResolvedValue(
-				networkResult([{ name: "main" }]),
-			);
-			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo", orientation: "vertical" }) as never);
 
 			const svg = decodeSvg(lastFeedbackCanvas(mockAction));
 			expect(svg).toContain("<svg");

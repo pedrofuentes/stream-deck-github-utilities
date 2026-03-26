@@ -90,11 +90,6 @@ describe("renderNetworkGraphStrip", () => {
 		expect(svg).toContain('fill="#58a6ff"');
 	});
 
-	it("renders branch label in vertical mode", () => {
-		const svg = decodeSvg(renderNetworkGraphStrip(singleCommitData, "vertical"));
-		expect(svg).toContain("main");
-	});
-
 	it("renders straight lines for same-lane connections", () => {
 		const svg = decodeSvg(renderNetworkGraphStrip(linearData));
 		expect(svg).toContain("<line");
@@ -117,47 +112,12 @@ describe("renderNetworkGraphStrip", () => {
 		expect(svg).toContain("<circle");
 	});
 
-	it("supports vertical orientation", () => {
-		const svg = decodeSvg(renderNetworkGraphStrip(linearData, "vertical"));
-		expect(svg).toContain("<svg");
-		expect(svg).toContain("<circle");
-	});
-
 	it("applies scroll offsets", () => {
 		const noScroll = decodeSvg(renderNetworkGraphStrip(linearData, "horizontal", 0, 0));
 		const scrolled = decodeSvg(renderNetworkGraphStrip(linearData, "horizontal", 100, 0));
 		// Both should be valid SVGs but with different circle positions
 		expect(noScroll).toContain("<circle");
 		expect(scrolled).toContain("<svg");
-	});
-
-	it("truncates long branch names", () => {
-		const longNameData: NetworkGraphRenderData = {
-			grid: [
-				[{ char: "●", color: "#58a6ff" }, { char: " ", color: "#8b949e" }],
-			],
-			gridCols: 2,
-			branches: [
-				{ name: "feature/very-long-branch-name-here", column: 0, color: "#58a6ff", firstRow: 0 },
-			],
-		};
-		const svg = decodeSvg(renderNetworkGraphStrip(longNameData, "vertical"));
-		expect(svg).toContain("..");
-		expect(svg).not.toContain("feature/very-long-branch-name-here");
-	});
-
-	it("excludes tag branches from labels", () => {
-		const tagData: NetworkGraphRenderData = {
-			grid: [
-				[{ char: "●", color: "#3fb950" }, { char: " ", color: "#8b949e" }],
-			],
-			gridCols: 2,
-			branches: [
-				{ name: "tags/v1.0", column: 0, color: "#3fb950", firstRow: 0 },
-			],
-		};
-		const svg = decodeSvg(renderNetworkGraphStrip(tagData));
-		expect(svg).not.toContain("tags/v1.0");
 	});
 
 	it("renders valid SVG with correct dimensions", () => {

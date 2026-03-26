@@ -228,10 +228,6 @@ describe("Touch strip renderer snapshots", () => {
 			expect(renderNetworkGraphStrip({ grid: [], gridCols: 0, branches: [] })).toMatchSnapshot();
 		});
 
-		it("vertical orientation", () => {
-			expect(renderNetworkGraphStrip(branchingData, "vertical")).toMatchSnapshot();
-		});
-
 		// Reversed grid: columns mirrored, rows in oldest-first order
 		const reversedBranchingData: NetworkGraphRenderData = {
 			grid: [

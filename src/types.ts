@@ -350,7 +350,7 @@ export interface CommitActivitySettings extends BranchFilterSettings {
 /** Per-action settings for the Branch Network action */
 export interface BranchNetworkSettings extends RepoActionSettings {
 	/** Graph orientation */
-	orientation?: "horizontal" | "horizontal-reverse" | "vertical";
+	orientation?: "horizontal" | "horizontal-reverse";
 	/** Maximum commits to display (default: 100) */
 	maxCommits?: number;
 	/** Branching model for column assignment and colors */

@@ -664,14 +664,14 @@ const ARROW_CHARS = new Set(["<", ">", "⌃", "⌄"]);
  * for connections, and quarter-arc paths for corners.
  *
  * @param data - Pre-resolved render data including parsed character grid
- * @param orientation - Graph direction: "horizontal" or "vertical"
+ * @param orientation - Graph direction: "horizontal" or "horizontal-reverse"
  * @param scrollH - Horizontal scroll offset in pixels (default: 0)
  * @param scrollV - Vertical scroll offset in pixels (default: 0)
  * @returns SVG string for touch strip pixmap
  */
 export function renderNetworkGraphStrip(
 	data: NetworkGraphRenderData,
-	orientation: "horizontal" | "horizontal-reverse" | "vertical" = "horizontal",
+	orientation: "horizontal" | "horizontal-reverse" = "horizontal",
 	scrollH = 0,
 	scrollV = 0,
 ): string {
@@ -680,27 +680,19 @@ export function renderNetworkGraphStrip(
 	}
 
 	const svgParts: string[] = [];
-	const isHoriz = orientation === "horizontal" || orientation === "horizontal-reverse";
 	const isReverse = orientation === "horizontal-reverse";
 	const cs = GRID_CELL;
 	const half = cs / 2;
 
 	/** Map grid (row, col) to pixel (x, y) top-left corner of the cell */
 	function pos(row: number, col: number): [number, number] {
-		if (isHoriz) {
-			const totalH = data.gridCols * cs;
-			const startY = Math.max(GRID_PAD, (HEIGHT - totalH) / 2);
-			const maxRow = data.grid.length - 1;
-			// Normal grid: row 0 = newest → reverse to put oldest at left
-			// Reversed grid: row 0 = oldest → map directly, oldest already at left
-			const xRow = isReverse ? row : maxRow - row;
-			return [GRID_PAD + xRow * cs - scrollH, startY + col * cs - scrollV];
-		} else {
-			// Vertical: grid-cols → X, rows → Y (time flows top→bottom, newest at top)
-			const totalW = data.gridCols * cs;
-			const startX = Math.max(GRID_PAD, (WIDTH - totalW) / 2);
-			return [startX + col * cs - scrollH, GRID_PAD + row * cs - scrollV];
-		}
+		const totalH = data.gridCols * cs;
+		const startY = Math.max(GRID_PAD, (HEIGHT - totalH) / 2);
+		const maxRow = data.grid.length - 1;
+		// Normal grid: row 0 = newest → reverse to put oldest at left
+		// Reversed grid: row 0 = oldest → map directly, oldest already at left
+		const xRow = isReverse ? row : maxRow - row;
+		return [GRID_PAD + xRow * cs - scrollH, startY + col * cs - scrollV];
 	}
 
 	function visible(x: number, y: number): boolean {
@@ -738,109 +730,44 @@ export function renderNetworkGraphStrip(
 				svgParts.push(`<circle cx="${cx}" cy="${cy}" r="3" fill="${STRIP_BG}" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (VERT_CHARS.has(cell.char)) {
 				// │ vertical in grid → horizontal on screen in horiz mode
-				if (isHoriz) {
-					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
-				} else {
-					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
-				}
+				svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (HORIZ_CHARS.has(cell.char)) {
 				// ─ horizontal in grid → vertical on screen in horiz mode
-				if (isHoriz) {
-					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
-				} else {
-					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
-				}
+				svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (CORNER_BL.has(cell.char)) {
 				// └ rotates CW to ┌: arc from bottom → right
-				if (isHoriz) {
-					svgParts.push(`<path d="M${cx},${bot} Q${cx},${cy} ${rgt},${cy}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
-				} else {
-					svgParts.push(`<path d="M${cx},${top} Q${cx},${cy} ${rgt},${cy}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
-				}
+				svgParts.push(`<path d="M${cx},${bot} Q${cx},${cy} ${rgt},${cy}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (CORNER_TL.has(cell.char)) {
 				// ┌ rotates CW to ┐: arc from left → bottom
-				if (isHoriz) {
-					svgParts.push(`<path d="M${lft},${cy} Q${cx},${cy} ${cx},${bot}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
-				} else {
-					svgParts.push(`<path d="M${cx},${bot} Q${cx},${cy} ${rgt},${cy}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
-				}
+				svgParts.push(`<path d="M${lft},${cy} Q${cx},${cy} ${cx},${bot}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (CORNER_TR.has(cell.char)) {
 				// ┐ rotates CW to ┘: arc from left → top
-				if (isHoriz) {
-					svgParts.push(`<path d="M${lft},${cy} Q${cx},${cy} ${cx},${top}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
-				} else {
-					svgParts.push(`<path d="M${lft},${cy} Q${cx},${cy} ${cx},${bot}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
-				}
+				svgParts.push(`<path d="M${lft},${cy} Q${cx},${cy} ${cx},${top}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (CORNER_BR.has(cell.char)) {
 				// ┘ rotates CW to └: arc from top → right
-				if (isHoriz) {
-					svgParts.push(`<path d="M${cx},${top} Q${cx},${cy} ${rgt},${cy}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
-				} else {
-					svgParts.push(`<path d="M${lft},${cy} Q${cx},${cy} ${cx},${top}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
-				}
+				svgParts.push(`<path d="M${cx},${top} Q${cx},${cy} ${rgt},${cy}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (T_RIGHT.has(cell.char)) {
 				// ├ rotates CW to ┬: horizontal + down
-				if (isHoriz) {
-					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
-					svgParts.push(`<line x1="${cx}" y1="${cy}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
-				} else {
-					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
-					svgParts.push(`<line x1="${cx}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
-				}
+				svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+				svgParts.push(`<line x1="${cx}" y1="${cy}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (T_LEFT.has(cell.char)) {
 				// ┤ rotates CW to ┴: horizontal + up
-				if (isHoriz) {
-					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
-					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
-				} else {
-					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
-					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${cx}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
-				}
+				svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+				svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (T_UP.has(cell.char)) {
 				// ┴ rotates CW to ├: vertical + right
-				if (isHoriz) {
-					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
-					svgParts.push(`<line x1="${cx}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
-				} else {
-					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
-					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
-				}
+				svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
+				svgParts.push(`<line x1="${cx}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (T_DOWN.has(cell.char)) {
 				// ┬ rotates CW to ┤: vertical + left
-				if (isHoriz) {
-					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
-					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${cx}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
-				} else {
-					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
-					svgParts.push(`<line x1="${cx}" y1="${cy}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
-				}
+				svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
+				svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${cx}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (CROSS_CHARS.has(cell.char)) {
 				svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
 				svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (ARROW_CHARS.has(cell.char)) {
-				if (isHoriz) {
-					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
-				} else {
-					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
-				}
+				svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
 			}
-		}
-	}
-
-	// Branch labels (vertical only — horizontal is too compact for labels)
-	if (!isHoriz) {
-		const labelledBranches = data.branches.filter((b) => !b.name.startsWith("tags/")).slice(0, 6);
-		for (const branch of labelledBranches) {
-			const [lx, ly] = pos(branch.firstRow, branch.column);
-			if (!visible(lx, ly)) continue;
-
-			const safeName = escapeXml(branch.name.length > 12 ? branch.name.slice(0, 10) + ".." : branch.name);
-			const textW = safeName.length * 4.5 + 6;
-			const lcx = lx + half;
-			const lcy = ly + half;
-
-			svgParts.push(`<rect x="${lcx + 6}" y="${lcy - 5}" width="${textW}" height="9" rx="2" fill="#000" fill-opacity="0.85"/>`);
-			svgParts.push(`<text x="${lcx + 8}" y="${lcy + 2}" fill="${branch.color}" fill-opacity="0.8" font-size="7" font-weight="500" font-family="${FONT}">${safeName}</text>`);
 		}
 	}
 
