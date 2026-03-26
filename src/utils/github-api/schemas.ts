@@ -183,6 +183,49 @@ export const CommitActivityWeekSchema = z
 	})
 	.passthrough();
 
+/** Schema for a single commit list item (for network graph). */
+export const CommitListItemSchema = z
+	.object({
+		sha: z.string(),
+		parents: z.array(
+			z.object({
+				sha: z.string(),
+			}).passthrough(),
+		),
+		commit: z
+			.object({
+				message: z.string(),
+				author: z
+					.object({
+						name: z.string(),
+						date: z.string().optional(),
+					})
+					.passthrough()
+					.nullable(),
+				committer: z
+					.object({
+						name: z.string(),
+						date: z.string().optional(),
+					})
+					.passthrough()
+					.nullable(),
+			})
+			.passthrough(),
+	})
+	.passthrough();
+
+/** Schema for a single tag list item (for network graph). */
+export const TagListItemSchema = z
+	.object({
+		name: z.string(),
+		commit: z
+			.object({
+				sha: z.string(),
+			})
+			.passthrough(),
+	})
+	.passthrough();
+
 // ──────────────────────────────────────────────
 // datasources.ts / core.ts
 // ──────────────────────────────────────────────

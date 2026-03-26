@@ -44,6 +44,7 @@
   "homepage": "https://github.com/pedrofuentes/stream-deck-github-utilities#readme",
   "dependencies": {
     "@elgato/streamdeck": "^2.0.0",
+    "git-network-graph": "^0.1.7",
     "zod": "^4.3.6"
   },
   "devDependencies": {

@@ -136,13 +136,29 @@ function decodeSvg(dataUri: string): string {
 	return decodeURIComponent(dataUri.replace(/^data:image\/svg\+xml,/, ""));
 }
 
-/** Creates a default coordinator result with branches */
-function branchResult(branches: Array<{ name: string; commitSha?: string }>) {
+/** Creates a coordinator result with branches + network commits for graph rendering */
+function networkResult(
+	branches: Array<{ name: string; commitSha?: string }>,
+	commits?: Array<{ oid: string; parentOids: string[]; message: string }>,
+) {
+	const resolvedBranches = branches.map((b) => ({
+		name: b.name,
+		commitSha: b.commitSha ?? "abc123",
+	}));
+
+	// Default commits: simple linear history
+	const defaultCommits = [
+		{ oid: "abc123", parentOids: ["def456"], message: "Latest commit" },
+		{ oid: "def456", parentOids: ["ghi789"], message: "Middle commit" },
+		{ oid: "ghi789", parentOids: [], message: "Initial commit" },
+	];
+
 	return {
-		branches: branches.map((b) => ({
-			name: b.name,
-			commitSha: b.commitSha ?? "abc123",
-		})),
+		branches: resolvedBranches,
+		networkCommits: {
+			commits: commits ?? defaultCommits,
+			tags: [],
+		},
 	};
 }
 
@@ -154,8 +170,14 @@ describe("BranchNetworkAction", () => {
 
 		vi.clearAllMocks();
 		mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
-		mockCoordinatorFetchData.mockResolvedValue({ branches: [] });
-		mockCoordinatorInvalidateAndFetch.mockResolvedValue({ branches: [] });
+		mockCoordinatorFetchData.mockResolvedValue({
+			branches: [],
+			networkCommits: { commits: [], tags: [] },
+		});
+		mockCoordinatorInvalidateAndFetch.mockResolvedValue({
+			branches: [],
+			networkCommits: { commits: [], tags: [] },
+		});
 
 		// Reset static shared state between tests
 		(BranchNetworkAction as any).sharedScrollH?.clear();
@@ -194,7 +216,7 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([
+				networkResult([
 					{ name: "main" },
 					{ name: "feature/auth" },
 					{ name: "develop" },
@@ -206,7 +228,7 @@ describe("BranchNetworkAction", () => {
 			expect(mockAction.setFeedback).toHaveBeenCalled();
 			const svg = decodeSvg(lastFeedbackCanvas(mockAction));
 			expect(svg).toContain("<svg");
-			expect(svg).toContain("main");
+			expect(svg).toContain("<circle");
 		});
 
 		it("shows loading state before fetching data", async () => {
@@ -219,7 +241,7 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([{ name: "main" }]),
+				networkResult([{ name: "main" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
@@ -239,7 +261,7 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([{ name: "main" }]),
+				networkResult([{ name: "main" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
@@ -263,7 +285,7 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([
+				networkResult([
 					{ name: "main" },
 					{ name: "feature/test" },
 				]),
@@ -296,7 +318,7 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([{ name: "main" }]),
+				networkResult([{ name: "main" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
@@ -323,7 +345,7 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([{ name: "main" }]),
+				networkResult([{ name: "main" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
@@ -344,7 +366,7 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([{ name: "main" }, { name: "develop" }]),
+				networkResult([{ name: "main" }, { name: "develop" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
@@ -365,14 +387,14 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([{ name: "main" }, { name: "feature/new" }]),
+				networkResult([{ name: "main" }, { name: "feature/new" }]),
 			);
 
 			await action.onDidReceiveSettings?.(createDidReceiveSettingsEvent(mockAction, settings) as never);
 
 			expect(mockAction.setFeedback).toHaveBeenCalled();
 			const svg = decodeSvg(lastFeedbackCanvas(mockAction));
-			expect(svg).toContain("main");
+			expect(svg).toContain("<circle");
 		});
 
 		it("shows unconfigured when repo is cleared", async () => {
@@ -499,14 +521,14 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([{ name: "main" }, { name: "develop" }]),
+				networkResult([{ name: "main" }, { name: "develop" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
 
 			const svg = decodeSvg(lastFeedbackCanvas(mockAction));
 			expect(svg).toContain("<svg");
-			expect(svg).toContain("main");
+			expect(svg).toContain("<circle");
 		});
 
 		it("renders with column 1 offset (200px offset applied)", async () => {
@@ -519,7 +541,7 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([{ name: "main" }, { name: "develop" }]),
+				networkResult([{ name: "main" }, { name: "develop" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
@@ -540,7 +562,7 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([{ name: "main" }, { name: "develop" }]),
+				networkResult([{ name: "main" }, { name: "develop" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction1, settings1) as never);
@@ -571,7 +593,7 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([{ name: "main" }, { name: "develop" }]),
+				networkResult([{ name: "main" }, { name: "develop" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction1, settings1) as never);
@@ -593,7 +615,7 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([{ name: "main" }]),
+				networkResult([{ name: "main" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction1, settings1) as never);
@@ -613,7 +635,7 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([{ name: "main" }]),
+				networkResult([{ name: "main" }]),
 			);
 
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, settings) as never);
@@ -633,7 +655,7 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([{ name: "main" }, { name: "develop" }]),
+				networkResult([{ name: "main" }, { name: "develop" }]),
 			);
 
 			// Appear at column 0 and column 1
@@ -662,7 +684,7 @@ describe("BranchNetworkAction", () => {
 			});
 
 			mockCoordinatorFetchData.mockResolvedValue(
-				branchResult([{ name: "main" }, { name: "develop" }]),
+				networkResult([{ name: "main" }, { name: "develop" }]),
 			);
 
 			// First instance appears at column 2
@@ -674,6 +696,81 @@ describe("BranchNetworkAction", () => {
 			await action.onWillAppear?.({ action: mockAction2, payload: { settings, coordinates: { column: 0, row: 0 } } } as never);
 
 			expect(mockAction1.setFeedback).toHaveBeenCalled();
+		});
+	});
+
+	describe("coordinator subscription", () => {
+		it("subscribes with branches and networkCommits fragments", async () => {
+			const mockAction = createMockDialAction("bn-sub-1");
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+			expect(mockCoordinatorSubscribe).toHaveBeenCalledWith(
+				expect.objectContaining({
+					fragments: ["branches", "networkCommits"],
+					params: expect.objectContaining({ maxCommits: 100 }),
+				}),
+				expect.any(Function),
+			);
+		});
+
+		it("passes custom maxCommits setting", async () => {
+			const mockAction = createMockDialAction("bn-sub-2");
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo", maxCommits: 50 }) as never);
+
+			expect(mockCoordinatorSubscribe).toHaveBeenCalledWith(
+				expect.objectContaining({
+					params: expect.objectContaining({ maxCommits: 50 }),
+				}),
+				expect.any(Function),
+			);
+		});
+	});
+
+	describe("new settings", () => {
+		it("renders with horizontal orientation by default", async () => {
+			const mockAction = createMockDialAction("bn-orient-1");
+			mockCoordinatorFetchData.mockResolvedValue(
+				networkResult([{ name: "main" }]),
+			);
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+			const svg = decodeSvg(lastFeedbackCanvas(mockAction));
+			expect(svg).toContain("<svg");
+			expect(svg).toContain("<circle");
+		});
+
+		it("renders with vertical orientation", async () => {
+			const mockAction = createMockDialAction("bn-orient-2");
+			mockCoordinatorFetchData.mockResolvedValue(
+				networkResult([{ name: "main" }]),
+			);
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo", orientation: "vertical" }) as never);
+
+			const svg = decodeSvg(lastFeedbackCanvas(mockAction));
+			expect(svg).toContain("<svg");
+			expect(svg).toContain("<circle");
+		});
+
+		it("respects graphStyle setting", async () => {
+			const mockAction = createMockDialAction("bn-style-1");
+			mockCoordinatorFetchData.mockResolvedValue(
+				networkResult([{ name: "main" }]),
+			);
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo", graphStyle: "thin" }) as never);
+
+			const svg = decodeSvg(lastFeedbackCanvas(mockAction));
+			expect(svg).toContain("<svg");
+			expect(svg).toContain("<circle");
+		});
+
+		it("shows No Commits when commits array is empty", async () => {
+			const mockAction = createMockDialAction("bn-no-commits");
+			mockCoordinatorFetchData.mockResolvedValue({
+				branches: [{ name: "main", commitSha: "abc" }],
+				networkCommits: { commits: [], tags: [] },
+			});
+			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+			expect(decodeSvg(lastFeedbackCanvas(mockAction))).toContain("No Commits");
 		});
 	});
 });

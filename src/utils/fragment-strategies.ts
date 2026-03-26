@@ -38,6 +38,8 @@ import {
 	fetchWorkflowInfo,
 	fetchCommitActivityWeeks,
 	fetchBranchComparison,
+	fetchCommitsForGraph,
+	fetchTagsForGraph,
 } from "./github-api";
 import { parseRepoIdentifier } from "./github";
 
@@ -301,6 +303,27 @@ class ReviewRequestedPRsStrategy implements FragmentStrategy {
 	}
 }
 
+/** Strategy for fetching commit history and tags for network graph visualization (REST-only). */
+class NetworkCommitsStrategy implements FragmentStrategy {
+	readonly name = "networkCommits" as const;
+	readonly supportsGraphQL = false;
+
+	async fetchViaREST(cache: RepoDataCache, repo: string, token: string, params?: FragmentParams): Promise<void> {
+		const parsed = parseRepoIdentifier(repo);
+		if (!parsed) return;
+		const maxCommits = params?.maxCommits ?? 100;
+		const [commits, tags] = await Promise.all([
+			fetchCommitsForGraph(parsed.owner, parsed.repo, token, maxCommits),
+			fetchTagsForGraph(parsed.owner, parsed.repo, token),
+		]);
+		cache.set(repo, "networkCommits", { commits, tags }, "rest");
+	}
+
+	assignToResult(result: CoordinatorResult, data: unknown): void {
+		result.networkCommits = data as CoordinatorResult["networkCommits"];
+	}
+}
+
 // ─── Registry ────────────────────────────────────────────────────────────────
 
 /** Registry mapping each {@link DataFragmentName} to its strategy implementation. */
@@ -318,5 +341,6 @@ export const fragmentRegistry = new Map<DataFragmentName, FragmentStrategy>();
 	new WorkflowRunsStrategy(),
 	new CommitActivityStrategy(),
 	new BranchComparisonStrategy(),
+	new NetworkCommitsStrategy(),
 	new ReviewRequestedPRsStrategy(),
 ].forEach(s => fragmentRegistry.set(s.name, s));

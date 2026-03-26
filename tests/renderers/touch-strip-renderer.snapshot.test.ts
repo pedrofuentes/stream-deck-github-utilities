@@ -9,9 +9,10 @@ import {
 	renderPRQueueStrip,
 	renderHeatmapStrip,
 	renderFleetStrip,
-	renderBranchNetworkStrip,
+	renderNetworkGraphStrip,
 	renderSecurityArcStrip,
 } from "../../src/utils/touch-strip-renderer.js";
+import type { NetworkGraphRenderData } from "../../src/utils/touch-strip-renderer.js";
 
 // ── Touch strip renderer snapshots ─────────────────────────────────────────
 
@@ -175,33 +176,85 @@ describe("Touch strip renderer snapshots", () => {
 		});
 	});
 
-	// ── Branch network strip ───────────────────────────────────────────────
+	// ── Network graph strip ───────────────────────────────────────────────
 
-	describe("renderBranchNetworkStrip", () => {
-		it("multiple branches", () => {
-			expect(renderBranchNetworkStrip(
-				["main", "develop", "feature/auth", "fix/login-bug"]
-			)).toMatchSnapshot();
+	describe("renderNetworkGraphStrip", () => {
+		const linearData: NetworkGraphRenderData = {
+			grid: [
+				[{ char: "●", color: "#58a6ff" }, { char: " ", color: "#8b949e" }],
+				[{ char: "│", color: "#58a6ff" }, { char: " ", color: "#8b949e" }],
+				[{ char: "●", color: "#58a6ff" }, { char: " ", color: "#8b949e" }],
+				[{ char: "│", color: "#58a6ff" }, { char: " ", color: "#8b949e" }],
+				[{ char: "●", color: "#58a6ff" }, { char: " ", color: "#8b949e" }],
+			],
+			gridCols: 2,
+			branches: [
+				{ name: "main", column: 0, color: "#58a6ff", firstRow: 0 },
+			],
+		};
+
+		const branchingData: NetworkGraphRenderData = {
+			grid: [
+				[{ char: "●", color: "#58a6ff" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#f85149" }],
+				[{ char: "○", color: "#58a6ff" }, { char: "<", color: "#f85149" }, { char: "╮", color: "#f85149" }, { char: " ", color: "#f85149" }],
+				[{ char: "│", color: "#58a6ff" }, { char: " ", color: "#8b949e" }, { char: "●", color: "#f85149" }, { char: " ", color: "#f85149" }],
+				[{ char: "├", color: "#58a6ff" }, { char: "─", color: "#f85149" }, { char: "╯", color: "#f85149" }, { char: " ", color: "#f85149" }],
+				[{ char: "●", color: "#58a6ff" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#f85149" }],
+			],
+			gridCols: 4,
+			branches: [
+				{ name: "main", column: 0, color: "#58a6ff", firstRow: 0 },
+				{ name: "develop", column: 2, color: "#f85149", firstRow: 2 },
+			],
+		};
+
+		it("linear history", () => {
+			expect(renderNetworkGraphStrip(linearData)).toMatchSnapshot();
 		});
 
-		it("single branch", () => {
-			expect(renderBranchNetworkStrip(["main"])).toMatchSnapshot();
+		it("branching history", () => {
+			expect(renderNetworkGraphStrip(branchingData)).toMatchSnapshot();
 		});
 
-		it("with offset", () => {
-			expect(renderBranchNetworkStrip(
-				["main", "develop", "staging"], 2
-			)).toMatchSnapshot();
+		it("with horizontal scroll offset", () => {
+			expect(renderNetworkGraphStrip(linearData, "horizontal", 50)).toMatchSnapshot();
 		});
 
-		it("with both offsets", () => {
-			expect(renderBranchNetworkStrip(
-				["main", "develop"], 1, 3
-			)).toMatchSnapshot();
+		it("with both scroll offsets", () => {
+			expect(renderNetworkGraphStrip(branchingData, "horizontal", 20, 10)).toMatchSnapshot();
 		});
 
-		it("empty branches", () => {
-			expect(renderBranchNetworkStrip([])).toMatchSnapshot();
+		it("empty commits", () => {
+			expect(renderNetworkGraphStrip({ grid: [], gridCols: 0, branches: [] })).toMatchSnapshot();
+		});
+
+		it("vertical orientation", () => {
+			expect(renderNetworkGraphStrip(branchingData, "vertical")).toMatchSnapshot();
+		});
+
+		// Reversed grid: columns mirrored, rows in oldest-first order
+		const reversedBranchingData: NetworkGraphRenderData = {
+			grid: [
+				[{ char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: "●", color: "#58a6ff" }],
+				[{ char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: "●", color: "#58a6ff" }],
+				[{ char: " ", color: "#f85149" }, { char: "╯", color: "#f85149" }, { char: "─", color: "#f85149" }, { char: "├", color: "#58a6ff" }],
+				[{ char: " ", color: "#f85149" }, { char: "●", color: "#f85149" }, { char: " ", color: "#8b949e" }, { char: "│", color: "#58a6ff" }],
+				[{ char: " ", color: "#f85149" }, { char: "╮", color: "#f85149" }, { char: "<", color: "#f85149" }, { char: "○", color: "#58a6ff" }],
+				[{ char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: "●", color: "#58a6ff" }],
+			],
+			gridCols: 4,
+			branches: [
+				{ name: "main", column: 3, color: "#58a6ff", firstRow: 0 },
+				{ name: "feature", column: 1, color: "#f85149", firstRow: 3 },
+			],
+		};
+
+		it("horizontal-reverse branching history", () => {
+			expect(renderNetworkGraphStrip(reversedBranchingData, "horizontal-reverse")).toMatchSnapshot();
+		});
+
+		it("horizontal-reverse with scroll offset", () => {
+			expect(renderNetworkGraphStrip(reversedBranchingData, "horizontal-reverse", 20, 5)).toMatchSnapshot();
 		});
 	});
 

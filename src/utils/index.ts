@@ -146,13 +146,24 @@ export {
 	renderStatStrip,
 	renderWorkflowStrip,
 	renderPRQueueStrip,
-	renderBranchNetworkStrip,
+	renderNetworkGraphStrip,
 	renderFleetStrip,
 	renderHeatmapStrip,
 	renderStripLoading,
 	renderStripError,
 	renderStripUnconfigured,
 	renderSecurityArcStrip,
+} from "./touch-strip-renderer";
+export type {
+	NetworkGraphRenderData,
+	NetworkGraphRenderBranch,
+	GridCell,
+} from "./touch-strip-renderer";
+export {
+	parseGraphGrid,
+} from "./touch-strip-renderer";
+export {
+	resolveGraphColor,
 } from "./touch-strip-renderer";
 export {
 	DebouncedUrlOpener,

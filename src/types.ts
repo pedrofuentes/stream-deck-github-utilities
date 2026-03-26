@@ -17,6 +17,8 @@ import type {
 	SecurityAlertSummary,
 	ReviewRequestedPR,
 	WorkflowInfo,
+	NetworkGraphCommit,
+	NetworkGraphTag,
 } from "./utils/github-api";
 
 // ─── GraphQL Query Coordinator Types ─────────────────────────────────
@@ -41,6 +43,7 @@ export type DataFragmentName =
 	| "workflowRuns"
 	| "commitActivity"
 	| "branchComparison"
+	| "networkCommits"
 	| "discussions"
 	| "projectsV2";
 
@@ -62,6 +65,7 @@ export type RESTFragmentName = Extract<DataFragmentName,
 	| "workflowRuns"
 	| "commitActivity"
 	| "branchComparison"
+	| "networkCommits"
 >;
 
 /** Fragments that are scoped to a repository (batched by repo) */
@@ -100,6 +104,8 @@ export interface FragmentParams {
 	headBranch?: string;
 	/** Time range for commit activity */
 	timeRange?: "24h" | "7d" | "30d";
+	/** Maximum commits for network graph (for networkCommits fragment) */
+	maxCommits?: number;
 }
 
 /** An action's subscription to data through the coordinator */
@@ -128,6 +134,7 @@ export interface CoordinatorResult {
 	workflowRuns?: WorkflowInfo;
 	commitActivity?: CommitActivityWeek[] | null;
 	branchComparison?: BranchComparison;
+	networkCommits?: { commits: NetworkGraphCommit[]; tags: NetworkGraphTag[] };
 	discussions?: DiscussionsData;
 	projectsV2?: ProjectsV2Data;
 	/** Per-fragment errors (fragment still returned if available from cache) */
@@ -341,7 +348,14 @@ export interface CommitActivitySettings extends BranchFilterSettings {
 }
 
 /** Per-action settings for the Branch Network action */
-export type BranchNetworkSettings = RepoActionSettings;
+export interface BranchNetworkSettings extends RepoActionSettings {
+	/** Graph orientation */
+	orientation?: "horizontal" | "horizontal-reverse" | "vertical";
+	/** Maximum commits to display (default: 100) */
+	maxCommits?: number;
+	/** Branching model for column assignment and colors */
+	branchModel?: "gitflow" | "simple" | "none";
+}
 
 /** Per-action settings for the Contribution Heatmap action */
 export interface ContributionHeatmapSettings extends RepoActionSettings {

@@ -103,9 +103,11 @@ Show how many commits one branch is ahead/behind another.
 
 ### Branch Network *(Stream Deck+ only)*
 
-Display a metro-map style git branch diagram on the Stream Deck+ touch strip.
+Display a real git network graph on the Stream Deck+ touch strip, powered by [`git-network-graph`](https://github.com/pedrofuentes/git-network-graph).
 
-- Scroll horizontally with the dial, hold-and-rotate for vertical pan
+- Shows actual commit topology with branch lanes, merge points, and fork connections
+- Configurable orientation (horizontal or vertical), commit depth (10–50), and graph style
+- Scroll with the dial, hold-and-rotate for cross-axis pan
 - Span 2 or 4 adjacent encoder quarters for panoramic views
 - Touch to open the GitHub network graph
 
@@ -182,7 +184,7 @@ Touch strip visualizations include:
 - **Sparklines** — trend data for repo stats and fleet monitoring
 - **Arc gauges** — security health scoring
 - **Contribution heatmaps** — 52-week grids
-- **Metro-map diagrams** — branch network visualization
+- **Real git network graphs** — commit topology visualization powered by git-network-graph
 - **Atmospheric status** — workflow status ambient glow
 
 ### Smart Property Inspector
@@ -392,7 +394,7 @@ This produces a `.streamDeckPlugin` file in the `release/` directory.
 - [x] **Branch Comparison** — Show ahead/behind counts between two branches
 - [x] **Stream Deck+ Encoder Support** — Dial/touch strip controls for Repo Stats and Workflow Status with rich visualizations (sparklines, heatmaps, status atmospheres)
 - [x] **PR Review Queue** — Show review-requested PR count with urgency gradient, browse individual PRs via dial
-- [x] **Git Branch Network** — Metro-map style branch diagram on touch strip (1, 2, or 4 quarter layouts)
+- [x] **Git Branch Network** — Real commit graph topology on touch strip powered by git-network-graph (1, 2, or 4 quarter layouts)
 - [x] **Workflow Dispatch** — Trigger workflow runs via long-touch on Stream Deck+
 - [x] **Security Health** — Arc gauge combining Dependabot + Code Scanning alerts
 - [x] **Contribution Heatmap** — 52-week GitHub contribution grid spanning the full touch strip

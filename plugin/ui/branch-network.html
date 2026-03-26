@@ -171,6 +171,35 @@
 
 	<hr />
 
+	<!-- Graph Options -->
+	<span class="sdpi-heading">Graph Options</span>
+
+	<sdpi-item label="Orientation">
+		<sdpi-select setting="orientation">
+			<option value="horizontal" selected>→ Horizontal (oldest→newest)</option>
+			<option value="horizontal-reverse">← Horizontal (newest→oldest)</option>
+			<option value="vertical">↓ Vertical (top→bottom)</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="Commits">
+		<sdpi-select setting="maxCommits">
+			<option value="100" selected>100 commits</option>
+			<option value="200">200 commits</option>
+			<option value="300">300 commits</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="Model">
+		<sdpi-select setting="branchModel">
+			<option value="gitflow" selected>Git Flow</option>
+			<option value="simple">Simple</option>
+			<option value="none">None</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<hr />
+
 	<!-- Refresh Interval -->
 	<sdpi-item label="Refresh">
 		<sdpi-select setting="refreshInterval">
@@ -190,10 +219,10 @@
 
 	<sdpi-item label="Controls">
 		<div style="font-size: 12px; color: #999; line-height: 1.6;">
-			<div><b>Rotate:</b> Scroll left/right</div>
-			<div><b>Press + Rotate:</b> Scroll up/down</div>
-			<div><b>Tap strip:</b> Open on GitHub</div>
-			<div style="margin-top: 6px; font-size: 11px; color: #666;">Place multiple instances on adjacent dials for a wider view.</div>
+			<div><b>Rotate:</b> Scroll along time axis</div>
+			<div><b>Press + Rotate:</b> Scroll across branches</div>
+			<div><b>Tap strip:</b> Open network on GitHub</div>
+			<div style="margin-top: 6px; font-size: 11px; color: #666;">Real commit graph with branch topology. Place multiple instances on adjacent dials for a wider view.</div>
 		</div>
 	</sdpi-item>
 

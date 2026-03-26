@@ -143,7 +143,7 @@ describe("Fragment Strategies", () => {
 	// ── Registry completeness ────────────────────────────────────────────
 
 	describe("Registry", () => {
-		it("should contain all 12 DataFragmentName entries", () => {
+		it("should contain all 13 DataFragmentName entries", () => {
 			const expected = [
 				"repoMetadata",
 				"prCount",
@@ -156,9 +156,10 @@ describe("Fragment Strategies", () => {
 				"workflowRuns",
 				"commitActivity",
 				"branchComparison",
+				"networkCommits",
 				"reviewRequestedPRs",
 			];
-			expect(fragmentRegistry.size).toBe(12);
+			expect(fragmentRegistry.size).toBe(13);
 			for (const name of expected) {
 				expect(fragmentRegistry.has(name as never)).toBe(true);
 			}

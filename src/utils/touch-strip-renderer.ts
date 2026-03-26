@@ -548,99 +548,300 @@ export function renderFleetStrip(
 </svg>`);
 }
 
+// ── Network Graph Types ────────────────────────────────────────────────────
+
+/** A single cell in the parsed character grid */
+export interface GridCell {
+	/** The box-drawing character (●, ○, │, ─, ╰, ╭, ╮, ╯, ├, ┤, ┴, ┬, ┼, <, >, etc.) */
+	char: string;
+	/** Hex color for this cell */
+	color: string;
+}
+
 /**
- * Render a git branch network (metro-map style) on the touch strip.
+ * Resolved render data for the network graph.
+ * Pre-computed from GitGraph + printUnicode output.
+ */
+export interface NetworkGraphRenderData {
+	/** Parsed character grid — each row is an array of cells */
+	grid: GridCell[][];
+	/** Number of character columns in the widest grid row */
+	gridCols: number;
+	/** Branch metadata with column assignments and colors */
+	branches: NetworkGraphRenderBranch[];
+}
+
+/** A branch resolved for rendering */
+export interface NetworkGraphRenderBranch {
+	name: string;
+	/** Character column where this branch's first commit dot appears */
+	column: number;
+	color: string;
+	/** Grid row index where this branch first appears */
+	firstRow: number;
+}
+
+/** Named SVG color → GitHub dark theme hex mapping */
+const SVG_COLOR_MAP: Record<string, string> = {
+	blue: "#58a6ff",
+	orange: "#d29922",
+	green: "#3fb950",
+	red: "#f85149",
+	purple: "#bc8cff",
+	turquoise: "#79c0ff",
+	gray: "#8b949e",
+};
+
+/**
+ * Resolve a git-network-graph `svgColor` name to a GitHub dark theme hex color.
+ */
+export function resolveGraphColor(svgColor: string): string {
+	return SVG_COLOR_MAP[svgColor] ?? "#8b949e";
+}
+
+// ── Grid Parsing ──────────────────────────────────────────────────────────
+
+/**
+ * Parse graph lines from `printUnicode` into a 2D character grid with colors.
  *
- * Shows branches as colored horizontal lines with commit dots, fork/merge
- * points, and branch labels. Supports contiguous rendering with an offset
- * for multi-quarter layouts.
+ * Colors are determined by which branch lane (column) each character position
+ * belongs to, since chalk may not output ANSI codes in non-TTY environments.
  *
- * @param branches - Array of branch names to visualize
- * @param offset - Horizontal pixel offset for contiguous multi-quarter rendering (default: 0)
- * @param verticalOffset - Vertical pixel offset for branch panning (default: 0)
+ * @param graphLines - Array of graph line strings from `printUnicode` (no ANSI)
+ * @param columnColors - Map of branch column index → hex color
+ * @param defaultColor - Fallback color
+ * @returns 2D grid of cells
+ */
+export function parseGraphGrid(
+	graphLines: string[],
+	columnColors: Map<number, string>,
+	defaultColor = "#8b949e",
+): GridCell[][] {
+	const grid: GridCell[][] = [];
+	for (const line of graphLines) {
+		const row: GridCell[] = [];
+		const chars = [...line]; // spread handles multi-byte unicode
+		for (let i = 0; i < chars.length; i++) {
+			const ch = chars[i];
+			// Each branch lane occupies 2 character positions in the library's output
+			const branchCol = Math.floor(i / 2);
+			const color = columnColors.get(branchCol) ?? defaultColor;
+			row.push({ char: ch, color });
+		}
+		grid.push(row);
+	}
+	return grid;
+}
+
+// ── Grid-Based SVG Renderer ───────────────────────────────────────────────
+
+/** Grid cell size in pixels */
+const GRID_CELL = 8;
+/** Padding around the grid */
+const GRID_PAD = 4;
+
+// Character classification sets
+const DOT_CHARS = new Set(["●", "\u26AB"]);
+const CIRCLE_CHARS = new Set(["○", "\u26AA"]);
+const VERT_CHARS = new Set(["│", "┃", "║"]);
+const HORIZ_CHARS = new Set(["─", "━", "═"]);
+const CORNER_BL = new Set(["└", "╰", "┗", "╚"]);
+const CORNER_TL = new Set(["┌", "╭", "┏", "╔"]);
+const CORNER_TR = new Set(["┐", "╮", "┓", "╗"]);
+const CORNER_BR = new Set(["┘", "╯", "┛", "╝"]);
+const T_RIGHT = new Set(["├", "┣", "╠"]);
+const T_LEFT = new Set(["┤", "┫", "╣"]);
+const T_UP = new Set(["┴", "┻", "╩"]);
+const T_DOWN = new Set(["┬", "┳", "╦"]);
+const CROSS_CHARS = new Set(["┼", "╋", "╬"]);
+const ARROW_CHARS = new Set(["<", ">", "⌃", "⌄"]);
+
+/**
+ * Render a git network graph on the touch strip using grid-based box-drawing primitives.
+ *
+ * Each cell in the character grid is mapped to SVG primitives that replicate
+ * the library's visual style: filled/hollow circles for commits, straight lines
+ * for connections, and quarter-arc paths for corners.
+ *
+ * @param data - Pre-resolved render data including parsed character grid
+ * @param orientation - Graph direction: "horizontal" or "vertical"
+ * @param scrollH - Horizontal scroll offset in pixels (default: 0)
+ * @param scrollV - Vertical scroll offset in pixels (default: 0)
  * @returns SVG string for touch strip pixmap
  */
-export function renderBranchNetworkStrip(
-	branches: string[],
-	offset = 0,
-	verticalOffset = 0,
+export function renderNetworkGraphStrip(
+	data: NetworkGraphRenderData,
+	orientation: "horizontal" | "horizontal-reverse" | "vertical" = "horizontal",
+	scrollH = 0,
+	scrollV = 0,
 ): string {
-	const virtualHeight = 200;
-	const mainY = virtualHeight / 2 - verticalOffset;
-	const laneH = 28;
-	const branchColors = ["#8b949e", "#58a6ff", "#3fb950", "#bc8cff", "#f85149", "#d29922", "#e3b341"];
-
-	// Generate deterministic branch layout from names
-	const mainBranch = branches.find((b) => b === "main" || b === "master") ?? branches[0] ?? "main";
-	const featureBranches = branches.filter((b) => b !== mainBranch).slice(0, 4);
+	if (data.grid.length === 0) {
+		return renderStripError("No Commits");
+	}
 
 	const svgParts: string[] = [];
+	const isHoriz = orientation === "horizontal" || orientation === "horizontal-reverse";
+	const isReverse = orientation === "horizontal-reverse";
+	const cs = GRID_CELL;
+	const half = cs / 2;
 
-	// Main branch line
-	const mainColor = branchColors[0];
-	svgParts.push(`<line x1="${0 - offset}" y1="${mainY}" x2="${400 - offset}" y2="${mainY}" stroke="${mainColor}" stroke-width="2.5" stroke-linecap="round"/>`);
-
-	// Main branch commits (evenly spaced)
-	const mainCommitCount = 8;
-	for (let i = 0; i < mainCommitCount; i++) {
-		const cx = 25 + i * 45 - offset;
-		if (cx >= -10 && cx <= 210) {
-			svgParts.push(`<circle cx="${cx}" cy="${mainY}" r="3.5" fill="${mainColor}"/>`);
+	/** Map grid (row, col) to pixel (x, y) top-left corner of the cell */
+	function pos(row: number, col: number): [number, number] {
+		if (isHoriz) {
+			const totalH = data.gridCols * cs;
+			const startY = Math.max(GRID_PAD, (HEIGHT - totalH) / 2);
+			const maxRow = data.grid.length - 1;
+			// Normal grid: row 0 = newest → reverse to put oldest at left
+			// Reversed grid: row 0 = oldest → map directly, oldest already at left
+			const xRow = isReverse ? row : maxRow - row;
+			return [GRID_PAD + xRow * cs - scrollH, startY + col * cs - scrollV];
+		} else {
+			// Vertical: grid-cols → X, rows → Y (time flows top→bottom, newest at top)
+			const totalW = data.gridCols * cs;
+			const startX = Math.max(GRID_PAD, (WIDTH - totalW) / 2);
+			return [startX + col * cs - scrollH, GRID_PAD + row * cs - scrollV];
 		}
 	}
 
-	// Feature branches
-	featureBranches.forEach((name, idx) => {
-		const color = branchColors[(idx + 1) % branchColors.length];
-		const isAbove = idx % 2 === 0;
-		const yOffset = isAbove ? -laneH * (Math.floor(idx / 2) + 1) : laneH * (Math.floor(idx / 2) + 1);
-		const branchY = mainY + yOffset;
+	function visible(x: number, y: number): boolean {
+		return x >= -cs && x <= WIDTH + cs && y >= -cs && y <= HEIGHT + cs;
+	}
 
-		// Branch start and end positions (deterministic from name hash)
-		const hash = name.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-		const startX = 40 + (hash % 80) - offset;
-		const endX = startX + 80 + (hash % 60);
-		const merged = idx < 2;
+	// Render each grid cell as SVG primitive(s)
+	// In horizontal mode, we swap axes (row→X, col→Y) AND rotate the characters
+	// 90° CCW so vertical lines become horizontal, corners rotate, etc.
+	for (let row = 0; row < data.grid.length; row++) {
+		const gridRow = data.grid[row];
+		for (let col = 0; col < gridRow.length; col++) {
+			const cell = gridRow[col];
+			if (cell.char === " " || cell.char === "") continue;
 
-		if (endX >= -20 && startX <= 220) {
-			// Fork point
-			svgParts.push(`<line x1="${startX}" y1="${mainY}" x2="${startX + 15}" y2="${branchY}" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`);
+			const [x, y] = pos(row, col);
+			if (!visible(x, y)) continue;
 
-			// Branch line
-			svgParts.push(`<line x1="${startX + 15}" y1="${branchY}" x2="${endX - (merged ? 15 : 0)}" y2="${branchY}" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`);
+			const cx = x + half; // center x
+			const cy = y + half; // center y
+			const c = cell.color;
+			const sw = "1.5";
 
-			// Commits on branch
-			const commitSpacing = 25;
-			for (let cx = startX + 25; cx < endX - 10; cx += commitSpacing) {
-				if (cx >= -10 && cx <= 210) {
-					svgParts.push(`<circle cx="${cx}" cy="${branchY}" r="3" fill="${color}"/>`);
+			// Helper: draw a line from edge to edge or edge to center
+			// Directions are in SCREEN space (after rotation for horizontal mode)
+			// In reverse horizontal mode, the column axis is mirrored, so swap top↔bot
+			const top = isReverse ? y + cs : y;
+			const bot = isReverse ? y : y + cs;
+			const lft = x;
+			const rgt = x + cs;
+
+			if (DOT_CHARS.has(cell.char)) {
+				svgParts.push(`<circle cx="${cx}" cy="${cy}" r="2.5" fill="${c}"/>`);
+			} else if (CIRCLE_CHARS.has(cell.char)) {
+				svgParts.push(`<circle cx="${cx}" cy="${cy}" r="3" fill="${STRIP_BG}" stroke="${c}" stroke-width="${sw}"/>`);
+			} else if (VERT_CHARS.has(cell.char)) {
+				// │ vertical in grid → horizontal on screen in horiz mode
+				if (isHoriz) {
+					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+				} else {
+					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
+				}
+			} else if (HORIZ_CHARS.has(cell.char)) {
+				// ─ horizontal in grid → vertical on screen in horiz mode
+				if (isHoriz) {
+					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
+				} else {
+					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+				}
+			} else if (CORNER_BL.has(cell.char)) {
+				// └ rotates CW to ┌: arc from bottom → right
+				if (isHoriz) {
+					svgParts.push(`<path d="M${cx},${bot} Q${cx},${cy} ${rgt},${cy}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
+				} else {
+					svgParts.push(`<path d="M${cx},${top} Q${cx},${cy} ${rgt},${cy}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
+				}
+			} else if (CORNER_TL.has(cell.char)) {
+				// ┌ rotates CW to ┐: arc from left → bottom
+				if (isHoriz) {
+					svgParts.push(`<path d="M${lft},${cy} Q${cx},${cy} ${cx},${bot}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
+				} else {
+					svgParts.push(`<path d="M${cx},${bot} Q${cx},${cy} ${rgt},${cy}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
+				}
+			} else if (CORNER_TR.has(cell.char)) {
+				// ┐ rotates CW to ┘: arc from left → top
+				if (isHoriz) {
+					svgParts.push(`<path d="M${lft},${cy} Q${cx},${cy} ${cx},${top}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
+				} else {
+					svgParts.push(`<path d="M${lft},${cy} Q${cx},${cy} ${cx},${bot}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
+				}
+			} else if (CORNER_BR.has(cell.char)) {
+				// ┘ rotates CW to └: arc from top → right
+				if (isHoriz) {
+					svgParts.push(`<path d="M${cx},${top} Q${cx},${cy} ${rgt},${cy}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
+				} else {
+					svgParts.push(`<path d="M${lft},${cy} Q${cx},${cy} ${cx},${top}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
+				}
+			} else if (T_RIGHT.has(cell.char)) {
+				// ├ rotates CW to ┬: horizontal + down
+				if (isHoriz) {
+					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+					svgParts.push(`<line x1="${cx}" y1="${cy}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
+				} else {
+					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
+					svgParts.push(`<line x1="${cx}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+				}
+			} else if (T_LEFT.has(cell.char)) {
+				// ┤ rotates CW to ┴: horizontal + up
+				if (isHoriz) {
+					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+				} else {
+					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
+					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${cx}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+				}
+			} else if (T_UP.has(cell.char)) {
+				// ┴ rotates CW to ├: vertical + right
+				if (isHoriz) {
+					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
+					svgParts.push(`<line x1="${cx}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+				} else {
+					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+				}
+			} else if (T_DOWN.has(cell.char)) {
+				// ┬ rotates CW to ┤: vertical + left
+				if (isHoriz) {
+					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
+					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${cx}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+				} else {
+					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+					svgParts.push(`<line x1="${cx}" y1="${cy}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
+				}
+			} else if (CROSS_CHARS.has(cell.char)) {
+				svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
+				svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
+			} else if (ARROW_CHARS.has(cell.char)) {
+				if (isHoriz) {
+					svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
+				} else {
+					svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
 				}
 			}
-
-			// Merge point (if merged)
-			if (merged && endX >= -10 && endX <= 220) {
-				svgParts.push(`<line x1="${endX - 15}" y1="${branchY}" x2="${endX}" y2="${mainY}" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`);
-				svgParts.push(`<circle cx="${endX}" cy="${mainY}" r="3.5" fill="${color}"/>`);
-				svgParts.push(`<circle cx="${endX}" cy="${mainY}" r="5.5" fill="none" stroke="#fff" stroke-width="1" stroke-opacity="0.5"/>`);
-			}
-
-			// Branch label
-			const labelX = startX + 18;
-			const labelY = isAbove ? branchY - 6 : branchY + 12;
-			if (labelX >= -30 && labelX <= 200) {
-				const safeName = escapeXml(name.length > 14 ? name.slice(0, 12) + ".." : name);
-				svgParts.push(`<rect x="${labelX - 2}" y="${labelY - 7}" width="${safeName.length * 5 + 6}" height="11" rx="2" fill="#000" fill-opacity="0.8"/>`);
-				svgParts.push(`<text x="${labelX}" y="${labelY}" fill="${color}" fill-opacity="0.7" font-size="9" font-weight="500" font-family="${FONT}">${safeName}</text>`);
-			}
 		}
-	});
+	}
 
-	// Main branch label
-	const mainLabelX = 5 - offset;
-	if (mainLabelX >= -30 && mainLabelX <= 180) {
-		const safeMain = escapeXml(mainBranch);
-		svgParts.push(`<rect x="${mainLabelX - 2}" y="${mainY - 18}" width="${safeMain.length * 5 + 8}" height="12" rx="2" fill="${mainColor}"/>`);
-		svgParts.push(`<text x="${mainLabelX + 2}" y="${mainY - 9}" fill="#000" font-size="9" font-weight="700" font-family="${FONT}">${safeMain}</text>`);
+	// Branch labels (vertical only — horizontal is too compact for labels)
+	if (!isHoriz) {
+		const labelledBranches = data.branches.filter((b) => !b.name.startsWith("tags/")).slice(0, 6);
+		for (const branch of labelledBranches) {
+			const [lx, ly] = pos(branch.firstRow, branch.column);
+			if (!visible(lx, ly)) continue;
+
+			const safeName = escapeXml(branch.name.length > 12 ? branch.name.slice(0, 10) + ".." : branch.name);
+			const textW = safeName.length * 4.5 + 6;
+			const lcx = lx + half;
+			const lcy = ly + half;
+
+			svgParts.push(`<rect x="${lcx + 6}" y="${lcy - 5}" width="${textW}" height="9" rx="2" fill="#000" fill-opacity="0.85"/>`);
+			svgParts.push(`<text x="${lcx + 8}" y="${lcy + 2}" fill="${branch.color}" fill-opacity="0.8" font-size="7" font-weight="500" font-family="${FONT}">${safeName}</text>`);
+		}
 	}
 
 	return encodeSvgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">

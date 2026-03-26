@@ -35,6 +35,7 @@ const config = {
 	output: {
 		file: `${sdPluginDir}/bin/plugin.js`,
 		format: "es",
+		inlineDynamicImports: true,
 		sourcemap: isWatch,
 		sourcemapPathTransform: (relativeSourcePath, sourcemapPath) => {
 			return url.pathToFileURL(path.resolve(path.dirname(sourcemapPath), relativeSourcePath)).href;
@@ -60,7 +61,7 @@ const config = {
 		}),
 		commonjs()
 	],
-	external: [/^node:/]
+	external: [/^node:/, "isomorphic-git"]
 };
 
 export default config;

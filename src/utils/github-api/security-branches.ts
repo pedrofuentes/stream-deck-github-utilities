@@ -21,6 +21,8 @@ import {
 	BranchComparisonResponseSchema,
 	BranchListItemSchema,
 	CommitActivityWeekSchema,
+	CommitListItemSchema,
+	TagListItemSchema,
 } from "./schemas";
 
 // ─── Security Alert APIs ────────────────────────────────────────────
@@ -149,7 +151,7 @@ export async function fetchBranchNetwork(
 	repo: string,
 	token: string,
 ): Promise<BranchInfo[]> {
-	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=10`;
+	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100`;
 	const headers = buildHeaders(token);
 
 	const response = await fetchWithRetry(url, { headers }, "fetchBranchNetwork");
@@ -289,4 +291,132 @@ export async function fetchCommitActivityWeeks(
 
 	const weeks = z.array(CommitActivityWeekSchema).parse(await response.json());
 	return weeks;
+}
+
+// ─── Network Graph Data APIs ────────────────────────────────────────────
+
+/** Commit data shaped for git-network-graph's RawCommit input */
+export interface NetworkGraphCommit {
+	oid: string;
+	parentOids: string[];
+	message: string;
+	author?: {
+		name: string;
+		email: string;
+		timestamp: number;
+		timezoneOffset: number;
+	};
+	committer?: {
+		name: string;
+		email: string;
+		timestamp: number;
+		timezoneOffset: number;
+	};
+}
+
+/** Tag data shaped for git-network-graph's RawTag input */
+export interface NetworkGraphTag {
+	name: string;
+	oid: string;
+}
+
+/**
+ * Fetches commits for the network graph visualization.
+ * Returns commits with parent OIDs, suitable for `createGitGraphFromData()`.
+ *
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param token - GitHub personal access token
+ * @param maxCount - Maximum commits to fetch (default 30)
+ * @returns Array of commits shaped for RawGraphInput
+ * @throws {GitHubApiError} on API errors
+ */
+export async function fetchCommitsForGraph(
+	owner: string,
+	repo: string,
+	token: string,
+	maxCount = 100,
+): Promise<NetworkGraphCommit[]> {
+	const allCommits: NetworkGraphCommit[] = [];
+	const perPage = Math.min(maxCount, 100);
+	let page = 1;
+
+	while (allCommits.length < maxCount) {
+		const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?per_page=${perPage}&page=${page}`;
+		const headers = buildHeaders(token);
+
+		const response = await fetchWithRetry(url, { headers }, "fetchCommitsForGraph");
+		const rateLimitInfo = parseRateLimitHeaders(response.headers);
+
+		if (!response.ok) {
+			handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
+		}
+
+		const data = z.array(CommitListItemSchema).parse(await response.json());
+		if (data.length === 0) break;
+
+		for (const c of data) {
+			if (allCommits.length >= maxCount) break;
+			const authorDate = c.commit.author?.date;
+			const committerDate = c.commit.committer?.date;
+			allCommits.push({
+				oid: c.sha,
+				parentOids: c.parents.map((p) => p.sha),
+				message: c.commit.message,
+				author: c.commit.author
+					? {
+						name: c.commit.author.name,
+						email: "",
+						timestamp: authorDate ? Math.floor(new Date(authorDate).getTime() / 1000) : 0,
+						timezoneOffset: 0,
+					}
+					: undefined,
+				committer: c.commit.committer
+					? {
+						name: c.commit.committer.name,
+						email: "",
+						timestamp: committerDate ? Math.floor(new Date(committerDate).getTime() / 1000) : 0,
+						timezoneOffset: 0,
+					}
+					: undefined,
+			});
+		}
+
+		if (data.length < perPage) break;
+		page++;
+	}
+
+	return allCommits;
+}
+
+/**
+ * Fetches tags for the network graph visualization.
+ * Returns tag names with their commit SHAs, suitable for `createGitGraphFromData()`.
+ *
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param token - GitHub personal access token
+ * @returns Array of tags shaped for RawGraphInput
+ * @throws {GitHubApiError} on API errors
+ */
+export async function fetchTagsForGraph(
+	owner: string,
+	repo: string,
+	token: string,
+): Promise<NetworkGraphTag[]> {
+	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/tags?per_page=20`;
+	const headers = buildHeaders(token);
+
+	const response = await fetchWithRetry(url, { headers }, "fetchTagsForGraph");
+	const rateLimitInfo = parseRateLimitHeaders(response.headers);
+
+	if (!response.ok) {
+		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
+	}
+
+	const data = z.array(TagListItemSchema).parse(await response.json());
+	return data.map((t) => ({
+		name: t.name,
+		oid: t.commit.sha,
+	}));
 }
