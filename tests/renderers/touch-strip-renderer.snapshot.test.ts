@@ -228,29 +228,15 @@ describe("Touch strip renderer snapshots", () => {
 			expect(renderNetworkGraphStrip({ grid: [], gridCols: 0, branches: [] })).toMatchSnapshot();
 		});
 
-		// Reversed grid: columns mirrored, rows in oldest-first order
-		const reversedBranchingData: NetworkGraphRenderData = {
-			grid: [
-				[{ char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: "●", color: "#58a6ff" }],
-				[{ char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: "●", color: "#58a6ff" }],
-				[{ char: " ", color: "#f85149" }, { char: "╯", color: "#f85149" }, { char: "─", color: "#f85149" }, { char: "├", color: "#58a6ff" }],
-				[{ char: " ", color: "#f85149" }, { char: "●", color: "#f85149" }, { char: " ", color: "#8b949e" }, { char: "│", color: "#58a6ff" }],
-				[{ char: " ", color: "#f85149" }, { char: "╮", color: "#f85149" }, { char: "<", color: "#f85149" }, { char: "○", color: "#58a6ff" }],
-				[{ char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: "●", color: "#58a6ff" }],
-			],
-			gridCols: 4,
-			branches: [
-				{ name: "main", column: 3, color: "#58a6ff", firstRow: 0 },
-				{ name: "feature", column: 1, color: "#f85149", firstRow: 3 },
-			],
-		};
+		// Reverse mode uses the same normal grid — reverseCommitOrder is always false.
+		// The renderer handles direction via CCW coordinate mapping.
 
 		it("horizontal-reverse branching history", () => {
-			expect(renderNetworkGraphStrip(reversedBranchingData, "horizontal-reverse")).toMatchSnapshot();
+			expect(renderNetworkGraphStrip(branchingData, "horizontal-reverse")).toMatchSnapshot();
 		});
 
 		it("horizontal-reverse with scroll offset", () => {
-			expect(renderNetworkGraphStrip(reversedBranchingData, "horizontal-reverse", 20, 5)).toMatchSnapshot();
+			expect(renderNetworkGraphStrip(branchingData, "horizontal-reverse", 20, 5)).toMatchSnapshot();
 		});
 	});
 

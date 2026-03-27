@@ -130,94 +130,65 @@ describe("renderNetworkGraphStrip", () => {
 	// ── Horizontal-reverse orientation tests ──────────────────────────────
 
 	describe("horizontal-reverse orientation", () => {
-		// Reversed grid: columns mirrored, rows in oldest-first order
-		// Mirrors the output of printUnicode with reverseCommitOrder: true
+		// With the correct CCW approach, the renderer receives the same normal
+		// grid for both orientations (reverseCommitOrder is always false).
+		// CCW = CW(180°(char)): the renderer remaps corner/T-junction character
+		// sets and uses CCW coordinate mapping (xRow=row, yCol=gridCols-1-col).
 		//
-		// Normal grid (newest first):         Reversed grid (oldest first):
-		//   row0: ●  .  .  .                    row0: .  .  .  ●
-		//   row1: ○  <  ╮  .                    row4: .  ╮  <  ○
-		//   row2: │  .  ●  .                    row3: .  ●  .  │
-		//   row3: ├  ─  ╯  .                    row2: .  ╯  ─  ├
-		//   row4: ●  .  .  .                    row1: .  .  .  ●
-
-		const reversedBranchingData: NetworkGraphRenderData = {
-			grid: [
-				[{ char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: "●", color: "#58a6ff" }],
-				[{ char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: "●", color: "#58a6ff" }],
-				[{ char: " ", color: "#f85149" }, { char: "╯", color: "#f85149" }, { char: "─", color: "#f85149" }, { char: "├", color: "#58a6ff" }],
-				[{ char: " ", color: "#f85149" }, { char: "●", color: "#f85149" }, { char: " ", color: "#8b949e" }, { char: "│", color: "#58a6ff" }],
-				[{ char: " ", color: "#f85149" }, { char: "╮", color: "#f85149" }, { char: "<", color: "#f85149" }, { char: "○", color: "#58a6ff" }],
-				[{ char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: "●", color: "#58a6ff" }],
-			],
-			gridCols: 4,
-			branches: [
-				{ name: "main", column: 3, color: "#58a6ff", firstRow: 0 },
-				{ name: "feature", column: 1, color: "#f85149", firstRow: 3 },
-			],
-		};
+		// Normal (CW):  row 0 (newest) at right, col 0 at top
+		// Reverse (CCW): row 0 (newest) at left,  col 0 at bottom
 
 		it("renders valid SVG for horizontal-reverse", () => {
-			const svg = decodeSvg(renderNetworkGraphStrip(reversedBranchingData, "horizontal-reverse"));
+			const svg = decodeSvg(renderNetworkGraphStrip(branchingData, "horizontal-reverse"));
 			expect(svg).toContain("<svg");
 			expect(svg).toContain("<circle");
 			expect(svg).toContain("<path");
 			expect(svg).toContain("<line");
 		});
 
-		it("flips vertical direction of corners compared to normal horizontal", () => {
-			// The ╮ corner in normal horizontal arcs from left→bottom (CW rotation).
-			// In reverse, the same ╮ char must arc from left→TOP (top↔bot swapped).
-			// We verify by checking that the path endpoints differ between modes.
+		it("CCW produces different geometry than CW for corners", () => {
 			const normalSvg = decodeSvg(renderNetworkGraphStrip(branchingData, "horizontal"));
-			const reverseSvg = decodeSvg(renderNetworkGraphStrip(reversedBranchingData, "horizontal-reverse"));
+			const reverseSvg = decodeSvg(renderNetworkGraphStrip(branchingData, "horizontal-reverse"));
 
-			// Both should contain path elements (corners)
-			expect(normalSvg).toContain("<path");
-			expect(reverseSvg).toContain("<path");
-
-			// Extract all path d attributes from each SVG
 			const normalPaths = [...normalSvg.matchAll(/d="([^"]+)"/g)].map(m => m[1]);
 			const reversePaths = [...reverseSvg.matchAll(/d="([^"]+)"/g)].map(m => m[1]);
 
-			// The path curves must NOT be identical — they are vertically mirrored
 			expect(normalPaths.length).toBeGreaterThan(0);
 			expect(reversePaths.length).toBeGreaterThan(0);
-			// At least one path should differ (vertical flip changes Q control point)
+			// Paths must differ — different rotation produces different arc directions
 			const allIdentical = normalPaths.every((p, i) => reversePaths[i] === p);
 			expect(allIdentical).toBe(false);
 		});
 
-		it("T-junction ├ points in opposite vertical direction in reverse vs normal", () => {
-			// In normal horizontal, ├ rotates CW to ┬: horizontal + stem DOWN
-			// In reverse horizontal, ├ should have stem UP (top↔bot swapped)
+		it("CCW produces different T-junction geometry than CW", () => {
 			const normalSvg = decodeSvg(renderNetworkGraphStrip(branchingData, "horizontal"));
-			const reverseSvg = decodeSvg(renderNetworkGraphStrip(reversedBranchingData, "horizontal-reverse"));
+			const reverseSvg = decodeSvg(renderNetworkGraphStrip(branchingData, "horizontal-reverse"));
 
-			// Extract all line elements from each
 			const normalLines = [...normalSvg.matchAll(/<line[^/]*\/>/g)].map(m => m[0]);
 			const reverseLines = [...reverseSvg.matchAll(/<line[^/]*\/>/g)].map(m => m[0]);
 
-			// Both should have line elements (connections + T-junction stems)
 			expect(normalLines.length).toBeGreaterThan(0);
 			expect(reverseLines.length).toBeGreaterThan(0);
+			// Lines should differ — different rotation changes junction stem direction
+			const allIdentical = normalLines.every((l, i) => reverseLines[i] === l);
+			expect(allIdentical).toBe(false);
 		});
 
-		it("does not reverse row order for horizontal-reverse (oldest stays at left)", () => {
-			// Row 0 should map to leftmost X position (not rightmost)
-			// The first commit dot (row 0) should be at a small X coordinate
-			const svg = decodeSvg(renderNetworkGraphStrip(reversedBranchingData, "horizontal-reverse"));
+		it("places newest commits at left for horizontal-reverse", () => {
+			// Row 0 = newest (reverseCommitOrder is always false).
+			// CCW maps xRow = row, so row 0 (newest) → leftmost X position.
+			const svg = decodeSvg(renderNetworkGraphStrip(branchingData, "horizontal-reverse"));
 
-			// Extract circle cx values
 			const circles = [...svg.matchAll(/cx="([^"]+)"/g)].map(m => parseFloat(m[1]));
 			expect(circles.length).toBeGreaterThan(0);
 
-			// The minimum cx should be near the left edge (GRID_PAD + half = 8)
+			// Minimum cx should be near the left edge (GRID_PAD + half = 8)
 			const minCx = Math.min(...circles);
 			expect(minCx).toBeLessThan(20);
 		});
 
 		it("does not render labels in horizontal-reverse mode", () => {
-			const svg = decodeSvg(renderNetworkGraphStrip(reversedBranchingData, "horizontal-reverse"));
+			const svg = decodeSvg(renderNetworkGraphStrip(branchingData, "horizontal-reverse"));
 			expect(svg).not.toContain("main");
 			expect(svg).not.toContain("feature");
 		});

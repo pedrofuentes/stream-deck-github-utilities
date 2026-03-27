@@ -656,12 +656,47 @@ const T_DOWN = new Set(["┬", "┳", "╦"]);
 const CROSS_CHARS = new Set(["┼", "╋", "╬"]);
 const ARROW_CHARS = new Set(["<", ">", "⌃", "⌄"]);
 
+/** 180° rotation character map — swaps opposite corner and T-junction pairs */
+const ROTATE_180: Record<string, string> = {
+	"└": "┐", "╰": "╮", "┗": "┓", "╚": "╗",
+	"┐": "└", "╮": "╰", "┓": "┗", "╗": "╚",
+	"┌": "┘", "╭": "╯", "┏": "┛", "╔": "╝",
+	"┘": "┌", "╯": "╭", "┛": "┏", "╝": "╔",
+	"├": "┤", "┣": "┫", "╠": "╣",
+	"┤": "├", "┫": "┣", "╣": "╠",
+	"┬": "┴", "┳": "┻", "╦": "╩",
+	"┴": "┬", "┻": "┳", "╩": "╦",
+	"<": ">", ">": "<",
+};
+
+/**
+ * Rotate a grid 180° — reverse row order, reverse column order, remap characters.
+ * Used for CCW rendering: CCW rotation = CW rotation applied to a 180°-rotated grid.
+ */
+export function rotateGrid180(grid: GridCell[][], gridCols: number): GridCell[][] {
+	const spaceCell: GridCell = { char: " ", color: "#8b949e" };
+	const padded = grid.map(row => {
+		const result = [...row];
+		while (result.length < gridCols) result.push({ ...spaceCell });
+		return result;
+	});
+	return padded.reverse().map(row =>
+		[...row].reverse().map(cell => ({
+			char: ROTATE_180[cell.char] ?? cell.char,
+			color: cell.color,
+		})),
+	);
+}
+
 /**
  * Render a git network graph on the touch strip using grid-based box-drawing primitives.
  *
  * Each cell in the character grid is mapped to SVG primitives that replicate
  * the library's visual style: filled/hollow circles for commits, straight lines
  * for connections, and quarter-arc paths for corners.
+ *
+ * For reverse mode (CCW), the grid is pre-rotated 180° and then rendered with
+ * the standard CW code. This matches the library's approach: CCW = CW(180°(grid)).
  *
  * @param data - Pre-resolved render data including parsed character grid
  * @param orientation - Graph direction: "horizontal" or "horizontal-reverse"
@@ -680,18 +715,20 @@ export function renderNetworkGraphStrip(
 	}
 
 	const svgParts: string[] = [];
-	const isReverse = orientation === "horizontal-reverse";
 	const cs = GRID_CELL;
 	const half = cs / 2;
 
-	/** Map grid (row, col) to pixel (x, y) top-left corner of the cell */
+	// For CCW (reverse), pre-rotate grid 180°. Combined with the CW coordinate
+	// mapping below, this produces correct CCW output with zero branching.
+	const grid = orientation === "horizontal-reverse"
+		? rotateGrid180(data.grid, data.gridCols) : data.grid;
+
+	/** Map grid (row, col) to pixel (x, y) — always CW: row→X reversed, col→Y direct */
 	function pos(row: number, col: number): [number, number] {
 		const totalH = data.gridCols * cs;
 		const startY = Math.max(GRID_PAD, (HEIGHT - totalH) / 2);
-		const maxRow = data.grid.length - 1;
-		// Normal grid: row 0 = newest → reverse to put oldest at left
-		// Reversed grid: row 0 = oldest → map directly, oldest already at left
-		const xRow = isReverse ? row : maxRow - row;
+		const maxRow = grid.length - 1;
+		const xRow = maxRow - row;
 		return [GRID_PAD + xRow * cs - scrollH, startY + col * cs - scrollV];
 	}
 
@@ -699,11 +736,9 @@ export function renderNetworkGraphStrip(
 		return x >= -cs && x <= WIDTH + cs && y >= -cs && y <= HEIGHT + cs;
 	}
 
-	// Render each grid cell as SVG primitive(s)
-	// In horizontal mode, we swap axes (row→X, col→Y) AND rotate the characters
-	// 90° CCW so vertical lines become horizontal, corners rotate, etc.
-	for (let row = 0; row < data.grid.length; row++) {
-		const gridRow = data.grid[row];
+	// Render each grid cell as its CW-rotated SVG primitive
+	for (let row = 0; row < grid.length; row++) {
+		const gridRow = grid[row];
 		for (let col = 0; col < gridRow.length; col++) {
 			const cell = gridRow[col];
 			if (cell.char === " " || cell.char === "") continue;
@@ -716,11 +751,8 @@ export function renderNetworkGraphStrip(
 			const c = cell.color;
 			const sw = "1.5";
 
-			// Helper: draw a line from edge to edge or edge to center
-			// Directions are in SCREEN space (after rotation for horizontal mode)
-			// In reverse horizontal mode, the column axis is mirrored, so swap top↔bot
-			const top = isReverse ? y + cs : y;
-			const bot = isReverse ? y : y + cs;
+			const top = y;
+			const bot = y + cs;
 			const lft = x;
 			const rgt = x + cs;
 
@@ -729,10 +761,10 @@ export function renderNetworkGraphStrip(
 			} else if (CIRCLE_CHARS.has(cell.char)) {
 				svgParts.push(`<circle cx="${cx}" cy="${cy}" r="3" fill="${STRIP_BG}" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (VERT_CHARS.has(cell.char)) {
-				// │ vertical in grid → horizontal on screen in horiz mode
+				// │ vertical in grid → horizontal on screen
 				svgParts.push(`<line x1="${lft}" y1="${cy}" x2="${rgt}" y2="${cy}" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (HORIZ_CHARS.has(cell.char)) {
-				// ─ horizontal in grid → vertical on screen in horiz mode
+				// ─ horizontal in grid → vertical on screen
 				svgParts.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bot}" stroke="${c}" stroke-width="${sw}"/>`);
 			} else if (CORNER_BL.has(cell.char)) {
 				// └ rotates CW to ┌: arc from bottom → right

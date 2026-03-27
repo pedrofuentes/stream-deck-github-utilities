@@ -56,14 +56,16 @@ const MIN_REFRESH_INTERVAL = 30;
  * @param model - Branching model name
  * @returns Configured settings for the graph library
  */
-function buildGraphSettings(model: "gitflow" | "simple" | "none" = "gitflow", reverse = false): GraphSettings {
+function buildGraphSettings(model: "gitflow" | "simple" | "none" = "gitflow"): GraphSettings {
 	const modelMap: Record<string, BranchSettingsDef> = {
 		gitflow: BranchSettingsDef.gitFlow(),
 		simple: BranchSettingsDef.simple(),
 		none: BranchSettingsDef.none(),
 	};
 	return {
-		reverseCommitOrder: reverse,
+		// Always false — the renderer handles horizontal direction via CW/CCW
+		// coordinate mapping, matching the library's printSvgHorizontal approach.
+		reverseCommitOrder: false,
 		debug: false,
 		compact: true,
 		colored: false,
@@ -388,8 +390,7 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 				tags,
 			};
 
-			const isReverse = (settings.orientation ?? "horizontal") === "horizontal-reverse";
-			const graphSettings = buildGraphSettings(settings.branchModel ?? "gitflow", isReverse);
+			const graphSettings = buildGraphSettings(settings.branchModel ?? "gitflow");
 			const graph = createGitGraphFromData(graphInput, graphSettings);
 			const renderData = resolveRenderData(graph, graphSettings);
 
