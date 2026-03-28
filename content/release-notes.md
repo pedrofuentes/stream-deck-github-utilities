@@ -4,6 +4,24 @@
   Character limit per entry: 1,500
 -->
 
+## v2.3.0
+<!-- Characters: ~680 / 1,500 -->
+
+Branch Network overhaul — now powered by the `git-network-graph` library for accurate commit topology rendering.
+
+**Branch Network Improvements:**
+- **Real graph topology** — replaced the previous renderer with the `git-network-graph` library for accurate branch lanes, merge points, and fork connections
+- **Reverse orientation fixed** — newest→oldest mode now renders correctly using 180° grid pre-rotation (matching the library's own CCW approach)
+- **Branch model selector** — choose Git Flow, Simple, or None to control how branches are prioritized and colored
+- **Increased commit depth** — now supports 100, 200, or 300 commits (up from 10–50)
+
+**Under the Hood:**
+- Grid-based SVG renderer with CW/CCW rotation support
+- Zod runtime validation for GitHub API responses
+- Comprehensive test coverage for rotation and rendering (1,617 tests)
+
+---
+
 ## v2.2.1
 <!-- Characters: ~480 / 1,500 -->
 

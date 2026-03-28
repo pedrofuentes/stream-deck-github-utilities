@@ -1,6 +1,6 @@
 <!-- 
   Marketplace Description — Stream Deck GitHub Utilities
-  Last Updated: v2.2.4
+  Last Updated: v2.3.0
   Character Limit: 4,000
   Current Count: ~4,000 characters
 -->
@@ -73,8 +73,11 @@ See how branches diverge with ahead/behind counts and color-coded status.
 
 ## 🌐 Branch Network *(SD+ only)*
 
-A metro-map style git branch diagram rendered live on the touch strip.
+A real git network graph rendered live on the touch strip, powered by `git-network-graph`.
 
+- Orientation: oldest→newest or newest→oldest
+- Commit depth: 100, 200, or 300 commits
+- Branch model: Git Flow, Simple, or None
 - Scroll horizontally and vertically with the dial
 
 ---

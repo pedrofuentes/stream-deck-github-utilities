@@ -3,7 +3,7 @@
 A [Stream Deck](https://www.elgato.com/stream-deck) plugin that provides utilities to display information from GitHub directly on your Stream Deck device.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.2.4-blue.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities/releases)
+[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities/releases)
 [![Tests](https://img.shields.io/badge/tests-1562%20passed-brightgreen.svg)](https://github.com/pedrofuentes/stream-deck-github-utilities)
 
 ## Overview
@@ -106,7 +106,8 @@ Show how many commits one branch is ahead/behind another.
 Display a real git network graph on the Stream Deck+ touch strip, powered by [`git-network-graph`](https://github.com/pedrofuentes/git-network-graph).
 
 - Shows actual commit topology with branch lanes, merge points, and fork connections
-- Configurable orientation (oldest→newest or newest→oldest), commit depth (10–50), and graph style
+- Configurable orientation: oldest→newest or newest→oldest (horizontal-reverse)
+- Configurable commit depth (100, 200, or 300 commits) and branch model (Git Flow, Simple, or None)
 - Scroll with the dial, hold-and-rotate for cross-axis pan
 - Span 2 or 4 adjacent encoder quarters for panoramic views
 - Touch to open the GitHub network graph

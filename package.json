@@ -1,69 +1,69 @@
 {
-  "name": "stream-deck-github-utilities",
-  "version": "2.2.4",
-  "description": "Stream Deck plugin providing utilities to display information from GitHub",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "build": "rollup -c",
-    "watch": "npm run build && streamdeck restart com.pedrofuentes.github-utilities && rollup -c -w --watch.onEnd=\"streamdeck restart com.pedrofuentes.github-utilities\"",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "lint": "eslint src/ --ext .ts",
-    "lint:fix": "eslint src/ --ext .ts --fix",
-    "validate": "streamdeck validate release/com.pedrofuentes.github-utilities.sdPlugin",
-    "pack": "npm run build && npm run test && streamdeck pack release/com.pedrofuentes.github-utilities.sdPlugin --output release/",
-    "prepack": "npm run validate",
-    "streamdeck:link": "streamdeck link release/com.pedrofuentes.github-utilities.sdPlugin",
-    "streamdeck:unlink": "streamdeck unlink release/com.pedrofuentes.github-utilities.sdPlugin",
-    "streamdeck:restart": "streamdeck restart com.pedrofuentes.github-utilities",
-    "streamdeck:stop": "streamdeck stop com.pedrofuentes.github-utilities",
-    "streamdeck:validate": "streamdeck validate release/com.pedrofuentes.github-utilities.sdPlugin",
-    "streamdeck:pack": "npm run build && streamdeck pack release/com.pedrofuentes.github-utilities.sdPlugin --output release/",
-    "content:assets": "npx tsx scripts/convert-content-assets.ts",
-    "streamdeck:dev": "streamdeck dev",
-    "streamdeck:dev:disable": "streamdeck dev --disable"
-  },
-  "keywords": [
-    "stream-deck",
-    "elgato",
-    "github",
-    "plugin",
-    "utilities"
-  ],
-  "author": "Pedro Pablo Fuentes Schuster",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/pedrofuentes/stream-deck-github-utilities.git"
-  },
-  "bugs": {
-    "url": "https://github.com/pedrofuentes/stream-deck-github-utilities/issues"
-  },
-  "homepage": "https://github.com/pedrofuentes/stream-deck-github-utilities#readme",
-  "dependencies": {
-    "@elgato/streamdeck": "^2.0.0",
-    "git-network-graph": "^0.1.7",
-    "zod": "^4.3.6"
-  },
-  "devDependencies": {
-    "@resvg/resvg-js": "^2.6.2",
-    "@rollup/plugin-commonjs": "^29.0.0",
-    "@rollup/plugin-node-resolve": "^16.0.0",
-    "@rollup/plugin-typescript": "^12.1.0",
-    "@types/node": "^20.11.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@vitest/coverage-v8": "^3.0.0",
-    "eslint": "^9.0.0",
-    "rollup": "^4.59.0",
-    "tslib": "^2.6.0",
-    "tsx": "^4.21.0",
-    "typescript": "^5.3.0",
-    "vitest": "^3.0.0"
-  },
-  "engines": {
-    "node": ">=20.0.0"
-  }
+	"name": "stream-deck-github-utilities",
+	"version": "2.3.0",
+	"description": "Stream Deck plugin providing utilities to display information from GitHub",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "rollup -c",
+		"watch": "npm run build && streamdeck restart com.pedrofuentes.github-utilities && rollup -c -w --watch.onEnd=\"streamdeck restart com.pedrofuentes.github-utilities\"",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:coverage": "vitest run --coverage",
+		"lint": "eslint src/ --ext .ts",
+		"lint:fix": "eslint src/ --ext .ts --fix",
+		"validate": "streamdeck validate release/com.pedrofuentes.github-utilities.sdPlugin",
+		"pack": "npm run build && npm run test && streamdeck pack release/com.pedrofuentes.github-utilities.sdPlugin --output release/",
+		"prepack": "npm run validate",
+		"streamdeck:link": "streamdeck link release/com.pedrofuentes.github-utilities.sdPlugin",
+		"streamdeck:unlink": "streamdeck unlink release/com.pedrofuentes.github-utilities.sdPlugin",
+		"streamdeck:restart": "streamdeck restart com.pedrofuentes.github-utilities",
+		"streamdeck:stop": "streamdeck stop com.pedrofuentes.github-utilities",
+		"streamdeck:validate": "streamdeck validate release/com.pedrofuentes.github-utilities.sdPlugin",
+		"streamdeck:pack": "npm run build && streamdeck pack release/com.pedrofuentes.github-utilities.sdPlugin --output release/",
+		"content:assets": "npx tsx scripts/convert-content-assets.ts",
+		"streamdeck:dev": "streamdeck dev",
+		"streamdeck:dev:disable": "streamdeck dev --disable"
+	},
+	"keywords": [
+		"stream-deck",
+		"elgato",
+		"github",
+		"plugin",
+		"utilities"
+	],
+	"author": "Pedro Pablo Fuentes Schuster",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/pedrofuentes/stream-deck-github-utilities.git"
+	},
+	"bugs": {
+		"url": "https://github.com/pedrofuentes/stream-deck-github-utilities/issues"
+	},
+	"homepage": "https://github.com/pedrofuentes/stream-deck-github-utilities#readme",
+	"dependencies": {
+		"@elgato/streamdeck": "^2.0.0",
+		"git-network-graph": "^0.1.7",
+		"zod": "^4.3.6"
+	},
+	"devDependencies": {
+		"@resvg/resvg-js": "^2.6.2",
+		"@rollup/plugin-commonjs": "^29.0.0",
+		"@rollup/plugin-node-resolve": "^16.0.0",
+		"@rollup/plugin-typescript": "^12.1.0",
+		"@types/node": "^20.11.0",
+		"@typescript-eslint/eslint-plugin": "^8.0.0",
+		"@typescript-eslint/parser": "^8.0.0",
+		"@vitest/coverage-v8": "^3.0.0",
+		"eslint": "^9.0.0",
+		"rollup": "^4.59.0",
+		"tslib": "^2.6.0",
+		"tsx": "^4.21.0",
+		"typescript": "^5.3.0",
+		"vitest": "^3.0.0"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	}
 }
