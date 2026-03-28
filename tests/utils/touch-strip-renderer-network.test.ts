@@ -9,8 +9,9 @@ import { describe, it, expect } from "vitest";
 import {
 	renderNetworkGraphStrip,
 	resolveGraphColor,
+	rotateGrid180,
 } from "../../src/utils/touch-strip-renderer";
-import type { NetworkGraphRenderData } from "../../src/utils/touch-strip-renderer";
+import type { NetworkGraphRenderData, GridCell } from "../../src/utils/touch-strip-renderer";
 
 function decodeSvg(dataUri: string): string {
 	return decodeURIComponent(dataUri.replace(/^data:image\/svg\+xml,/, ""));
@@ -192,5 +193,281 @@ describe("renderNetworkGraphStrip", () => {
 			expect(svg).not.toContain("main");
 			expect(svg).not.toContain("feature");
 		});
+	});
+
+	// ── Reverse with additional character types ───────────────────────────
+
+	describe("horizontal-reverse with T_DOWN and CROSS characters", () => {
+		const complexData: NetworkGraphRenderData = {
+			grid: [
+				[{ char: "●", color: "#58a6ff" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#f85149" }],
+				[{ char: "┼", color: "#58a6ff" }, { char: "─", color: "#f85149" }, { char: "┬", color: "#f85149" }, { char: " ", color: "#f85149" }],
+				[{ char: "│", color: "#58a6ff" }, { char: " ", color: "#8b949e" }, { char: "●", color: "#f85149" }, { char: " ", color: "#f85149" }],
+				[{ char: "●", color: "#58a6ff" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#f85149" }],
+			],
+			gridCols: 4,
+			branches: [
+				{ name: "main", column: 0, color: "#58a6ff", firstRow: 0 },
+				{ name: "feature", column: 2, color: "#f85149", firstRow: 2 },
+			],
+		};
+
+		it("renders ┬ and ┼ correctly in reverse mode", () => {
+			const svg = decodeSvg(renderNetworkGraphStrip(complexData, "horizontal-reverse"));
+			expect(svg).toContain("<svg");
+			expect(svg).toContain("<circle");
+			expect(svg).toContain("<line");
+		});
+
+		it("produces different SVG for reverse vs normal with ┬/┼", () => {
+			const normalSvg = decodeSvg(renderNetworkGraphStrip(complexData, "horizontal"));
+			const reverseSvg = decodeSvg(renderNetworkGraphStrip(complexData, "horizontal-reverse"));
+			expect(normalSvg).not.toBe(reverseSvg);
+		});
+	});
+
+	// ── Reverse with linear graph ────────────────────────────────────────
+
+	describe("horizontal-reverse with linear graph", () => {
+		it("reverses commit order on single-lane linear graph", () => {
+			const normalSvg = decodeSvg(renderNetworkGraphStrip(linearData, "horizontal"));
+			const reverseSvg = decodeSvg(renderNetworkGraphStrip(linearData, "horizontal-reverse"));
+
+			// Both should have the same number of circles (same commits)
+			const normalCircles = [...normalSvg.matchAll(/<circle/g)].length;
+			const reverseCircles = [...reverseSvg.matchAll(/<circle/g)].length;
+			expect(normalCircles).toBe(reverseCircles);
+
+			// The full SVGs differ — cy values change due to column inversion
+			expect(normalSvg).not.toBe(reverseSvg);
+		});
+	});
+
+	// ── Reverse with uneven row lengths ──────────────────────────────────
+
+	describe("horizontal-reverse with uneven rows", () => {
+		const unevenData: NetworkGraphRenderData = {
+			grid: [
+				[{ char: "●", color: "#58a6ff" }, { char: " ", color: "#8b949e" }],
+				[{ char: "├", color: "#58a6ff" }, { char: "─", color: "#f85149" }, { char: "╮", color: "#f85149" }, { char: " ", color: "#f85149" }],
+				[{ char: "●", color: "#58a6ff" }],
+			],
+			gridCols: 4,
+			branches: [
+				{ name: "main", column: 0, color: "#58a6ff", firstRow: 0 },
+			],
+		};
+
+		it("handles rows shorter than gridCols in reverse mode", () => {
+			const svg = decodeSvg(renderNetworkGraphStrip(unevenData, "horizontal-reverse"));
+			expect(svg).toContain("<svg");
+			expect(svg).toContain("<circle");
+			// Should not crash or produce malformed SVG
+			expect(svg).toContain("</svg>");
+		});
+	});
+});
+
+// ── rotateGrid180 ─────────────────────────────────────────────────────────
+
+describe("rotateGrid180", () => {
+	function cell(ch: string, color = "#fff"): GridCell {
+		return { char: ch, color };
+	}
+
+	it("reverses row order", () => {
+		const grid = [
+			[cell("●"), cell(" ")],
+			[cell("│"), cell(" ")],
+			[cell("○"), cell(" ")],
+		];
+		const rotated = rotateGrid180(grid, 2);
+		// Row 0 was ● → now should be last after reversal + col reversal
+		// After 180°: row order reversed (○,│,●), then each row reversed
+		expect(rotated[0][1].char).toBe("○");
+		expect(rotated[1][1].char).toBe("│");
+		expect(rotated[2][1].char).toBe("●");
+	});
+
+	it("reverses column order within each row", () => {
+		const grid = [
+			[cell("A"), cell("B"), cell("C")],
+		];
+		const rotated = rotateGrid180(grid, 3);
+		expect(rotated[0][0].char).toBe("C");
+		expect(rotated[0][1].char).toBe("B");
+		expect(rotated[0][2].char).toBe("A");
+	});
+
+	it("remaps all corner pairs (BL↔TR)", () => {
+		const grid = [
+			[cell("└"), cell("╰"), cell("┗"), cell("╚")],
+			[cell("┐"), cell("╮"), cell("┓"), cell("╗")],
+		];
+		const rotated = rotateGrid180(grid, 4);
+		// After 180° rows are reversed, cols reversed, chars remapped
+		// Row 0 (was row 1: ┐╮┓╗ → remapped: └╰┗╚, reversed: ╚┗╰└)
+		expect(rotated[0].map(c => c.char)).toEqual(["╚", "┗", "╰", "└"]);
+		// Row 1 (was row 0: └╰┗╚ → remapped: ┐╮┓╗, reversed: ╗┓╮┐)
+		expect(rotated[1].map(c => c.char)).toEqual(["╗", "┓", "╮", "┐"]);
+	});
+
+	it("remaps all corner pairs (TL↔BR)", () => {
+		const grid = [
+			[cell("┌"), cell("╭"), cell("┏"), cell("╔")],
+			[cell("┘"), cell("╯"), cell("┛"), cell("╝")],
+		];
+		const rotated = rotateGrid180(grid, 4);
+		// Row 0 (was row 1: ┘╯┛╝ → remapped: ┌╭┏╔, reversed: ╔┏╭┌)
+		expect(rotated[0].map(c => c.char)).toEqual(["╔", "┏", "╭", "┌"]);
+		// Row 1 (was row 0: ┌╭┏╔ → remapped: ┘╯┛╝, reversed: ╝┛╯┘)
+		expect(rotated[1].map(c => c.char)).toEqual(["╝", "┛", "╯", "┘"]);
+	});
+
+	it("remaps T-junction pairs (RIGHT↔LEFT, DOWN↔UP)", () => {
+		const grid = [
+			[cell("├"), cell("┤"), cell("┬"), cell("┴")],
+		];
+		const rotated = rotateGrid180(grid, 4);
+		// ├→┤, ┤→├, ┬→┴, ┴→┬ then reversed
+		// Remapped: ┤├┴┬, reversed: ┬┴├┤
+		expect(rotated[0].map(c => c.char)).toEqual(["┬", "┴", "├", "┤"]);
+	});
+
+	it("remaps arrow pairs", () => {
+		const grid = [[cell("<"), cell(">")]];
+		const rotated = rotateGrid180(grid, 2);
+		// < → >, > → <, reversed: < >... wait:
+		// Remap: > <, Reverse: < >
+		expect(rotated[0].map(c => c.char)).toEqual(["<", ">"]);
+	});
+
+	it("preserves symmetric characters", () => {
+		const grid = [[cell("●"), cell("○"), cell("│"), cell("─"), cell("┼")]];
+		const rotated = rotateGrid180(grid, 5);
+		// All symmetric, reversed order
+		expect(rotated[0].map(c => c.char)).toEqual(["┼", "─", "│", "○", "●"]);
+	});
+
+	it("preserves colors through rotation", () => {
+		const grid = [
+			[cell("●", "#58a6ff"), cell("╮", "#f85149")],
+		];
+		const rotated = rotateGrid180(grid, 2);
+		// Reversed: ╮ becomes ╰, ● stays ●, colors preserved
+		expect(rotated[0][0].color).toBe("#f85149");
+		expect(rotated[0][1].color).toBe("#58a6ff");
+	});
+
+	it("pads shorter rows to gridCols before rotating", () => {
+		const grid = [
+			[cell("●")],
+			[cell("│"), cell("─"), cell("╮"), cell("X")],
+		];
+		const rotated = rotateGrid180(grid, 4);
+		// Row 0 (was row 1: │─╮X → remapped: │─╰X, reversed: X╰─│)
+		expect(rotated[0].length).toBe(4);
+		expect(rotated[0][1].char).toBe("╰");
+		// Row 1 (was row 0: ●[pad][pad][pad] → remapped: ●   , reversed:    ●)
+		expect(rotated[1].length).toBe(4);
+		expect(rotated[1][3].char).toBe("●");
+		expect(rotated[1][0].char).toBe(" ");
+	});
+
+	it("returns empty array for empty grid", () => {
+		expect(rotateGrid180([], 0)).toEqual([]);
+	});
+});
+
+// ── Library-generated graph rendering ────────────────────────────────────
+
+describe("renderNetworkGraphStrip with library-generated data", () => {
+	// Use the git-network-graph library to create a real graph, then verify
+	// that both CW and CCW rendering produce valid, structurally correct SVGs.
+	// This catches issues that hand-crafted mock data might miss.
+
+	it("renders CW and CCW from library graph with same element counts", async () => {
+		const {
+			createGitGraphFromData,
+			printUnicode,
+			Characters,
+			BranchSettings,
+			BranchSettingsDef,
+			MergePatterns,
+		} = await import("git-network-graph");
+		const { parseGraphGrid, resolveGraphColor } = await import("../../src/utils/touch-strip-renderer");
+
+		const input = {
+			head: { oid: "c1", name: "main", isBranch: true },
+			commits: [
+				{ oid: "c1", parentOids: ["c2"], message: "newest", author: { name: "X", email: "x", timestamp: 1000, timezoneOffset: 0 }, committer: { name: "X", email: "x", timestamp: 1000, timezoneOffset: 0 } },
+				{ oid: "c2", parentOids: ["c4", "c3"], message: "merge", author: { name: "X", email: "x", timestamp: 900, timezoneOffset: 0 }, committer: { name: "X", email: "x", timestamp: 900, timezoneOffset: 0 } },
+				{ oid: "c3", parentOids: ["c4"], message: "feat", author: { name: "X", email: "x", timestamp: 850, timezoneOffset: 0 }, committer: { name: "X", email: "x", timestamp: 850, timezoneOffset: 0 } },
+				{ oid: "c4", parentOids: ["c5"], message: "base", author: { name: "X", email: "x", timestamp: 800, timezoneOffset: 0 }, committer: { name: "X", email: "x", timestamp: 800, timezoneOffset: 0 } },
+				{ oid: "c5", parentOids: [], message: "oldest", author: { name: "X", email: "x", timestamp: 700, timezoneOffset: 0 }, committer: { name: "X", email: "x", timestamp: 700, timezoneOffset: 0 } },
+			],
+			branches: [
+				{ name: "main", oid: "c1" },
+				{ name: "feature", oid: "c3" },
+			],
+			tags: [],
+		};
+
+		const settings = {
+			reverseCommitOrder: false,
+			debug: false,
+			compact: true,
+			colored: false,
+			includeRemote: false,
+			format: { type: "OneLine" as const },
+			wrapping: null,
+			characters: Characters.round(),
+			branchOrder: { type: "ShortestFirst" as const, forward: true },
+			branches: BranchSettings.from(BranchSettingsDef.gitFlow()),
+			mergePatterns: MergePatterns.default(),
+		};
+
+		const graph = createGitGraphFromData(input, settings);
+		const [graphLines] = printUnicode(graph, settings);
+		const cleanLines = graphLines.map((line: string) => line.replace(/\x1b\[[0-9;]*m/g, ""));
+
+		// Build color map from graph
+		const columnColors = new Map<number, string>();
+		for (const branch of graph.allBranches) {
+			if (branch.visual.column != null && !columnColors.has(branch.visual.column)) {
+				columnColors.set(branch.visual.column, resolveGraphColor(branch.visual.svgColor ?? "gray"));
+			}
+		}
+
+		const grid = parseGraphGrid(cleanLines, columnColors);
+		const gridCols = cleanLines.reduce((max: number, line: string) => Math.max(max, [...line].length), 0);
+		const renderData: NetworkGraphRenderData = { grid, gridCols, branches: [] };
+
+		// Render both orientations
+		const cwSvg = decodeSvg(renderNetworkGraphStrip(renderData, "horizontal"));
+		const ccwSvg = decodeSvg(renderNetworkGraphStrip(renderData, "horizontal-reverse"));
+
+		// Both should be valid SVGs
+		expect(cwSvg).toContain("<svg");
+		expect(cwSvg).toContain("</svg>");
+		expect(ccwSvg).toContain("<svg");
+		expect(ccwSvg).toContain("</svg>");
+
+		// Both should have the same number of circles (same commits)
+		const cwCircles = [...cwSvg.matchAll(/<circle/g)].length;
+		const ccwCircles = [...ccwSvg.matchAll(/<circle/g)].length;
+		expect(cwCircles).toBe(ccwCircles);
+		expect(cwCircles).toBeGreaterThan(0);
+
+		// Both should have paths (branch connections)
+		expect(cwSvg).toContain("<path");
+		expect(ccwSvg).toContain("<path");
+
+		// Both should have lines
+		expect(cwSvg).toContain("<line");
+		expect(ccwSvg).toContain("<line");
+
+		// But the actual SVG content should differ (different orientations)
+		expect(cwSvg).not.toBe(ccwSvg);
 	});
 });

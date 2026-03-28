@@ -238,6 +238,33 @@ describe("Touch strip renderer snapshots", () => {
 		it("horizontal-reverse with scroll offset", () => {
 			expect(renderNetworkGraphStrip(branchingData, "horizontal-reverse", 20, 5)).toMatchSnapshot();
 		});
+
+		it("horizontal-reverse linear history", () => {
+			expect(renderNetworkGraphStrip(linearData, "horizontal-reverse")).toMatchSnapshot();
+		});
+
+		// Grid with T_DOWN (┬) and CROSS (┼) characters for coverage
+		const complexData: NetworkGraphRenderData = {
+			grid: [
+				[{ char: "●", color: "#58a6ff" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#f85149" }],
+				[{ char: "┼", color: "#58a6ff" }, { char: "─", color: "#f85149" }, { char: "┬", color: "#f85149" }, { char: " ", color: "#f85149" }],
+				[{ char: "│", color: "#58a6ff" }, { char: " ", color: "#8b949e" }, { char: "●", color: "#f85149" }, { char: " ", color: "#f85149" }],
+				[{ char: "●", color: "#58a6ff" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#8b949e" }, { char: " ", color: "#f85149" }],
+			],
+			gridCols: 4,
+			branches: [
+				{ name: "main", column: 0, color: "#58a6ff", firstRow: 0 },
+				{ name: "feature", column: 2, color: "#f85149", firstRow: 2 },
+			],
+		};
+
+		it("complex graph with ┬ and ┼ characters", () => {
+			expect(renderNetworkGraphStrip(complexData)).toMatchSnapshot();
+		});
+
+		it("horizontal-reverse complex graph with ┬ and ┼", () => {
+			expect(renderNetworkGraphStrip(complexData, "horizontal-reverse")).toMatchSnapshot();
+		});
 	});
 
 	// ── Security arc strip ─────────────────────────────────────────────────
