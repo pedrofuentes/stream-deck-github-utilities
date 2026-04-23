@@ -73,16 +73,6 @@ export class BranchComparisonAction extends BaseGitHubAction<BranchComparisonSet
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		this.coordinator.subscribe({
-			actionId: ev.action.id,
-			repo: settings.repo!,
-			fragments: ["branchComparison"],
-			maxAgeSec: intervalSec,
-			params: {
-				baseBranch: settings.baseBranch,
-				headBranch: settings.headBranch,
-			},
-		}, () => this.refreshComparison(ev.action.id));
 		this.polling.start(ev.action.id, () => this.refreshComparison(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshComparison(ev.action.id);
@@ -104,15 +94,15 @@ export class BranchComparisonAction extends BaseGitHubAction<BranchComparisonSet
 
 		const settings = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
-		const repo = cached?.repo ?? settings.repo;
-		if (!repo) return;
+		const resolved = await this.resolveEffectiveRepo(cached ?? settings);
+		if (!resolved || resolved.missing) return;
 
 		const cachedUrl = this.lastUrl.get(ev.action.id);
 		let url: string | undefined;
 		if (cachedUrl) {
 			url = cachedUrl;
 		} else {
-			const parsed = parseRepoIdentifier(repo);
+			const parsed = parseRepoIdentifier(resolved.repo);
 			const base = cached?.baseBranch ?? settings.baseBranch ?? "main";
 			const head = cached?.headBranch ?? settings.headBranch ?? "develop";
 			if (parsed) {
@@ -132,14 +122,14 @@ export class BranchComparisonAction extends BaseGitHubAction<BranchComparisonSet
 	override async onDialDown(ev: DialDownEvent<BranchComparisonSettings>): Promise<void> {
 		const cached = this.actionSettings.get(ev.action.id);
 		const settings = cached ?? ev.payload.settings;
-		const repo = settings.repo;
-		if (!repo) return;
+		const resolved = await this.resolveEffectiveRepo(settings);
+		if (!resolved || resolved.missing) return;
 
 		const url = this.lastUrl.get(ev.action.id);
 		if (url) {
 			await streamDeck.system.openUrl(url);
 		} else {
-			const parsed = parseRepoIdentifier(repo);
+			const parsed = parseRepoIdentifier(resolved.repo);
 			const base = settings.baseBranch ?? "main";
 			const head = settings.headBranch ?? "develop";
 			if (parsed) {
@@ -203,16 +193,6 @@ export class BranchComparisonAction extends BaseGitHubAction<BranchComparisonSet
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		this.coordinator.subscribe({
-			actionId: ev.action.id,
-			repo: settings.repo!,
-			fragments: ["branchComparison"],
-			maxAgeSec: intervalSec,
-			params: {
-				baseBranch: settings.baseBranch,
-				headBranch: settings.headBranch,
-			},
-		}, () => this.refreshComparison(ev.action.id));
 		this.polling.restart(ev.action.id, () => this.refreshComparison(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshComparison(ev.action.id);
@@ -229,7 +209,27 @@ export class BranchComparisonAction extends BaseGitHubAction<BranchComparisonSet
 
 		const isDial = actionContext.isDial();
 
-		const parsed = parseRepoIdentifier(settings.repo);
+		const resolved = await this.resolveEffectiveRepo(settings);
+		if (!resolved) return;
+
+		if (resolved.missing === "bridge") {
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("No Active"));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError("No active repo") });
+			return;
+		}
+		if (resolved.missing === "invalid") {
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("Bad Bridge"));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError("Bridge invalid") });
+			return;
+		}
+
+		const parsed = parseRepoIdentifier(resolved.repo);
 		if (!parsed) {
 			if (actionContext.isKey()) {
 				await actionContext.setImage(renderErrorImage("Invalid"));
@@ -250,6 +250,16 @@ export class BranchComparisonAction extends BaseGitHubAction<BranchComparisonSet
 				if (isDial) await actionContext.setFeedback({ canvas: renderStripUnconfigured() });
 				return;
 			}
+
+			const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+			this.syncResolvedRepoSubscription(
+				actionId,
+				resolved.repo,
+				["branchComparison"],
+				intervalSec,
+				{ baseBranch: settings.baseBranch, headBranch: settings.headBranch },
+				() => this.refreshComparison(actionId),
+			);
 
 			const result = force
 				? await this.coordinator.invalidateAndFetch(actionId, token)

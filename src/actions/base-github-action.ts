@@ -34,8 +34,14 @@ import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provid
 import { classifyErrorLabel } from "../utils/github-api";
 import { renderErrorImage } from "../utils/button-renderer";
 import { renderStripError } from "../utils/touch-strip-renderer";
+import { resolveRepoSelection, type ResolvedRepo } from "../utils/active-repo-source";
 import type { JsonValue } from "@elgato/utils";
-import type { RepoActionSettings } from "../types";
+import type {
+	DataFragmentName,
+	FragmentParams,
+	GlobalSettings,
+	RepoActionSettings,
+} from "../types";
 
 /**
  * Minimal settings shape that all GitHub action settings share.
@@ -71,6 +77,9 @@ export abstract class BaseGitHubAction<TSettings extends BaseActionSettings> ext
 	/** Cached action contexts for O(1) lookup */
 	protected actionContexts = new Map<string, Action<TSettings>>();
 
+	/** Last resolved repo per action — used by syncResolvedRepoSubscription to detect repo changes. */
+	protected lastResolvedRepo = new Map<string, string>();
+
 	/**
 	 * Common cleanup on action disappear.
 	 * Subclasses should override, call super.onWillDisappear(ev),
@@ -83,6 +92,49 @@ export abstract class BaseGitHubAction<TSettings extends BaseActionSettings> ext
 		this.urlOpener.cleanup(actionId);
 		this.actionSettings.delete(actionId);
 		this.actionContexts.delete(actionId);
+		this.lastResolvedRepo.delete(actionId);
+	}
+
+	/**
+	 * Resolve the effective repo for an action, honoring Dynamic Repo Mode.
+	 *
+	 * Returns `null` when the setting is blank — caller decides the semantics
+	 * (e.g. pr-review-queue treats empty as "all repos", other actions render
+	 * an unconfigured state). When the setting is the active-repo sentinel
+	 * but the bridge file is missing/invalid, returns a result with a
+	 * `missing` reason so callers can surface a specific error.
+	 */
+	protected async resolveEffectiveRepo(settings: TSettings): Promise<ResolvedRepo | null> {
+		const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+		return resolveRepoSelection(settings.repo, {
+			bridgePath: globalSettings.activeRepoBridgePath,
+		});
+	}
+
+	/**
+	 * Subscribe an action to the coordinator, re-routing the subscription when
+	 * the resolved repo has changed since the last call. Inside a single
+	 * refresh tick this is a no-op for the common "repo didn't move" case —
+	 * it simply reinstalls the subscription (picking up any fragment/params
+	 * change) without touching the cache.
+	 */
+	protected syncResolvedRepoSubscription(
+		actionId: string,
+		resolvedRepo: string,
+		fragments: DataFragmentName[],
+		maxAgeSec: number,
+		params?: FragmentParams,
+		onSiblingRefresh?: () => Promise<void>,
+	): void {
+		const previous = this.lastResolvedRepo.get(actionId);
+		if (previous !== undefined && previous !== resolvedRepo) {
+			this.coordinator.unsubscribe(actionId);
+		}
+		this.coordinator.subscribe(
+			{ actionId, repo: resolvedRepo, fragments, maxAgeSec, params },
+			onSiblingRefresh,
+		);
+		this.lastResolvedRepo.set(actionId, resolvedRepo);
 	}
 
 	/**

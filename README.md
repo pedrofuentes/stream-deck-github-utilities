@@ -199,6 +199,43 @@ The Property Inspector features a dynamic, auto-populated UX:
 - **Visual feedback** — status indicators show token validation and loading states
 - Private repos are indicated with a lock icon
 
+### Dynamic Repo Mode
+
+Every repo picker in this plugin shows a **★ Current Active Repo (Cursor/VS Code)** option at the top of the dropdown. Pick it once and the button follows whatever repo your editor currently has focused — no reconfiguration when you switch projects.
+
+**How it works.** A companion extension in Cursor / VS Code writes a small JSON bridge file whenever the active workspace changes. The plugin reads that file on every refresh and retargets the button automatically. Repo data is cached for 10 minutes across project switches, so flipping A → B → A within the window serves from cache instead of hitting the GitHub API again.
+
+**Bridge file path**
+
+- macOS: `~/Library/Application Support/stream-deck-github-utilities/active-repo.json`
+- Windows: `%APPDATA%\stream-deck-github-utilities\active-repo.json`
+- Linux / other: `$XDG_CONFIG_HOME/stream-deck-github-utilities/active-repo.json` (falls back to `~/.config/...`)
+
+**Schema**
+
+```json
+{
+  "repo": "owner/repo",
+  "remoteUrl": "git@github.com:owner/repo.git",
+  "workspacePath": "/Users/you/Projects/owner/repo",
+  "sourceApp": "cursor",
+  "updatedAt": "2026-04-23T22:10:00.000Z"
+}
+```
+
+- `repo` (preferred) or `remoteUrl` (fallback) is required. Other fields are metadata the plugin ignores but a companion may populate for its own use.
+- `remoteUrl` accepts both SSH (`git@github.com:owner/repo.git`) and HTTPS (`https://github.com/owner/repo.git`) forms.
+- The plugin watches file mtime — just rewrite the file atomically and buttons retarget within one refresh interval (or instantly on touch-tap / key refresh).
+
+**Special cases**
+
+- **PR Review Queue** — empty repo still means "all repos, unscoped". The sentinel scopes to the current active repo only. A missing bridge file shows an error state rather than silently falling back to cross-repo (so you never leak activity across projects).
+- **Contribution Heatmap** — only applies when the data source is **Repo**. The **User** profile mode stays global and ignores the bridge file.
+
+**Companion extension (Cursor / VS Code).** This repo ships the companion at [`bridge-extension/`](bridge-extension/). It writes the bridge file automatically on startup, workspace-folder changes, and window focus changes. Build with `npm run build && npm run package` inside `bridge-extension/`, then install the resulting `.vsix` via **Extensions → Install from VSIX…** in Cursor or VS Code. A single install covers both editors since Cursor is a VS Code fork.
+
+If you'd rather integrate a different tool, anything that writes the JSON schema above to the default path will work — the plugin reads the file and parses it; it doesn't care how it got there.
+
 ### Authentication
 
 Uses a GitHub Personal Access Token (PAT) stored as a global plugin setting (shared across all actions).

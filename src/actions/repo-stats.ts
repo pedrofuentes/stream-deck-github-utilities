@@ -107,16 +107,8 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
 		}
 
-		// Subscribe to coordinator for data fetching
-		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		this.coordinator.subscribe({
-			actionId: ev.action.id,
-			repo: settings.repo!,
-			fragments: ["repoMetadata", "prCount"],
-			maxAgeSec: intervalSec,
-		}, () => this.refreshStats(ev.action.id));
-
 		// Start polling (creates state for generation counter)
+		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 		this.polling.start(ev.action.id, () => this.refreshStats(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		// Initial fetch
@@ -156,12 +148,10 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 		}
 
 		const settings = ev.payload.settings;
-		// Prefer cached settings — the event payload may be missing fields if
-		// sdpi-components sent a partial setSettings (overwriting repo to undefined).
 		const cached = this.actionSettings.get(ev.action.id);
-		const repo = cached?.repo ?? settings.repo;
+		const resolved = await this.resolveEffectiveRepo(cached ?? settings);
 
-		if (!repo) {
+		if (!resolved || resolved.missing) {
 			return;
 		}
 
@@ -175,7 +165,7 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 			if (url) {
 				this.urlOpener.scheduleOpen(ev.action.id, url);
 			} else {
-				const parsed = parseRepoIdentifier(repo);
+				const parsed = parseRepoIdentifier(resolved.repo);
 				if (parsed) {
 					const statType: StatType = cached?.statType ?? settings.statType ?? "stars";
 					const computedUrl = getStatUrl(parsed.owner, parsed.repo, statType);
@@ -241,15 +231,15 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 		this.keyDownTime.delete(ev.action.id);
 		const cached = this.actionSettings.get(ev.action.id);
 		const settings = cached ?? ev.payload.settings;
-		const repo = settings.repo;
+		const resolved = await this.resolveEffectiveRepo(settings);
 
-		if (!repo) return;
+		if (!resolved || resolved.missing) return;
 
 		const url = this.lastUrl.get(ev.action.id);
 		if (url) {
 			await streamDeck.system.openUrl(url);
 		} else {
-			const parsed = parseRepoIdentifier(repo);
+			const parsed = parseRepoIdentifier(resolved.repo);
 			if (parsed) {
 				const statType: StatType = settings.statType ?? "stars";
 				await streamDeck.system.openUrl(getStatUrl(parsed.owner, parsed.repo, statType));
@@ -323,17 +313,9 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
 		}
 
-		// Re-subscribe with updated settings
+		// Restart timer with potentially new interval. The subscription is
+		// (re-)installed inside refreshStats via syncResolvedRepoSubscription.
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		this.coordinator.unsubscribe(ev.action.id);
-		this.coordinator.subscribe({
-			actionId: ev.action.id,
-			repo: settings.repo!,
-			fragments: ["repoMetadata", "prCount"],
-			maxAgeSec: intervalSec,
-		}, () => this.refreshStats(ev.action.id));
-
-		// Restart timer with potentially new interval(creates fresh state for generation counter)
 		this.polling.restart(ev.action.id, () => this.refreshStats(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		// Re-fetch with new settings
@@ -360,7 +342,27 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 
 		const isDial = actionContext.isDial();
 
-		const parsed = parseRepoIdentifier(settings.repo);
+		const resolved = await this.resolveEffectiveRepo(settings);
+		if (!resolved) return;
+
+		if (resolved.missing === "bridge") {
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("No Active"));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError("No active repo") });
+			return;
+		}
+		if (resolved.missing === "invalid") {
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("Bad Bridge"));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError("Bridge invalid") });
+			return;
+		}
+
+		const parsed = parseRepoIdentifier(resolved.repo);
 		if (!parsed) {
 			if (actionContext.isKey()) {
 				await actionContext.setImage(renderErrorImage("Invalid"));
@@ -383,6 +385,16 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 				if (isDial) await actionContext.setFeedback({ canvas: renderStripUnconfigured() });
 				return;
 			}
+
+			const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+			this.syncResolvedRepoSubscription(
+				actionId,
+				resolved.repo,
+				["repoMetadata", "prCount"],
+				intervalSec,
+				undefined,
+				() => this.refreshStats(actionId),
+			);
 
 			// Fetch data via coordinator (GraphQL with REST fallback)
 			const result = forceRefresh

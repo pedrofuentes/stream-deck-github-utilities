@@ -284,6 +284,8 @@ export interface ProjectsV2Data {
 export interface GlobalSettings {
 	/** GitHub Personal Access Token (fine-grained or classic) */
 	githubToken?: string;
+	/** Optional override for the active-repo bridge file path (Dynamic Repo Mode). */
+	activeRepoBridgePath?: string;
 	[key: string]: JsonValue;
 }
 

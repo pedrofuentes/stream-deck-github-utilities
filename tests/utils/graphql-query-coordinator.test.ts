@@ -963,14 +963,45 @@ describe("GraphQLQueryCoordinator", () => {
 	// ── Cleanup ──────────────────────────────────────────────────────────
 
 	describe("Cleanup", () => {
-		it("should clean up cache for repos with no subscribers on unsubscribe", async () => {
+		it("should keep the cache warm inside the retention window when the last subscriber leaves", () => {
 			cache.set("owner/repo", "prCount", 42, "graphql");
 			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo" }));
 
-			// Unsubscribe removes the last subscriber for owner/repo
 			coordinator.unsubscribe("a1");
 
+			// Within the retention window — data still available for a fast reconnect
+			expect(cache.has("owner/repo", "prCount")).toBe(true);
+		});
+
+		it("should evict the cache once the retention window has elapsed", () => {
+			cache.set("owner/repo", "prCount", 42, "graphql");
+			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo" }));
+
+			coordinator.unsubscribe("a1");
+
+			// Simulate elapsed time past the retention window
+			vi.advanceTimersByTime(10 * 60 * 1000 + 1);
+
+			// Trigger another cleanup pass via a no-op unsubscribe
+			coordinator.unsubscribe("nonexistent-action");
+
 			expect(cache.has("owner/repo", "prCount")).toBe(false);
+		});
+
+		it("should let a re-subscribe within the retention window reuse cached data (no refetch)", async () => {
+			cache.set("owner/repo", "prCount", 42, "graphql");
+			coordinator.subscribe(baseSub({ repo: "owner/repo" }));
+			coordinator.unsubscribe("action-1");
+
+			// Simulate a bridge-file flip to another repo and back within retention
+			vi.advanceTimersByTime(30 * 1000);
+
+			coordinator.subscribe(baseSub({ repo: "owner/repo", fragments: ["prCount"] }));
+			const result = await coordinator.fetchData("action-1", TOKEN);
+
+			expect(result.prCount).toBe(42);
+			// Cached fragment is still fresh — no GraphQL call
+			expect(mocks.executeGraphQLQuery).not.toHaveBeenCalled();
 		});
 
 		it("should preserve cache for repos with remaining subscribers", async () => {

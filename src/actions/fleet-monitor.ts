@@ -68,15 +68,6 @@ export class FleetMonitorAction extends BaseGitHubAction<FleetMonitorSettings> {
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
-		if (settings.repo) {
-			this.coordinator.subscribe({
-				actionId: ev.action.id,
-				repo: settings.repo,
-				fragments: ["prCount", "workflowRuns", "commitActivity"],
-				maxAgeSec: intervalSec,
-			}, () => this.refreshFleet(ev.action.id));
-		}
-
 		this.polling.start(ev.action.id, () => this.refreshFleet(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshFleet(ev.action.id);
@@ -94,11 +85,11 @@ export class FleetMonitorAction extends BaseGitHubAction<FleetMonitorSettings> {
 
 		const settings = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
-		const repo = cached?.repo ?? settings.repo;
+		const resolved = await this.resolveEffectiveRepo(cached ?? settings);
 
 		let url = "https://github.com";
-		if (repo) {
-			const parsed = parseRepoIdentifier(repo);
+		if (resolved && !resolved.missing) {
+			const parsed = parseRepoIdentifier(resolved.repo);
 			if (parsed) {
 				url = `https://github.com/${parsed.owner}/${parsed.repo}`;
 			}
@@ -122,13 +113,14 @@ export class FleetMonitorAction extends BaseGitHubAction<FleetMonitorSettings> {
 	 */
 	override async onDialDown(ev: DialDownEvent<FleetMonitorSettings>): Promise<void> {
 		const cached = this.actionSettings.get(ev.action.id);
-		const repo = cached?.repo;
-
-		if (repo) {
-			const parsed = parseRepoIdentifier(repo);
-			if (parsed) {
-				await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}`);
-				return;
+		if (cached) {
+			const resolved = await this.resolveEffectiveRepo(cached);
+			if (resolved && !resolved.missing) {
+				const parsed = parseRepoIdentifier(resolved.repo);
+				if (parsed) {
+					await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}`);
+					return;
+				}
 			}
 		}
 		await streamDeck.system.openUrl("https://github.com");
@@ -175,18 +167,11 @@ export class FleetMonitorAction extends BaseGitHubAction<FleetMonitorSettings> {
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
 		}
 
-		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-
-		if (settings.repo) {
-			this.coordinator.subscribe({
-				actionId: ev.action.id,
-				repo: settings.repo,
-				fragments: ["prCount", "workflowRuns", "commitActivity"],
-				maxAgeSec: intervalSec,
-			}, () => this.refreshFleet(ev.action.id));
-		} else {
+		if (!settings.repo) {
 			this.coordinator.unsubscribe(ev.action.id);
 		}
+
+		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
 		this.polling.restart(ev.action.id, () => this.refreshFleet(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -213,8 +198,7 @@ export class FleetMonitorAction extends BaseGitHubAction<FleetMonitorSettings> {
 				return;
 			}
 
-			const repo = settings?.repo;
-			if (!repo) {
+			if (!settings?.repo) {
 				if (actionContext.isKey()) {
 					await actionContext.setImage(renderUnconfiguredImage());
 					await actionContext.setTitle("");
@@ -224,7 +208,29 @@ export class FleetMonitorAction extends BaseGitHubAction<FleetMonitorSettings> {
 				return;
 			}
 
-			const parsed = parseRepoIdentifier(repo);
+			const resolved = await this.resolveEffectiveRepo(settings);
+			if (!resolved) return;
+
+			if (resolved.missing === "bridge") {
+				if (actionContext.isKey()) {
+					await actionContext.setImage(renderErrorImage("No Active"));
+					await actionContext.setTitle("");
+				} else if (actionContext.isDial()) {
+					await actionContext.setFeedback({ canvas: renderStripError("No active repo") });
+				}
+				return;
+			}
+			if (resolved.missing === "invalid") {
+				if (actionContext.isKey()) {
+					await actionContext.setImage(renderErrorImage("Bad Bridge"));
+					await actionContext.setTitle("");
+				} else if (actionContext.isDial()) {
+					await actionContext.setFeedback({ canvas: renderStripError("Bridge invalid") });
+				}
+				return;
+			}
+
+			const parsed = parseRepoIdentifier(resolved.repo);
 			if (!parsed) {
 				if (actionContext.isKey()) {
 					await actionContext.setImage(renderErrorImage("Invalid Repo"));
@@ -234,6 +240,16 @@ export class FleetMonitorAction extends BaseGitHubAction<FleetMonitorSettings> {
 				}
 				return;
 			}
+
+			const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+			this.syncResolvedRepoSubscription(
+				actionId,
+				resolved.repo,
+				["prCount", "workflowRuns", "commitActivity"],
+				intervalSec,
+				undefined,
+				() => this.refreshFleet(actionId),
+			);
 
 			// Fetch all data points via the coordinator (batched GraphQL + REST)
 			const result = force
@@ -282,7 +298,7 @@ export class FleetMonitorAction extends BaseGitHubAction<FleetMonitorSettings> {
 			}
 
 			this.polling.reportSuccess(actionId);
-			streamDeck.logger.debug(`Fleet monitor updated: ${repo} status=${statusLabel} prs=${prCount}`);
+			streamDeck.logger.debug(`Fleet monitor updated: ${resolved.repo} status=${statusLabel} prs=${prCount}`);
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : "Unknown error";
 			streamDeck.logger.error(`Failed to refresh fleet monitor: ${message}`);

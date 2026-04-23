@@ -1135,8 +1135,8 @@ describe("RepoStatsAction", () => {
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo", statType: "stars" }) as never);
 			mockCoordinatorUnsubscribe.mockClear();
 
-			// PI clears repo
-			await action.onDidReceiveSettings?.(createDidReceiveSettingsEvent(mockAction, {}) as never);
+			// PI clears repo — sends an explicit empty string (what the dropdown actually emits)
+			await action.onDidReceiveSettings?.(createDidReceiveSettingsEvent(mockAction, { repo: "" }) as never);
 
 			expect(mockCoordinatorUnsubscribe).toHaveBeenCalledWith("coord-unsub-drs");
 		});

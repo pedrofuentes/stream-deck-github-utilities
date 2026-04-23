@@ -121,17 +121,6 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		this.coordinator.subscribe({
-			actionId: ev.action.id,
-			repo: settings.repo!,
-			fragments: ["workflowRuns"],
-			maxAgeSec: intervalSec,
-			params: {
-				branch: settings.branch,
-				workflowFile: settings.workflowFile,
-				environment: settings.environment,
-			},
-		}, () => this.refreshStatus(ev.action.id));
 		this.polling.start(ev.action.id, () => this.refreshStatus(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshStatus(ev.action.id);
@@ -165,10 +154,9 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 		}
 
 		const settings = ev.payload.settings;
-
-		if (!settings.repo) {
-			return;
-		}
+		const cached = this.actionSettings.get(ev.action.id);
+		const resolved = await this.resolveEffectiveRepo(cached ?? settings);
+		if (!resolved || resolved.missing) return;
 
 		// Compute URL synchronously, then schedule it to open after delay
 		const cachedUrl = this.lastUrl.get(ev.action.id);
@@ -176,7 +164,7 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 		if (cachedUrl) {
 			url = cachedUrl;
 		} else {
-			const parsed = parseRepoIdentifier(settings.repo);
+			const parsed = parseRepoIdentifier(resolved.repo);
 			if (parsed) {
 				url = settings.workflowFile
 					? `https://github.com/${parsed.owner}/${parsed.repo}/actions/workflows/${encodeURIComponent(settings.workflowFile)}`
@@ -263,17 +251,6 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		this.coordinator.subscribe({
-			actionId: ev.action.id,
-			repo: settings.repo!,
-			fragments: ["workflowRuns"],
-			maxAgeSec: intervalSec,
-			params: {
-				branch: settings.branch,
-				workflowFile: settings.workflowFile,
-				environment: settings.environment,
-			},
-		}, () => this.refreshStatus(ev.action.id));
 		this.polling.restart(ev.action.id, () => this.refreshStatus(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshStatus(ev.action.id);
@@ -296,7 +273,29 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 			return;
 		}
 
-		const parsed = parseRepoIdentifier(settings.repo);
+		const resolved = await this.resolveEffectiveRepo(settings);
+		if (!resolved) return;
+
+		if (resolved.missing === "bridge") {
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("No Active"));
+				await actionContext.setTitle("");
+			} else if (actionContext.isDial()) {
+				await actionContext.setFeedback({ canvas: renderStripError("No active repo") });
+			}
+			return;
+		}
+		if (resolved.missing === "invalid") {
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("Bad Bridge"));
+				await actionContext.setTitle("");
+			} else if (actionContext.isDial()) {
+				await actionContext.setFeedback({ canvas: renderStripError("Bridge invalid") });
+			}
+			return;
+		}
+
+		const parsed = parseRepoIdentifier(resolved.repo);
 		if (!parsed) {
 			if (actionContext.isKey()) {
 				await actionContext.setImage(renderErrorImage("Invalid"));
@@ -320,6 +319,20 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 				}
 				return;
 			}
+
+			const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+			this.syncResolvedRepoSubscription(
+				actionId,
+				resolved.repo,
+				["workflowRuns"],
+				intervalSec,
+				{
+					branch: settings.branch,
+					workflowFile: settings.workflowFile,
+					environment: settings.environment,
+				},
+				() => this.refreshStatus(actionId),
+			);
 
 			const result = force
 				? await this.coordinator.invalidateAndFetch(actionId, token)
@@ -450,7 +463,10 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 			return;
 		}
 
-		const parsed = parseRepoIdentifier(settings.repo);
+		const resolved = await this.resolveEffectiveRepo(settings);
+		if (!resolved || resolved.missing) return;
+
+		const parsed = parseRepoIdentifier(resolved.repo);
 		if (!parsed) return;
 
 		try {

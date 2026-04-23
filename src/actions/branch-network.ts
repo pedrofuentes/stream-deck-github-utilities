@@ -192,17 +192,6 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-
-		if (settings.repo) {
-			this.coordinator.subscribe({
-				actionId: ev.action.id,
-				repo: settings.repo,
-				fragments: ["branches", "networkCommits"],
-				maxAgeSec: intervalSec,
-				params: { maxCommits: Number(settings.maxCommits) || 100 },
-			}, () => this.refreshNetwork(ev.action.id));
-		}
-
 		this.polling.start(ev.action.id, () => this.refreshNetwork(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 		await this.refreshNetwork(ev.action.id);
 		if (settings.repo) {
@@ -311,24 +300,10 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 			this.graphCache.delete(ev.action.id);
 		}
 
-		if (settings.repo) {
-			this.coordinator.subscribe({
-				actionId: ev.action.id,
-				repo: settings.repo,
-				fragments: ["branches", "networkCommits"],
-				maxAgeSec: intervalSec,
-				params: { maxCommits: newMaxCommits },
-			}, () => this.refreshNetwork(ev.action.id));
-		}
-
 		this.polling.restart(ev.action.id, () => this.refreshNetwork(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 		// Force refetch when maxCommits changes (cached data has wrong commit count)
 		if (settings.repo && oldMaxCommits !== newMaxCommits) {
 			this.graphCache.delete(ev.action.id);
-			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
-			if (globalSettings.githubToken) {
-				await this.coordinator.invalidateAndFetch(ev.action.id, globalSettings.githubToken);
-			}
 		}
 		await this.refreshNetwork(ev.action.id);
 		if (oldRepo && (oldRepo !== settings.repo || oldOrientation !== newOrientation)) {
@@ -345,7 +320,19 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 		const actionContext = this.actionContexts.get(actionId);
 		if (!actionContext) return;
 
-		const parsed = parseRepoIdentifier(settings.repo);
+		const resolved = await this.resolveEffectiveRepo(settings);
+		if (!resolved) return;
+
+		if (resolved.missing === "bridge") {
+			if (actionContext.isDial()) await actionContext.setFeedback({ canvas: renderStripError("No active repo") });
+			return;
+		}
+		if (resolved.missing === "invalid") {
+			if (actionContext.isDial()) await actionContext.setFeedback({ canvas: renderStripError("Bridge invalid") });
+			return;
+		}
+
+		const parsed = parseRepoIdentifier(resolved.repo);
 		if (!parsed) {
 			if (actionContext.isDial()) await actionContext.setFeedback({ canvas: renderStripError("Invalid repo") });
 			return;
@@ -358,6 +345,16 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 				if (actionContext.isDial()) await actionContext.setFeedback({ canvas: renderStripUnconfigured() });
 				return;
 			}
+
+			const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+			this.syncResolvedRepoSubscription(
+				actionId,
+				resolved.repo,
+				["branches", "networkCommits"],
+				intervalSec,
+				{ maxCommits: Number(settings.maxCommits) || 100 },
+				() => this.refreshNetwork(actionId),
+			);
 
 			const result = await this.coordinator.fetchData(actionId, token);
 			if (!this.polling.isCurrentGeneration(actionId, gen)) return;

@@ -34,6 +34,7 @@ import { classifyErrorLabel } from "../utils/github-api";
 import { renderPRCountImage, renderAnimatedSpinner, renderErrorImage, renderUnconfiguredImage } from "../utils/button-renderer";
 import { renderPRQueueStrip, renderStripLoading, renderStripError, renderStripUnconfigured } from "../utils/touch-strip-renderer";
 import { MarqueeController } from "../utils/marquee-controller";
+import { isActiveRepoSentinel } from "../utils/active-repo-source";
 
 const DEFAULT_REFRESH_INTERVAL = 300; // 5 minutes
 const MIN_REFRESH_INTERVAL = 30; // 30 seconds minimum
@@ -77,8 +78,6 @@ export class PRReviewQueueAction extends BaseGitHubAction<PRReviewQueueSettings>
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		const maxAgeSec = intervalSec;
-		this.coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo ?? "", fragments: ["reviewRequestedPRs"], maxAgeSec }, () => this.refreshQueue(ev.action.id));
 
 		this.polling.start(ev.action.id, () => this.refreshQueue(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -103,18 +102,17 @@ export class PRReviewQueueAction extends BaseGitHubAction<PRReviewQueueSettings>
 
 		const settings = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
-		const repo = cached?.repo ?? settings.repo;
+		const mergedSettings = cached ?? settings;
 
-		let url: string;
-		if (repo) {
-			const parsed = parseRepoIdentifier(repo);
-			if (parsed) {
-				url = `https://github.com/${parsed.owner}/${parsed.repo}/pulls?q=is%3Apr+is%3Aopen+review-requested%3A%40me`;
-			} else {
-				url = "https://github.com/pulls/review-requested";
+		let url = "https://github.com/pulls/review-requested";
+		if (mergedSettings.repo) {
+			const resolved = await this.resolveEffectiveRepo(mergedSettings);
+			if (resolved && !resolved.missing) {
+				const parsed = parseRepoIdentifier(resolved.repo);
+				if (parsed) {
+					url = `https://github.com/${parsed.owner}/${parsed.repo}/pulls?q=is%3Apr+is%3Aopen+review-requested%3A%40me`;
+				}
 			}
-		} else {
-			url = "https://github.com/pulls/review-requested";
 		}
 
 		this.urlOpener.scheduleOpen(ev.action.id, url);
@@ -135,13 +133,15 @@ export class PRReviewQueueAction extends BaseGitHubAction<PRReviewQueueSettings>
 	 */
 	override async onDialDown(ev: DialDownEvent<PRReviewQueueSettings>): Promise<void> {
 		const cached = this.actionSettings.get(ev.action.id);
-		const repo = cached?.repo;
 
-		if (repo) {
-			const parsed = parseRepoIdentifier(repo);
-			if (parsed) {
-				await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/pulls?q=is%3Apr+is%3Aopen+review-requested%3A%40me`);
-				return;
+		if (cached?.repo) {
+			const resolved = await this.resolveEffectiveRepo(cached);
+			if (resolved && !resolved.missing) {
+				const parsed = parseRepoIdentifier(resolved.repo);
+				if (parsed) {
+					await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/pulls?q=is%3Apr+is%3Aopen+review-requested%3A%40me`);
+					return;
+				}
 			}
 		}
 		await streamDeck.system.openUrl("https://github.com/pulls/review-requested");
@@ -189,8 +189,6 @@ export class PRReviewQueueAction extends BaseGitHubAction<PRReviewQueueSettings>
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		const maxAgeSec = intervalSec;
-		this.coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo ?? "", fragments: ["reviewRequestedPRs"], maxAgeSec }, () => this.refreshQueue(ev.action.id));
 
 		this.polling.restart(ev.action.id, () => this.refreshQueue(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -217,7 +215,49 @@ export class PRReviewQueueAction extends BaseGitHubAction<PRReviewQueueSettings>
 				return;
 			}
 
-			const repo = settings?.repo || undefined;
+			// Tri-state resolution:
+			//   empty/undefined → unscoped "all repos" query (historical behavior)
+			//   ACTIVE_REPO_SENTINEL → bridge-file resolution; missing bridge is a hard error
+			//   "owner/repo" → scoped to that repo
+			let effectiveRepo = "";
+			if (settings?.repo) {
+				if (isActiveRepoSentinel(settings.repo)) {
+					const resolved = await this.resolveEffectiveRepo(settings);
+					if (!resolved) return;
+					if (resolved.missing === "bridge") {
+						if (actionContext.isKey()) {
+							await actionContext.setImage(renderErrorImage("No Active"));
+							await actionContext.setTitle("");
+						} else if (actionContext.isDial()) {
+							await actionContext.setFeedback({ canvas: renderStripError("No active repo") });
+						}
+						return;
+					}
+					if (resolved.missing === "invalid") {
+						if (actionContext.isKey()) {
+							await actionContext.setImage(renderErrorImage("Bad Bridge"));
+							await actionContext.setTitle("");
+						} else if (actionContext.isDial()) {
+							await actionContext.setFeedback({ canvas: renderStripError("Bridge invalid") });
+						}
+						return;
+					}
+					effectiveRepo = resolved.repo;
+				} else {
+					effectiveRepo = settings.repo;
+				}
+			}
+
+			const intervalSec = settings?.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+			this.syncResolvedRepoSubscription(
+				actionId,
+				effectiveRepo,
+				["reviewRequestedPRs"],
+				intervalSec,
+				undefined,
+				() => this.refreshQueue(actionId),
+			);
+
 			const coordinatorResult = forceRefresh
 				? await this.coordinator.invalidateAndFetch(actionId, token)
 				: await this.coordinator.fetchData(actionId, token);
@@ -233,9 +273,9 @@ export class PRReviewQueueAction extends BaseGitHubAction<PRReviewQueueSettings>
 
 			// Determine repo display name for marquee
 			let repoDisplayName = "";
-			if (repo) {
-				const parsed = parseRepoIdentifier(repo);
-				repoDisplayName = parsed?.repo ?? repo;
+			if (effectiveRepo) {
+				const parsed = parseRepoIdentifier(effectiveRepo);
+				repoDisplayName = parsed?.repo ?? effectiveRepo;
 			}
 
 			if (actionContext.isKey()) {
@@ -254,7 +294,7 @@ export class PRReviewQueueAction extends BaseGitHubAction<PRReviewQueueSettings>
 			}
 
 			this.polling.reportSuccess(actionId);
-			streamDeck.logger.debug(`PR review queue updated: ${repo ?? "all"}=${displayCount}`);
+			streamDeck.logger.debug(`PR review queue updated: ${effectiveRepo || "all"}=${displayCount}`);
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : "Unknown error";
 			streamDeck.logger.error(`Failed to fetch PR review queue: ${message}`);

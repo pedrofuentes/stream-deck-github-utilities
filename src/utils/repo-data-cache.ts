@@ -22,6 +22,19 @@ import type { CacheEntry, DataFragmentName, DataSource } from "../types";
  */
 export class RepoDataCache {
 	private cache = new Map<string, Map<DataFragmentName, CacheEntry>>();
+	/** Last time each repo was touched (subscribed or had data set). Drives retention-aware cleanup. */
+	private lastSubscribedAt = new Map<string, number>();
+
+	/**
+	 * Stamp a repo as actively in use. Coordinator should call on `subscribe()`
+	 * so that flipping editor focus A → B → A within the retention window
+	 * reuses cached fragments instead of refetching.
+	 *
+	 * @param repo - Repository identifier ("owner/repo")
+	 */
+	touch(repo: string): void {
+		this.lastSubscribedAt.set(repo, Date.now());
+	}
 
 	/**
 	 * Gets cached data for a fragment if it's fresh enough.
@@ -56,6 +69,7 @@ export class RepoDataCache {
 			this.cache.set(repo, repoMap);
 		}
 		repoMap.set(fragment, { data, fetchedAt: Date.now(), source });
+		this.lastSubscribedAt.set(repo, Date.now());
 	}
 
 	/**
@@ -93,16 +107,27 @@ export class RepoDataCache {
 
 	/**
 	 * Removes cache entries for repos not in the active set.
-	 * Call periodically to prevent memory leaks when repos are removed
-	 * from Stream Deck actions.
+	 *
+	 * With `retentionMs > 0`, repos that just lost their last subscriber are kept
+	 * warm for the retention window so that a quick return (e.g. editor focus
+	 * flipping between projects) avoids a round-trip to GitHub. Pass `0` for
+	 * immediate eviction — the original behavior.
 	 *
 	 * @param activeRepos - Set of repository identifiers currently in use
+	 * @param retentionMs - Grace period (ms) to keep orphaned repos warm. Default 0.
 	 */
-	cleanup(activeRepos: Set<string>): void {
+	cleanup(activeRepos: Set<string>, retentionMs = 0): void {
+		const now = Date.now();
 		for (const repo of this.cache.keys()) {
-			if (!activeRepos.has(repo)) {
-				this.cache.delete(repo);
+			if (activeRepos.has(repo)) continue;
+
+			if (retentionMs > 0) {
+				const lastSeen = this.lastSubscribedAt.get(repo) ?? 0;
+				if (now - lastSeen <= retentionMs) continue;
 			}
+
+			this.cache.delete(repo);
+			this.lastSubscribedAt.delete(repo);
 		}
 	}
 
@@ -137,5 +162,6 @@ export class RepoDataCache {
 	/** Clears all cached data. */
 	clear(): void {
 		this.cache.clear();
+		this.lastSubscribedAt.clear();
 	}
 }
