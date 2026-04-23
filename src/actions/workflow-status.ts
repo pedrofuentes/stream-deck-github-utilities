@@ -275,6 +275,7 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 
 		const resolved = await this.resolveEffectiveRepo(settings);
 		if (!resolved) return;
+		this.watchActiveRepo(actionId, resolved.isSentinel, () => this.refreshStatus(actionId));
 
 		if (resolved.missing === "bridge") {
 			if (actionContext.isKey()) {

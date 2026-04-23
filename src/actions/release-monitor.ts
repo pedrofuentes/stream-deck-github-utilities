@@ -247,6 +247,7 @@ export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSetting
 
 		const resolved = await this.resolveEffectiveRepo(settings);
 		if (!resolved) return;
+		this.watchActiveRepo(actionId, resolved.isSentinel, () => this.refreshRelease(actionId));
 
 		if (resolved.missing === "bridge") {
 			if (actionContext.isKey()) {

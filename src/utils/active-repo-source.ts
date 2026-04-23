@@ -237,3 +237,123 @@ export async function resolveRepoSelection(
 
 	return { repo: extracted, isSentinel: true, payload };
 }
+
+// ─── Bridge-file watcher ────────────────────────────────────────────────────
+
+/** How often to stat the bridge file looking for an mtime change. */
+const WATCHER_POLL_INTERVAL_MS = 1000;
+
+export type ActiveRepoChangeListener = () => void | Promise<void>;
+
+/**
+ * Centralized bridge-file watcher. Polls the file's mtime on a short interval
+ * and fires every registered listener when it changes — giving every action
+ * that follows the sentinel a near-instant, synchronized retarget without
+ * having to wait for its own polling interval.
+ *
+ * The watcher is lazy: no subscribers → no timer. First subscriber starts it;
+ * last unsubscribe stops it. Subscribers provide a bridge-path resolver so
+ * that the `activeRepoBridgePath` global-settings override still works.
+ */
+class ActiveRepoWatcher {
+	private listeners = new Map<string, ActiveRepoChangeListener>();
+	private pathResolver: () => string = getDefaultBridgePath;
+	private timer: ReturnType<typeof setInterval> | null = null;
+	private lastMtimeMs: number | null = null;
+	private lastPath: string | null = null;
+
+	/**
+	 * Update how the watcher resolves the current bridge path. Called by the
+	 * plugin whenever global settings might have changed.
+	 */
+	setPathResolver(resolver: () => string): void {
+		this.pathResolver = resolver;
+	}
+
+	subscribe(id: string, listener: ActiveRepoChangeListener): void {
+		this.listeners.set(id, listener);
+		if (!this.timer) this.start();
+	}
+
+	unsubscribe(id: string): void {
+		if (!this.listeners.delete(id)) return;
+		if (this.listeners.size === 0) this.stop();
+	}
+
+	/** Exposed for tests. */
+	get subscriberCount(): number {
+		return this.listeners.size;
+	}
+
+	/** Exposed for tests. */
+	async _tick(): Promise<void> {
+		await this.checkForChange();
+	}
+
+	private start(): void {
+		if (this.timer) return;
+		// Capture the current mtime so we don't fire on the very first tick
+		// just because we hadn't seen the file before.
+		this.primeBaseline().catch(() => {});
+		this.timer = setInterval(() => {
+			this.checkForChange().catch(() => {});
+		}, WATCHER_POLL_INTERVAL_MS);
+	}
+
+	private stop(): void {
+		if (this.timer) {
+			clearInterval(this.timer);
+			this.timer = null;
+		}
+		this.lastMtimeMs = null;
+		this.lastPath = null;
+	}
+
+	private async primeBaseline(): Promise<void> {
+		const path = this.pathResolver();
+		this.lastPath = path;
+		this.lastMtimeMs = await statMtimeOrNull(path);
+	}
+
+	private async checkForChange(): Promise<void> {
+		const path = this.pathResolver();
+
+		// Path override flipped → treat as a change so subscribers re-read.
+		if (path !== this.lastPath) {
+			this.lastPath = path;
+			this.lastMtimeMs = await statMtimeOrNull(path);
+			this.notifyAll();
+			return;
+		}
+
+		const mtimeMs = await statMtimeOrNull(path);
+		if (mtimeMs !== this.lastMtimeMs) {
+			this.lastMtimeMs = mtimeMs;
+			// Clear the 1-second read cache so subscribers see the new payload.
+			_resetBridgeCache();
+			this.notifyAll();
+		}
+	}
+
+	private notifyAll(): void {
+		for (const listener of this.listeners.values()) {
+			try {
+				void listener();
+			} catch {
+				// listener errors don't deregister other listeners
+			}
+		}
+	}
+}
+
+async function statMtimeOrNull(path: string): Promise<number | null> {
+	try {
+		const stat = await fs.stat(path);
+		return stat.mtimeMs;
+	} catch {
+		return null;
+	}
+}
+
+/** Singleton watcher — the plugin keeps one instance for its lifetime. */
+export const activeRepoWatcher = new ActiveRepoWatcher();

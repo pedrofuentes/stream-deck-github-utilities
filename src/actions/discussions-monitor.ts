@@ -222,6 +222,7 @@ export class DiscussionsMonitorAction extends BaseGitHubAction<DiscussionsMonito
 
 		const resolved = await this.resolveEffectiveRepo(settings);
 		if (!resolved) return;
+		this.watchActiveRepo(actionId, resolved.isSentinel, () => this.refreshCount(actionId));
 
 		if (resolved.missing === "bridge") {
 			if (actionContext.isKey()) {

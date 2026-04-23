@@ -206,6 +206,7 @@ export class ProjectsBoardAction extends BaseGitHubAction<ProjectsBoardSettings>
 
 		const resolved = await this.resolveEffectiveRepo(settings);
 		if (!resolved) return;
+		this.watchActiveRepo(actionId, resolved.isSentinel, () => this.refreshData(actionId));
 
 		if (resolved.missing === "bridge") {
 			if (actionContext.isKey()) {

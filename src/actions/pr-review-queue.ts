@@ -220,8 +220,10 @@ export class PRReviewQueueAction extends BaseGitHubAction<PRReviewQueueSettings>
 			//   ACTIVE_REPO_SENTINEL → bridge-file resolution; missing bridge is a hard error
 			//   "owner/repo" → scoped to that repo
 			let effectiveRepo = "";
+			const wantsActiveRepo = settings?.repo ? isActiveRepoSentinel(settings.repo) : false;
+			this.watchActiveRepo(actionId, wantsActiveRepo, () => this.refreshQueue(actionId));
 			if (settings?.repo) {
-				if (isActiveRepoSentinel(settings.repo)) {
+				if (wantsActiveRepo) {
 					const resolved = await this.resolveEffectiveRepo(settings);
 					if (!resolved) return;
 					if (resolved.missing === "bridge") {

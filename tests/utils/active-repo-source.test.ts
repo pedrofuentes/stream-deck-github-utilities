@@ -16,6 +16,7 @@ import {
 	parseRemoteUrl,
 	readBridgeFile,
 	resolveRepoSelection,
+	activeRepoWatcher,
 	_resetBridgeCache,
 } from "../../src/utils/active-repo-source";
 import { parseRepoIdentifier } from "../../src/utils/github";
@@ -260,5 +261,98 @@ describe("resolveRepoSelection", () => {
 
 		await resolveRepoSelection(ACTIVE_REPO_SENTINEL);
 		expect(fsMock.stat).toHaveBeenCalledWith(getDefaultBridgePath());
+	});
+});
+
+// ---------------------------------------------------------------------------
+// activeRepoWatcher — mtime polling + notification
+// ---------------------------------------------------------------------------
+describe("activeRepoWatcher", () => {
+	const PATH = "/tmp/bridge.json";
+
+	beforeEach(() => {
+		// Clean slate for the singleton watcher between tests
+		for (const id of ["a", "b", "c"]) activeRepoWatcher.unsubscribe(id);
+		activeRepoWatcher.setPathResolver(() => PATH);
+	});
+
+	it("is lazy — subscriberCount is 0 until someone subscribes", () => {
+		expect(activeRepoWatcher.subscriberCount).toBe(0);
+	});
+
+	it("notifies all subscribers when the bridge-file mtime changes", async () => {
+		const a = vi.fn();
+		const b = vi.fn();
+
+		// First stat sets the baseline
+		fsMock.stat.mockResolvedValueOnce({ mtimeMs: 100 });
+		activeRepoWatcher.subscribe("a", a);
+		activeRepoWatcher.subscribe("b", b);
+		// Let the baseline-prime microtask run
+		await Promise.resolve();
+		await Promise.resolve();
+
+		// Second stat: same mtime → no notification
+		fsMock.stat.mockResolvedValueOnce({ mtimeMs: 100 });
+		await activeRepoWatcher._tick();
+		expect(a).not.toHaveBeenCalled();
+		expect(b).not.toHaveBeenCalled();
+
+		// Third stat: changed mtime → both fire
+		fsMock.stat.mockResolvedValueOnce({ mtimeMs: 200 });
+		await activeRepoWatcher._tick();
+		expect(a).toHaveBeenCalledTimes(1);
+		expect(b).toHaveBeenCalledTimes(1);
+	});
+
+	it("invalidates the readBridgeFile cache so subscribers see fresh data", async () => {
+		// Seed the bridge cache with repo A
+		fsMock.stat.mockResolvedValueOnce({ mtimeMs: 100 });
+		fsMock.readFile.mockResolvedValueOnce(JSON.stringify({ repo: "a/a" }));
+		expect(await readBridgeFile(PATH)).toEqual({ repo: "a/a" });
+
+		// Baseline stat when we subscribe
+		fsMock.stat.mockResolvedValueOnce({ mtimeMs: 100 });
+		activeRepoWatcher.subscribe("a", vi.fn());
+		await Promise.resolve();
+		await Promise.resolve();
+
+		// Now simulate a write: mtime bumps to 200, content switches to repo B
+		fsMock.stat.mockResolvedValueOnce({ mtimeMs: 200 });
+		await activeRepoWatcher._tick();
+
+		// Subscribers should now see the new repo on their next read
+		fsMock.stat.mockResolvedValueOnce({ mtimeMs: 200 });
+		fsMock.readFile.mockResolvedValueOnce(JSON.stringify({ repo: "b/b" }));
+		expect(await readBridgeFile(PATH)).toEqual({ repo: "b/b" });
+	});
+
+	it("unsubscribe stops notifications", async () => {
+		const listener = vi.fn();
+		fsMock.stat.mockResolvedValueOnce({ mtimeMs: 100 });
+		activeRepoWatcher.subscribe("a", listener);
+		await Promise.resolve();
+		await Promise.resolve();
+
+		activeRepoWatcher.unsubscribe("a");
+
+		fsMock.stat.mockResolvedValueOnce({ mtimeMs: 999 });
+		await activeRepoWatcher._tick();
+		expect(listener).not.toHaveBeenCalled();
+		expect(activeRepoWatcher.subscriberCount).toBe(0);
+	});
+
+	it("treats a bridge-path override switch as a change so subscribers re-read", async () => {
+		const listener = vi.fn();
+		fsMock.stat.mockResolvedValueOnce({ mtimeMs: 100 });
+		activeRepoWatcher.subscribe("a", listener);
+		await Promise.resolve();
+		await Promise.resolve();
+
+		activeRepoWatcher.setPathResolver(() => "/tmp/other.json");
+		fsMock.stat.mockResolvedValueOnce({ mtimeMs: 50 });
+		await activeRepoWatcher._tick();
+
+		expect(listener).toHaveBeenCalledTimes(1);
 	});
 });

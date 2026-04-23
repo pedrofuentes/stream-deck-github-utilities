@@ -344,6 +344,7 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 
 		const resolved = await this.resolveEffectiveRepo(settings);
 		if (!resolved) return;
+		this.watchActiveRepo(actionId, resolved.isSentinel, () => this.refreshStats(actionId));
 
 		if (resolved.missing === "bridge") {
 			if (actionContext.isKey()) {

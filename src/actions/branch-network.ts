@@ -322,6 +322,7 @@ export class BranchNetworkAction extends BaseGitHubAction<BranchNetworkSettings>
 
 		const resolved = await this.resolveEffectiveRepo(settings);
 		if (!resolved) return;
+		this.watchActiveRepo(actionId, resolved.isSentinel, () => this.refreshNetwork(actionId));
 
 		if (resolved.missing === "bridge") {
 			if (actionContext.isDial()) await actionContext.setFeedback({ canvas: renderStripError("No active repo") });

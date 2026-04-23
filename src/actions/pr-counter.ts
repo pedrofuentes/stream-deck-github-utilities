@@ -243,6 +243,7 @@ export class PRCounterAction extends BaseGitHubAction<PullRequestCounterSettings
 
 		const resolved = await this.resolveEffectiveRepo(settings);
 		if (!resolved) return;
+		this.watchActiveRepo(actionId, resolved.isSentinel, () => this.refreshCount(actionId));
 
 		if (resolved.missing === "bridge") {
 			if (actionContext.isKey()) {

@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
 	resolveRepoSelection: vi.fn(),
 	coordinatorSubscribe: vi.fn(),
 	coordinatorUnsubscribe: vi.fn(),
+	watcherSetPathResolver: vi.fn(),
+	watcherSubscribe: vi.fn(),
+	watcherUnsubscribe: vi.fn(),
 }));
 
 vi.mock("@elgato/streamdeck", () => {
@@ -40,6 +43,12 @@ vi.mock("@elgato/streamdeck", () => {
 
 vi.mock("../../src/utils/active-repo-source", () => ({
 	resolveRepoSelection: mocks.resolveRepoSelection,
+	getDefaultBridgePath: () => "/tmp/default-bridge.json",
+	activeRepoWatcher: {
+		setPathResolver: mocks.watcherSetPathResolver,
+		subscribe: mocks.watcherSubscribe,
+		unsubscribe: mocks.watcherUnsubscribe,
+	},
 }));
 
 vi.mock("../../src/utils/graphql-query-coordinator", () => ({

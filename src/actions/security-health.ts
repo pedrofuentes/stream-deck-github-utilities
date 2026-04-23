@@ -216,6 +216,7 @@ export class SecurityHealthAction extends BaseGitHubAction<SecurityHealthSetting
 
 			const resolved = await this.resolveEffectiveRepo(settings);
 			if (!resolved) return;
+			this.watchActiveRepo(actionId, resolved.isSentinel, () => this.refreshHealth(actionId));
 
 			if (resolved.missing === "bridge") {
 				if (actionContext.isKey()) {

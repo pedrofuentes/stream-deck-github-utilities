@@ -246,6 +246,7 @@ export class ContributionHeatmapAction extends BaseGitHubAction<ContributionHeat
 		if (dataSource === "repo") {
 			const resolved = await this.resolveEffectiveRepo(settings!);
 			if (!resolved) return;
+			this.watchActiveRepo(actionId, resolved.isSentinel, () => this.refreshHeatmap(actionId));
 
 			if (resolved.missing === "bridge") {
 				if (actionContext.isDial()) await actionContext.setFeedback({ canvas: renderStripError("No active repo") });
@@ -271,6 +272,10 @@ export class ContributionHeatmapAction extends BaseGitHubAction<ContributionHeat
 				this.totalCommitsCache.delete(actionId);
 			}
 			this.lastResolvedRepo.set(actionId, resolved.repo);
+		} else {
+			// dataSource === "user" — drop any bridge-watch subscription left over
+			// from a prior repo-mode configuration.
+			this.watchActiveRepo(actionId, false, () => this.refreshHeatmap(actionId));
 		}
 
 		// Check if another instance already has data for the same scroll key

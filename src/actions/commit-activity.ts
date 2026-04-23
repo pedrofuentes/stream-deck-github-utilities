@@ -240,6 +240,7 @@ export class CommitActivityAction extends BaseGitHubAction<CommitActivitySetting
 
 		const resolved = await this.resolveEffectiveRepo(settings);
 		if (!resolved) return;
+		this.watchActiveRepo(actionId, resolved.isSentinel, () => this.refreshActivity(actionId));
 
 		if (resolved.missing === "bridge") {
 			if (actionContext.isKey()) {
