@@ -13,6 +13,8 @@ import {
 	isActiveRepoSentinel,
 	getDefaultBridgePath,
 	extractRepoFromBridge,
+	extractGitState,
+	hasGitState,
 	parseRemoteUrl,
 	readBridgeFile,
 	resolveRepoSelection,
@@ -354,5 +356,102 @@ describe("activeRepoWatcher", () => {
 		await activeRepoWatcher._tick();
 
 		expect(listener).toHaveBeenCalledTimes(1);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// v1 / v2 bridge payload handling
+// ---------------------------------------------------------------------------
+describe("bridge schema v1 / v2 compatibility", () => {
+	it("v1 payload validates and parses cleanly", async () => {
+		const v1 = {
+			version: 1,
+			sourceApp: "Cursor",
+			workspacePath: "/x",
+			repo: "owner/repo",
+			remoteUrl: "git@github.com:owner/repo.git",
+			updatedAt: "2026-04-23T22:10:00.000Z",
+		};
+		fsMock.stat.mockResolvedValueOnce({ mtimeMs: 1 });
+		fsMock.readFile.mockResolvedValueOnce(JSON.stringify(v1));
+
+		const payload = await readBridgeFile("/tmp/v1.json");
+		expect(payload).not.toBeNull();
+		expect(payload?.version).toBe(1);
+		expect(hasGitState(payload)).toBe(false);
+	});
+
+	it("v2 payload validates and exposes git state", async () => {
+		const v2 = {
+			version: 2,
+			sourceApp: "Cursor",
+			workspacePath: "/x",
+			repo: "owner/repo",
+			remoteUrl: "git@github.com:owner/repo.git",
+			updatedAt: "2026-04-23T22:10:00.000Z",
+			branch: "feat/x",
+			headSha: "a3f91c0",
+			upstream: "origin/main",
+			ahead: 3,
+			behind: 1,
+			staged: 2,
+			unstaged: 5,
+			untracked: 1,
+			conflicts: 0,
+			isDirty: true,
+		};
+		fsMock.stat.mockResolvedValueOnce({ mtimeMs: 1 });
+		fsMock.readFile.mockResolvedValueOnce(JSON.stringify(v2));
+
+		const payload = await readBridgeFile("/tmp/v2.json");
+		expect(payload).not.toBeNull();
+		expect(hasGitState(payload)).toBe(true);
+		expect(extractGitState(payload!)).toEqual({
+			branch: "feat/x",
+			headSha: "a3f91c0",
+			upstream: "origin/main",
+			ahead: 3,
+			behind: 1,
+			staged: 2,
+			unstaged: 5,
+			untracked: 1,
+			conflicts: 0,
+			isDirty: true,
+		});
+	});
+
+	it("v2 clean state (no dirt, synced) still registers as hasGitState", async () => {
+		const v2 = {
+			version: 2,
+			repo: "owner/repo",
+			branch: "main",
+			staged: 0,
+			unstaged: 0,
+			untracked: 0,
+			conflicts: 0,
+			isDirty: false,
+		};
+		fsMock.stat.mockResolvedValueOnce({ mtimeMs: 1 });
+		fsMock.readFile.mockResolvedValueOnce(JSON.stringify(v2));
+
+		const payload = await readBridgeFile("/tmp/clean.json");
+		expect(hasGitState(payload)).toBe(true);
+		expect(payload?.isDirty).toBe(false);
+	});
+
+	it("hasGitState returns false for null or empty payload", () => {
+		expect(hasGitState(null)).toBe(false);
+		expect(hasGitState(undefined)).toBe(false);
+		expect(hasGitState({ repo: "owner/repo" })).toBe(false);
+	});
+
+	it("extractRepoFromBridge still works on a v2 payload", () => {
+		const v2 = {
+			version: 2,
+			repo: "owner/repo",
+			branch: "main",
+			isDirty: false,
+		};
+		expect(extractRepoFromBridge(v2)).toBe("owner/repo");
 	});
 });

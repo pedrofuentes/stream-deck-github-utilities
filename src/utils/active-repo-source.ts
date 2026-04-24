@@ -36,10 +36,71 @@ const bridgeSchema = z
 		workspacePath: z.string().optional(),
 		updatedAt: z.string().optional(),
 		version: z.number().optional(),
+
+		// v2 additions — absent on v1 bridges. All optional so v1 still validates.
+		branch: z.string().optional(),
+		headSha: z.string().optional(),
+		upstream: z.string().optional(),
+		ahead: z.number().optional(),
+		behind: z.number().optional(),
+		staged: z.number().optional(),
+		unstaged: z.number().optional(),
+		untracked: z.number().optional(),
+		conflicts: z.number().optional(),
+		isDirty: z.boolean().optional(),
 	})
 	.passthrough();
 
 export type ActiveRepoBridgePayload = z.infer<typeof bridgeSchema>;
+
+/** The subset of bridge fields that describe local git state (v2+). */
+export interface ActiveRepoGitState {
+	branch?: string;
+	headSha?: string;
+	upstream?: string;
+	ahead?: number;
+	behind?: number;
+	staged?: number;
+	unstaged?: number;
+	untracked?: number;
+	conflicts?: number;
+	isDirty?: boolean;
+}
+
+/**
+ * True when the bridge payload includes at least one v2 git-state field. Used
+ * to distinguish "v1 bridge, no git state available" from "v2 bridge, repo is
+ * currently clean and synced".
+ */
+export function hasGitState(payload: ActiveRepoBridgePayload | null | undefined): boolean {
+	if (!payload) return false;
+	return (
+		payload.branch !== undefined ||
+		payload.headSha !== undefined ||
+		payload.isDirty !== undefined ||
+		payload.staged !== undefined ||
+		payload.unstaged !== undefined ||
+		payload.untracked !== undefined ||
+		payload.ahead !== undefined ||
+		payload.behind !== undefined
+	);
+}
+
+/** Extract just the git-state slice from a bridge payload. */
+export function extractGitState(payload: ActiveRepoBridgePayload): ActiveRepoGitState {
+	return {
+		branch: payload.branch,
+		headSha: payload.headSha,
+		upstream: payload.upstream,
+		ahead: payload.ahead,
+		behind: payload.behind,
+		staged: payload.staged,
+		unstaged: payload.unstaged,
+		untracked: payload.untracked,
+		conflicts: payload.conflicts,
+		isDirty: payload.isDirty,
+	};
+}
 
 /** Reason a sentinel-resolve failed, surfaced to callers for user-facing copy. */
 export type ActiveRepoMissingReason = "bridge" | "invalid";

@@ -170,9 +170,23 @@ Monitor GitHub Projects V2 for a repository.
 - Double-click to force refresh
 - Requires `Projects: Read` permission on fine-grained token
 
+### 🎯 Active Repo
+
+Shows the repo and branch you're currently editing, plus live working-tree status — staged, unstaged, untracked, ahead/behind upstream. Works on both keypad and encoder. Re-renders sub-second on every save / stage / commit / branch switch in your editor.
+
+- **Keypad** — compact summary: repo, branch, `3↑  1↓  ⚠5` status line
+- **Encoder** — rotatable between two view modes:
+  - **Branch + sync** — branch name, ahead/behind counts, upstream name
+  - **Working tree** — staged / unstaged / untracked columns with traffic-light dots
+- **Press** — opens the workspace in the editor that wrote the bridge file (Cursor or VS Code; configurable)
+- **Long press** — opens the repo on GitHub
+- **Rotate the dial** — switch view mode (persisted)
+- **Accent bar color** summarizes overall state: green (clean + synced), yellow (dirty), orange (unpushed commits), red (behind upstream or merge conflicts)
+- Requires the Cursor / VS Code [bridge extension](bridge-extension/) — the action reads local git state from the bridge file only; no GitHub API calls, no token needed for this specific action
+
 ### Stream Deck+ Encoder Support
 
-All 14 actions support the Stream Deck+ encoder with rich touch strip visualizations:
+All 15 actions support the Stream Deck+ encoder with rich touch strip visualizations:
 
 | Interaction | Action |
 |-------------|--------|
@@ -211,19 +225,31 @@ Every repo picker in this plugin shows a **★ Current Active Repo (Cursor/VS Co
 - Windows: `%APPDATA%\stream-deck-github-utilities\active-repo.json`
 - Linux / other: `$XDG_CONFIG_HOME/stream-deck-github-utilities/active-repo.json` (falls back to `~/.config/...`)
 
-**Schema**
+**Schema (v2)**
 
 ```json
 {
+  "version": 2,
   "repo": "owner/repo",
   "remoteUrl": "git@github.com:owner/repo.git",
   "workspacePath": "/Users/you/Projects/owner/repo",
-  "sourceApp": "cursor",
-  "updatedAt": "2026-04-23T22:10:00.000Z"
+  "sourceApp": "Cursor",
+  "updatedAt": "2026-04-23T22:10:00.000Z",
+  "branch": "feat/x",
+  "headSha": "a3f91c0",
+  "upstream": "origin/main",
+  "ahead": 3,
+  "behind": 1,
+  "staged": 2,
+  "unstaged": 5,
+  "untracked": 1,
+  "conflicts": 0,
+  "isDirty": true
 }
 ```
 
-- `repo` (preferred) or `remoteUrl` (fallback) is required. Other fields are metadata the plugin ignores but a companion may populate for its own use.
+- `repo` (preferred) or `remoteUrl` (fallback) is required for any action to resolve. All other fields are optional.
+- **v1 bridges still work** — every v2 field is optional, so older companions that only write `repo` + `remoteUrl` continue to drive all actions except Active Repo (which needs `branch` / `isDirty` / counts to render its full UI and falls back to a "git state unavailable" hint when they're absent).
 - `remoteUrl` accepts both SSH (`git@github.com:owner/repo.git`) and HTTPS (`https://github.com/owner/repo.git`) forms.
 - The plugin watches file mtime — just rewrite the file atomically and buttons retarget within one refresh interval (or instantly on touch-tap / key refresh).
 

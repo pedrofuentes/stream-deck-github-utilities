@@ -2,7 +2,7 @@
 	"name": "stream-deck-github-bridge",
 	"displayName": "Stream Deck GitHub Utilities — Active Repo Bridge",
 	"description": "Writes the currently active workspace's GitHub repo to a bridge file so the Stream Deck GitHub Utilities plugin can follow your editor.",
-	"version": "0.1.0",
+	"version": "0.3.3",
 	"publisher": "pedrofuentes",
 	"private": true,
 	"license": "MIT",
@@ -18,6 +18,7 @@
 	"keywords": ["stream-deck", "github", "dashboard", "cursor"],
 	"main": "./out/extension.js",
 	"activationEvents": ["onStartupFinished"],
+	"extensionDependencies": ["vscode.git"],
 	"contributes": {
 		"commands": [
 			{

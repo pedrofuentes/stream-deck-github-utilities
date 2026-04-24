@@ -1,6 +1,6 @@
 # Stream Deck GitHub Utilities — Active Repo Bridge
 
-A tiny VS Code / Cursor extension that writes your currently-focused workspace's GitHub repo to a small JSON file. The [Stream Deck GitHub Utilities](https://github.com/pedrofuentes/stream-deck-github-utilities) plugin reads that file to make any button with the **★ Current Active Repo** setting follow your editor focus — no reconfiguration when you switch projects.
+A tiny VS Code / Cursor extension that writes your currently-focused workspace's GitHub repo **plus its live working-tree state** (branch, ahead/behind upstream, staged / unstaged / untracked counts, merge conflicts) to a small JSON file. The [Stream Deck GitHub Utilities](https://github.com/pedrofuentes/stream-deck-github-utilities) plugin reads that file so any button with the **★ Current Active Repo** setting follows your editor focus in real time, and the dedicated **Active Repo** action renders branch / dirty state on the Stream Deck LCD without any GitHub API calls.
 
 ## Install
 
@@ -26,20 +26,38 @@ Triggers on:
 - Startup of a focused editor window
 - Workspace folder add / remove / switch
 - Window focus changes (the last-focused window wins — switching windows updates the bridge)
+- **Active text editor changes** — flipping between tabs in the same window
+- **Git state changes** — every save, stage, commit, or branch switch in the active repo
 - The **Stream Deck Bridge: Refresh Active Repo** command (manual override)
 
-For the primary workspace folder, it runs `git remote get-url origin`, parses the result as a GitHub URL (SSH or HTTPS), and writes a JSON payload atomically:
+The extension caches the last successful git-state snapshot per workspace and falls back to it when Cursor's git API drops the repo briefly during transitions — so the Stream Deck LCD stays stable instead of flickering to "git state unavailable".
+
+Git state is read via the built-in `vscode.git` extension (declared as an `extensionDependencies`), so no extra `git` subprocess is spawned on every tick — just a subscription to `Repository.state.onDidChange`.
+
+For the primary workspace folder, it runs `git remote get-url origin` once to resolve the GitHub remote, then writes the JSON payload atomically on every relevant event:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "sourceApp": "Cursor",
   "workspacePath": "/Users/you/Projects/owner/repo",
   "repo": "owner/repo",
   "remoteUrl": "git@github.com:owner/repo.git",
-  "updatedAt": "2026-04-23T22:10:00.000Z"
+  "updatedAt": "2026-04-23T22:10:00.000Z",
+  "branch": "feat/x",
+  "headSha": "a3f91c0",
+  "upstream": "origin/main",
+  "ahead": 3,
+  "behind": 1,
+  "staged": 2,
+  "unstaged": 5,
+  "untracked": 1,
+  "conflicts": 0,
+  "isDirty": true
 }
 ```
+
+Writes that would only change `updatedAt` (no meaningful state change) are suppressed, so the Stream Deck's 1 s mtime watcher doesn't fire for noops.
 
 ## Where it writes
 

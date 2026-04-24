@@ -384,3 +384,18 @@ export type DiscussionsMonitorSettings = RepoActionSettings;
 
 /** Per-action settings for the Projects Board action */
 export type ProjectsBoardSettings = RepoActionSettings;
+
+/** Per-action settings for the Active Repo action. */
+export interface ActiveRepoSettings extends RepoActionSettings {
+	/**
+	 * Default encoder view mode. Keypad ignores this — always renders the
+	 * compact summary. Dials rotate through modes via the encoder, but this
+	 * setting sets the starting mode and persists across appear/disappear.
+	 */
+	viewMode?: "branch-sync" | "working-tree";
+	/**
+	 * How the repo name should be rendered. `full` = "owner/repo", `short` =
+	 * just the repo name. Default is `full`.
+	 */
+	ownerDisplay?: "full" | "short";
+}
