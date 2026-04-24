@@ -361,6 +361,33 @@
 			"UserTitleEnabled": false,
 			"UUID": "com.pedrofuentes.github-utilities.projects-board",
 			"PropertyInspectorPath": "ui/projects-board.html"
+		},
+		{
+			"Icon": "imgs/actions/active-repo/icon",
+			"Name": "Active Repo",
+			"Controllers": [
+				"Keypad",
+				"Encoder"
+			],
+			"Encoder": {
+				"layout": "layouts/github-full-canvas.json",
+				"TriggerDescription": {
+					"Rotate": "Switch View",
+					"Push": "Open Workspace",
+					"Touch": "Refresh",
+					"LongTouch": "Open on GitHub"
+				}
+			},
+			"States": [
+				{
+					"Image": "imgs/actions/active-repo/key",
+					"ShowTitle": false
+				}
+			],
+			"Tooltip": "Show the current editor's repo, branch, and working-tree status (requires the Cursor/VSCode bridge extension)",
+			"UserTitleEnabled": false,
+			"UUID": "com.pedrofuentes.github-utilities.active-repo",
+			"PropertyInspectorPath": "ui/active-repo.html"
 		}
 	],
 	"Author": "Pedro Fuentes",

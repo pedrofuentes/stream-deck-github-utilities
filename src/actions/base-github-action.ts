@@ -34,8 +34,19 @@ import { handlePIDataRequest, type PIDataRequest } from "../utils/pi-data-provid
 import { classifyErrorLabel } from "../utils/github-api";
 import { renderErrorImage } from "../utils/button-renderer";
 import { renderStripError } from "../utils/touch-strip-renderer";
+import {
+	activeRepoWatcher,
+	getDefaultBridgePath,
+	resolveRepoSelection,
+	type ResolvedRepo,
+} from "../utils/active-repo-source";
 import type { JsonValue } from "@elgato/utils";
-import type { RepoActionSettings } from "../types";
+import type {
+	DataFragmentName,
+	FragmentParams,
+	GlobalSettings,
+	RepoActionSettings,
+} from "../types";
 
 /**
  * Minimal settings shape that all GitHub action settings share.
@@ -53,6 +64,8 @@ export type BaseActionSettings = RepoActionSettings;
  */
 export abstract class BaseGitHubAction<TSettings extends BaseActionSettings> extends SingletonAction<TSettings> {
 	private static _coordinator = new GraphQLQueryCoordinator(new RepoDataCache());
+	/** Cached global-settings override for the bridge path — drives the watcher's pathResolver. */
+	private static _cachedBridgePathOverride: string | undefined;
 
 	/** Access the shared coordinator instance. */
 	protected get coordinator(): GraphQLQueryCoordinator {
@@ -71,6 +84,9 @@ export abstract class BaseGitHubAction<TSettings extends BaseActionSettings> ext
 	/** Cached action contexts for O(1) lookup */
 	protected actionContexts = new Map<string, Action<TSettings>>();
 
+	/** Last resolved repo per action — used by syncResolvedRepoSubscription to detect repo changes. */
+	protected lastResolvedRepo = new Map<string, string>();
+
 	/**
 	 * Common cleanup on action disappear.
 	 * Subclasses should override, call super.onWillDisappear(ev),
@@ -81,8 +97,81 @@ export abstract class BaseGitHubAction<TSettings extends BaseActionSettings> ext
 		this.polling.stop(actionId);
 		this.coordinator.unsubscribe(actionId);
 		this.urlOpener.cleanup(actionId);
+		activeRepoWatcher.unsubscribe(actionId);
 		this.actionSettings.delete(actionId);
 		this.actionContexts.delete(actionId);
+		this.lastResolvedRepo.delete(actionId);
+	}
+
+	/**
+	 * Resolve the effective repo for an action, honoring Dynamic Repo Mode.
+	 *
+	 * Returns `null` when the setting is blank — caller decides the semantics
+	 * (e.g. pr-review-queue treats empty as "all repos", other actions render
+	 * an unconfigured state). When the setting is the active-repo sentinel
+	 * but the bridge file is missing/invalid, returns a result with a
+	 * `missing` reason so callers can surface a specific error.
+	 */
+	protected async resolveEffectiveRepo(settings: TSettings): Promise<ResolvedRepo | null> {
+		const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+		// Keep the watcher's path resolver in sync with the latest global-settings
+		// override so path changes take effect on the next tick.
+		if (globalSettings.activeRepoBridgePath !== BaseGitHubAction._cachedBridgePathOverride) {
+			BaseGitHubAction._cachedBridgePathOverride = globalSettings.activeRepoBridgePath;
+			const override = globalSettings.activeRepoBridgePath;
+			activeRepoWatcher.setPathResolver(() =>
+				override && override.trim().length > 0 ? override.trim() : getDefaultBridgePath(),
+			);
+		}
+		return resolveRepoSelection(settings.repo, {
+			bridgePath: globalSettings.activeRepoBridgePath,
+		});
+	}
+
+	/**
+	 * Subscribe (or keep subscribed) to the bridge-file watcher so the action
+	 * re-runs its refresh immediately when the JSON file changes. When the
+	 * setting is no longer the sentinel, we unsubscribe so non-dynamic actions
+	 * don't re-render on every bridge change.
+	 *
+	 * Call from each action's refresh method right after `resolveEffectiveRepo`.
+	 */
+	protected watchActiveRepo(
+		actionId: string,
+		isSentinel: boolean,
+		onChange: () => Promise<void>,
+	): void {
+		if (isSentinel) {
+			activeRepoWatcher.subscribe(actionId, onChange);
+		} else {
+			activeRepoWatcher.unsubscribe(actionId);
+		}
+	}
+
+	/**
+	 * Subscribe an action to the coordinator, re-routing the subscription when
+	 * the resolved repo has changed since the last call. Inside a single
+	 * refresh tick this is a no-op for the common "repo didn't move" case —
+	 * it simply reinstalls the subscription (picking up any fragment/params
+	 * change) without touching the cache.
+	 */
+	protected syncResolvedRepoSubscription(
+		actionId: string,
+		resolvedRepo: string,
+		fragments: DataFragmentName[],
+		maxAgeSec: number,
+		params?: FragmentParams,
+		onSiblingRefresh?: () => Promise<void>,
+	): void {
+		const previous = this.lastResolvedRepo.get(actionId);
+		if (previous !== undefined && previous !== resolvedRepo) {
+			this.coordinator.unsubscribe(actionId);
+		}
+		this.coordinator.subscribe(
+			{ actionId, repo: resolvedRepo, fragments, maxAgeSec, params },
+			onSiblingRefresh,
+		);
+		this.lastResolvedRepo.set(actionId, resolvedRepo);
 	}
 
 	/**

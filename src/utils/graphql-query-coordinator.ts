@@ -30,6 +30,13 @@ import { fragmentRegistry } from "./fragment-strategies";
 import streamDeck from "@elgato/streamdeck";
 
 /**
+ * How long to keep a repo's cached fragments warm after its last subscriber
+ * unsubscribes. Tuned so that Dynamic Repo Mode users who flip editor focus
+ * back and forth don't pay a full refetch on every trip.
+ */
+export const REPO_CACHE_RETENTION_MS = 10 * 60 * 1000;
+
+/**
  * Centralized data fetching coordinator for Stream Deck actions.
  *
  * Manages subscriptions from actions, batches GraphQL queries per-repo,
@@ -62,16 +69,21 @@ export class GraphQLQueryCoordinator {
 		} else {
 			this.refreshCallbacks.delete(subscription.actionId);
 		}
+		if (subscription.repo) {
+			this.cache.touch(subscription.repo);
+		}
 	}
 
 	/**
 	 * Remove an action's subscription.
-	 * Call in onWillDisappear. Triggers cache cleanup.
+	 * Call in onWillDisappear. Orphaned repos stay warm for
+	 * {@link REPO_CACHE_RETENTION_MS} so rapid flips (e.g. Dynamic Repo Mode
+	 * swapping editor focus) don't pay a full refetch each trip.
 	 */
 	unsubscribe(actionId: string): void {
 		this.subscriptions.delete(actionId);
 		this.refreshCallbacks.delete(actionId);
-		this.cache.cleanup(this.getActiveRepos());
+		this.cache.cleanup(this.getActiveRepos(), REPO_CACHE_RETENTION_MS);
 	}
 
 	/**

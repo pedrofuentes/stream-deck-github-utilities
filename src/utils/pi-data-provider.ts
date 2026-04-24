@@ -32,6 +32,7 @@ import {
 	fetchRepoEnvironments,
 	type DataSourceItem,
 } from "./github-api";
+import { ACTIVE_REPO_SENTINEL, resolveRepoSelection } from "./active-repo-source";
 
 /** Payload shape from sdpi-components datasource requests */
 export interface PIDataRequest {
@@ -44,6 +45,25 @@ export interface PIDataRequest {
 export interface PIDataResponse {
 	event: string;
 	items: DataSourceItem[];
+}
+
+/**
+ * Build the leading "Current Active Repo" entry shown in every repo picker.
+ * When the bridge file resolves cleanly the label includes the live repo so
+ * users can confirm the integration at a glance.
+ */
+async function buildActiveRepoPickerItem(bridgePath: string | undefined): Promise<DataSourceItem> {
+	const resolved = await resolveRepoSelection(ACTIVE_REPO_SENTINEL, { bridgePath });
+	if (resolved && !resolved.missing && resolved.repo) {
+		return {
+			label: `★ Current Active Repo (${resolved.repo})`,
+			value: ACTIVE_REPO_SENTINEL,
+		};
+	}
+	return {
+		label: "★ Cursor/VS Code: Current Active Repo",
+		value: ACTIVE_REPO_SENTINEL,
+	};
 }
 
 /**
@@ -85,7 +105,9 @@ export async function handlePIDataRequest(
 			}
 
 			case PI_EVENTS.GET_REPOS: {
-				items = await fetchUserRepos(token);
+				const repos = await fetchUserRepos(token);
+				const activeEntry = await buildActiveRepoPickerItem(globalSettings.activeRepoBridgePath);
+				items = [activeEntry, ...repos];
 				break;
 			}
 
@@ -93,7 +115,20 @@ export async function handlePIDataRequest(
 			case PI_EVENTS.GET_BRANCHES:
 			case PI_EVENTS.GET_ENVIRONMENTS: {
 				const settings = await getActionSettings();
-				const parsed = settings.repo ? parseRepoIdentifier(settings.repo) : null;
+				const resolved = settings.repo
+					? await resolveRepoSelection(settings.repo, { bridgePath: globalSettings.activeRepoBridgePath })
+					: null;
+
+				if (resolved?.missing === "bridge") {
+					items = [{ label: "⚠ Active-repo bridge file not found — see README", value: "", disabled: true }];
+					break;
+				}
+				if (resolved?.missing === "invalid") {
+					items = [{ label: "⚠ Active-repo bridge file is invalid — see README", value: "", disabled: true }];
+					break;
+				}
+
+				const parsed = resolved ? parseRepoIdentifier(resolved.repo) : null;
 
 				if (!parsed) {
 					items = [{ label: "⚠ Select a repository first", value: "", disabled: true }];

@@ -240,14 +240,42 @@ export class ContributionHeatmapAction extends BaseGitHubAction<ContributionHeat
 
 		streamDeck.logger.debug(`Heatmap refresh starting: action=${actionId} dataSource=${dataSource} repo=${settings?.repo} gen=${gen}`);
 
-		// Validate repo format when in repo mode
+		// Resolve dynamic repo mode — only applies to dataSource === "repo".
+		// dataSource === "user" hits the global profile GraphQL, no repo involved.
 		let parsed: { owner: string; repo: string } | null = null;
 		if (dataSource === "repo") {
-			parsed = parseRepoIdentifier(settings!.repo!);
+			const resolved = await this.resolveEffectiveRepo(settings!);
+			if (!resolved) return;
+			this.watchActiveRepo(actionId, resolved.isSentinel, () => this.refreshHeatmap(actionId));
+
+			if (resolved.missing === "bridge") {
+				if (actionContext.isDial()) await actionContext.setFeedback({ canvas: renderStripError("No active repo") });
+				return;
+			}
+			if (resolved.missing === "invalid") {
+				if (actionContext.isDial()) await actionContext.setFeedback({ canvas: renderStripError("Bridge invalid") });
+				return;
+			}
+
+			parsed = parseRepoIdentifier(resolved.repo);
 			if (!parsed) {
 				if (actionContext.isDial()) await actionContext.setFeedback({ canvas: renderStripError("Invalid repo") });
 				return;
 			}
+
+			// When the resolved repo changes under a stable setting (e.g. sentinel
+			// following the editor from A to B), invalidate any cached weekly data
+			// so we don't render stale numbers for the wrong repo.
+			const previousResolved = this.lastResolvedRepo.get(actionId);
+			if (previousResolved !== undefined && previousResolved !== resolved.repo) {
+				this.weeklyCache.delete(actionId);
+				this.totalCommitsCache.delete(actionId);
+			}
+			this.lastResolvedRepo.set(actionId, resolved.repo);
+		} else {
+			// dataSource === "user" — drop any bridge-watch subscription left over
+			// from a prior repo-mode configuration.
+			this.watchActiveRepo(actionId, false, () => this.refreshHeatmap(actionId));
 		}
 
 		// Check if another instance already has data for the same scroll key

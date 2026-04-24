@@ -142,7 +142,7 @@ describe("Cache invalidation flow", () => {
 		expect(otherRepoCallback).not.toHaveBeenCalled();
 	});
 
-	it("unsubscribe cleans up cache for inactive repos", async () => {
+	it("unsubscribe keeps the cache warm during the retention window then evicts", async () => {
 		fetchSpy = vi.spyOn(globalThis, "fetch")
 			.mockResolvedValue(mockResponse(makeGraphQLRepoResponse()));
 
@@ -152,10 +152,13 @@ describe("Cache invalidation flow", () => {
 		// Cache should have data
 		expect(cache.has(REPO, "repoMetadata")).toBe(true);
 
-		// Unsubscribe — triggers cleanup
+		// Unsubscribe — cache stays warm inside the retention window
 		coordinator.unsubscribe("action-1");
+		expect(cache.has(REPO, "repoMetadata")).toBe(true);
 
-		// Cache for this repo should be cleaned up
+		// Advance past retention window and trigger another cleanup pass
+		vi.advanceTimersByTime(10 * 60 * 1000 + 1);
+		coordinator.unsubscribe("nonexistent-action");
 		expect(cache.has(REPO, "repoMetadata")).toBe(false);
 	});
 
@@ -173,8 +176,13 @@ describe("Cache invalidation flow", () => {
 		coordinator.unsubscribe("action-1");
 		expect(cache.has(REPO, "repoMetadata")).toBe(true);
 
-		// Unsubscribe action-2 — now cache should clean up
+		// Unsubscribe action-2 — cache stays warm during retention
 		coordinator.unsubscribe("action-2");
+		expect(cache.has(REPO, "repoMetadata")).toBe(true);
+
+		// Advance past retention window and trigger cleanup
+		vi.advanceTimersByTime(10 * 60 * 1000 + 1);
+		coordinator.unsubscribe("nonexistent-action");
 		expect(cache.has(REPO, "repoMetadata")).toBe(false);
 	});
 

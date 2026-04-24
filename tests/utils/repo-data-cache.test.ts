@@ -288,6 +288,62 @@ describe("RepoDataCache", () => {
 		});
 	});
 
+	// ── retention-aware cleanup ──────────────────────────────────────────
+
+	describe("cleanup() with retentionMs", () => {
+		it("keeps an orphaned repo warm inside the retention window", () => {
+			cache.set("warm/repo", "prCount", 42, "graphql");
+			cache.cleanup(new Set(), 10 * 60 * 1000);
+			expect(cache.has("warm/repo", "prCount")).toBe(true);
+		});
+
+		it("evicts the orphaned repo once the retention window elapses", () => {
+			cache.set("warm/repo", "prCount", 42, "graphql");
+
+			vi.advanceTimersByTime(10 * 60 * 1000 + 1);
+
+			cache.cleanup(new Set(), 10 * 60 * 1000);
+			expect(cache.has("warm/repo", "prCount")).toBe(false);
+		});
+
+		it("touch() resets the retention clock so a returning subscriber saves the cache", () => {
+			cache.set("warm/repo", "prCount", 42, "graphql");
+
+			vi.advanceTimersByTime(9 * 60 * 1000);
+			cache.touch("warm/repo");
+
+			vi.advanceTimersByTime(5 * 60 * 1000);
+			cache.cleanup(new Set(), 10 * 60 * 1000);
+			expect(cache.has("warm/repo", "prCount")).toBe(true);
+		});
+
+		it("evicts immediately when retentionMs is 0 (backward-compatible default)", () => {
+			cache.set("orphan/repo", "prCount", 1, "graphql");
+			cache.cleanup(new Set());
+			expect(cache.has("orphan/repo", "prCount")).toBe(false);
+		});
+
+		it("still keeps active repos regardless of retention", () => {
+			cache.set("active/repo", "prCount", 1, "graphql");
+
+			vi.advanceTimersByTime(20 * 60 * 1000);
+
+			cache.cleanup(new Set(["active/repo"]), 10 * 60 * 1000);
+			expect(cache.has("active/repo", "prCount")).toBe(true);
+		});
+
+		it("cleans up the lastSubscribedAt stamp when a repo is evicted", () => {
+			cache.set("stale/repo", "prCount", 1, "graphql");
+
+			vi.advanceTimersByTime(10 * 60 * 1000 + 1);
+			cache.cleanup(new Set(), 10 * 60 * 1000);
+
+			// Re-setting should work without residual state
+			cache.set("stale/repo", "prCount", 2, "graphql");
+			expect(cache.get<number>("stale/repo", "prCount", 300)!.data).toBe(2);
+		});
+	});
+
 	// ── has() ────────────────────────────────────────────────────────────
 
 	describe("has()", () => {

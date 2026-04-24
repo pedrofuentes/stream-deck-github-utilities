@@ -267,6 +267,28 @@
 		</div>
 	</div>
 
+	<hr class="divider" />
+
+	<div class="section-label">Dynamic Repo Mode (optional)</div>
+	<div class="help-text" style="margin-bottom: 12px;">
+		<p style="margin-bottom: 8px;">
+			Any repo picker now shows a <strong>★ Current Active Repo</strong> option. Select it to make the button follow whatever repo your editor has open — no reconfiguration when switching projects.
+		</p>
+		<p style="margin-bottom: 6px;">The plugin reads a small JSON bridge file that a Cursor/VS Code companion writes. Default path:</p>
+		<div class="scope-list" style="margin-left: 0;">
+			<code>~/Library/Application Support/stream-deck-github-utilities/active-repo.json</code> (macOS)<br>
+			<code>%APPDATA%\stream-deck-github-utilities\active-repo.json</code> (Windows)
+		</div>
+		<p style="margin: 8px 0 4px;">Schema:</p>
+		<pre style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:10px;font-family:'SF Mono',Consolas,monospace;font-size:11px;color:#c9d1d9;overflow-x:auto;">{
+  "repo": "owner/repo",
+  "remoteUrl": "git@github.com:owner/repo.git"
+}</pre>
+		<p style="margin-top: 6px; font-size: 11px; color: #8b949e;">
+			Either <code>repo</code> or <code>remoteUrl</code> is required. Data is cached for 10 minutes across project switches so flipping between editors doesn't re-hit the GitHub API. See the <a href="https://github.com/pedrofuentes/stream-deck-github-utilities#dynamic-repo-mode" target="_blank">README</a> for the companion extension.
+		</p>
+	</div>
+
 	<script>
 		/**
 		 * Setup page for GitHub Utilities plugin.

@@ -1,0 +1,60 @@
+{
+	"name": "stream-deck-github-bridge",
+	"displayName": "Stream Deck GitHub Utilities — Active Repo Bridge",
+	"description": "Writes the currently active workspace's GitHub repo to a bridge file so the Stream Deck GitHub Utilities plugin can follow your editor.",
+	"version": "0.3.3",
+	"publisher": "pedrofuentes",
+	"private": true,
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/pedrofuentes/stream-deck-github-utilities.git",
+		"directory": "bridge-extension"
+	},
+	"engines": {
+		"vscode": "^1.80.0"
+	},
+	"categories": ["Other"],
+	"keywords": ["stream-deck", "github", "dashboard", "cursor"],
+	"main": "./out/extension.js",
+	"activationEvents": ["onStartupFinished"],
+	"extensionDependencies": ["vscode.git"],
+	"contributes": {
+		"commands": [
+			{
+				"command": "streamDeckGitHubBridge.refresh",
+				"title": "Stream Deck Bridge: Refresh Active Repo"
+			}
+		],
+		"configuration": {
+			"title": "Stream Deck GitHub Bridge",
+			"properties": {
+				"streamDeckGitHubBridge.bridgePath": {
+					"type": "string",
+					"default": "",
+					"description": "Override the bridge-file path. Leave empty to use the OS default (matches the plugin's default)."
+				},
+				"streamDeckGitHubBridge.debounceMs": {
+					"type": "number",
+					"default": 300,
+					"minimum": 0,
+					"maximum": 5000,
+					"description": "How long to wait (ms) after a workspace/focus change before writing the bridge file. Prevents thrash when switching rapidly."
+				}
+			}
+		}
+	},
+	"scripts": {
+		"build": "tsc -p .",
+		"watch": "tsc -w -p .",
+		"test": "vitest run",
+		"package": "mkdir -p dist && vsce package --out dist/stream-deck-github-bridge.vsix"
+	},
+	"devDependencies": {
+		"@types/node": "^20.11.0",
+		"@types/vscode": "^1.80.0",
+		"@vscode/vsce": "^3.0.0",
+		"typescript": "^5.3.0",
+		"vitest": "^3.0.0"
+	}
+}

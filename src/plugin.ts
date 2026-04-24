@@ -22,6 +22,7 @@ import { FleetMonitorAction } from "./actions/fleet-monitor";
 import { SecurityHealthAction } from "./actions/security-health";
 import { DiscussionsMonitorAction } from "./actions/discussions-monitor";
 import { ProjectsBoardAction } from "./actions/projects-board";
+import { ActiveRepoAction } from "./actions/active-repo";
 
 // Configure the logger
 streamDeck.logger.setLevel("debug");
@@ -41,6 +42,7 @@ streamDeck.actions.registerAction(new FleetMonitorAction());
 streamDeck.actions.registerAction(new SecurityHealthAction());
 streamDeck.actions.registerAction(new DiscussionsMonitorAction());
 streamDeck.actions.registerAction(new ProjectsBoardAction());
+streamDeck.actions.registerAction(new ActiveRepoAction());
 
 // Connect to the Stream Deck
 streamDeck.connect();

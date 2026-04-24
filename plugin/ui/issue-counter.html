@@ -179,7 +179,7 @@
 	</sdpi-item>
 
 	<span id="repoStatus" class="sdpi-info">
-		Select a repository to display issue count for.
+		Pick a repo — or ★ Current Active Repo to follow the editor — to display issue count for.
 	</span>
 
 	<!-- State Filter -->
@@ -220,7 +220,7 @@
 			container: document.getElementById('repoSelect'),
 			setting: 'repo',
 			datasource: 'getRepos',
-			placeholder: 'Choose a repository',
+			placeholder: 'Repository or ★ Active',
 			searchPlaceholder: 'Search repositories…',
 			threshold: 8,
 		});
@@ -266,7 +266,7 @@
 				const count = items.filter(i => i.value !== "").length;
 				tokenStatus.textContent = `✓ Token valid — ${count} repositor${count === 1 ? "y" : "ies"} loaded`;
 				tokenStatus.className = "sdpi-status success";
-				repoStatus.textContent = "Select a repository to display issue count for.";
+				repoStatus.textContent = "Pick a repo — or ★ Current Active Repo to follow the editor — to display issue count for.";
 			}
 		}
 

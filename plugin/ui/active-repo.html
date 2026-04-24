@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<script>
+	// Intercept WebSocket to merge action settings on outgoing setSettings, so
+	// partial updates from <sdpi-select> don't clobber the repo FilterableSelect
+	// value. Mirrors the pattern used by repo-stats.html.
+	(function() {
+		const NativeWS = window.WebSocket;
+		let _lastSendTime = 0;
+		const ECHO_WINDOW_MS = 500;
+		window.WebSocket = new Proxy(NativeWS, {
+			construct(target, args) {
+				const ws = new target(...args);
+				window._sdWebSocket = ws;
+				const _origSend = ws.send.bind(ws);
+				ws.send = function(data) {
+					try {
+						const msg = JSON.parse(data);
+						if (msg.event === "setSettings" && window._actionSettings) {
+							msg.payload = Object.assign({}, window._actionSettings, msg.payload);
+							window._actionSettings = msg.payload;
+							_lastSendTime = Date.now();
+							return _origSend(JSON.stringify(msg));
+						}
+					} catch(e) {}
+					return _origSend(data);
+				};
+				ws.addEventListener("message", function(evt) {
+					try {
+						const data = JSON.parse(evt.data);
+						if (data.event === "didReceiveGlobalSettings") {
+							window._globalSettings = data.payload?.settings || {};
+						}
+						if (data.event === "didReceiveSettings") {
+							const isEcho = (Date.now() - _lastSendTime) < ECHO_WINDOW_MS;
+							if (!isEcho) {
+								window._actionSettings = data.payload?.settings || {};
+							}
+							window.dispatchEvent(new CustomEvent('sdpi-settings-loaded', {
+								detail: { settings: data.payload?.settings || {} }
+							}));
+						}
+						if (data.event === "sendToPropertyInspector" && data.payload?.event === "getRepos") {
+							window._repoItems = data.payload.items || [];
+							window.dispatchEvent(new CustomEvent('sdpi-datasource', {
+								detail: { event: 'getRepos', items: window._repoItems }
+							}));
+							if (typeof window._onRepoData === "function") window._onRepoData();
+						}
+					} catch(e) {}
+				});
+				return ws;
+			}
+		});
+	})();
+	</script>
+	<script src="sdpi-components.js"></script>
+	<script src="filterable-select.js"></script>
+	<script>
+	(function() {
+		const origConnect = window.connectElgatoStreamDeckSocket;
+		window.connectElgatoStreamDeckSocket = function(port, uuid, registerEvent, info, actionInfo) {
+			window._sdUuid = uuid;
+			try {
+				var ai = typeof actionInfo === 'string' ? JSON.parse(actionInfo) : actionInfo;
+				window._sdAction = ai?.action || '';
+				window._actionSettings = ai?.payload?.settings || {};
+			} catch(e) {}
+			if (origConnect) origConnect.call(this, port, uuid, registerEvent, info, actionInfo);
+			window.dispatchEvent(new CustomEvent('sdpi-settings-loaded', {
+				detail: { settings: window._actionSettings }
+			}));
+			setTimeout(() => {
+				const ws = window._sdWebSocket;
+				if (ws && ws.readyState === WebSocket.OPEN) {
+					ws.send(JSON.stringify({ event: "getGlobalSettings", context: uuid }));
+				}
+			}, 200);
+		};
+	})();
+	</script>
+	<style>
+		body {
+			font-family: "SF Pro", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+		}
+		.sdpi-heading {
+			display: block;
+			padding: 6px 16px 3px;
+			font-size: 11px;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 0.8px;
+			color: #8b949e;
+			margin-top: 8px;
+		}
+		.sdpi-info {
+			display: block;
+			padding: 4px 16px;
+			font-size: 10px;
+			color: #8b949e;
+			line-height: 1.5;
+		}
+		.sdpi-info.warn { color: #d29922; }
+		hr {
+			border: none;
+			border-top: 1px solid #30363d;
+			margin: 10px 16px;
+		}
+	</style>
+</head>
+<body>
+	<span class="sdpi-heading">Active Repo</span>
+
+	<span class="sdpi-info">
+		Follows the repo and branch you're editing. Requires the Stream Deck
+		GitHub Bridge extension for Cursor / VS Code —
+		<a href="https://github.com/pedrofuentes/stream-deck-github-utilities#active-repo" target="_blank">setup →</a>
+	</span>
+
+	<hr />
+
+	<span class="sdpi-heading">Repository</span>
+
+	<sdpi-item label="Repository">
+		<div id="repoSelect"></div>
+	</sdpi-item>
+
+	<span id="repoStatus" class="sdpi-info">
+		Pick ★ Current Active Repo to follow the editor, or lock to a specific repo.
+	</span>
+
+	<hr />
+
+	<span class="sdpi-heading">Display</span>
+
+	<sdpi-item label="Dial view">
+		<sdpi-select setting="viewMode">
+			<option value="branch-sync" selected>Branch + sync</option>
+			<option value="working-tree">Working tree</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<sdpi-item label="Label">
+		<sdpi-select setting="ownerDisplay">
+			<option value="full">Full name (owner/repo)</option>
+			<option value="short">Short name (repo only)</option>
+		</sdpi-select>
+	</sdpi-item>
+
+	<span class="sdpi-info">
+		Rotate the dial at any time to switch between view modes — this sets the starting mode.
+		Press the button or dial to open the current workspace in your editor.
+	</span>
+
+	<script>
+		const repoStatus = document.getElementById("repoStatus");
+
+		const repoFS = new FilterableSelect({
+			container: document.getElementById('repoSelect'),
+			setting: 'repo',
+			datasource: 'getRepos',
+			placeholder: 'Repository or ★ Active',
+			searchPlaceholder: 'Search repositories…',
+			threshold: 8,
+		});
+
+		window._onRepoData = function() {
+			const items = window._repoItems || [];
+			if (items.length === 0) return;
+
+			const hasError = items[0]?.value === "" && items[0]?.label?.startsWith("⚠");
+			if (hasError) {
+				repoStatus.className = "sdpi-info warn";
+				repoStatus.textContent = items[0].label;
+			} else {
+				repoStatus.className = "sdpi-info";
+				repoStatus.textContent = "Pick ★ Current Active Repo to follow the editor, or lock to a specific repo.";
+			}
+		};
+	</script>
+</body>
+</html>

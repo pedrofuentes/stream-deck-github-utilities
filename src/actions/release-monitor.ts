@@ -88,16 +88,6 @@ export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSetting
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
-		if (settings.repo) {
-			this.coordinator.subscribe({
-				actionId: ev.action.id,
-				repo: settings.repo,
-				fragments: ["latestRelease"],
-				maxAgeSec: intervalSec,
-				params: { includePreReleases: settings.includePreReleases ?? false },
-			}, () => this.refreshRelease(ev.action.id));
-		}
-
 		this.polling.start(ev.action.id, () => this.refreshRelease(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshRelease(ev.action.id);
@@ -120,15 +110,15 @@ export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSetting
 
 		const settings = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
-		const repo = cached?.repo ?? settings.repo;
-		if (!repo) return;
+		const resolved = await this.resolveEffectiveRepo(cached ?? settings);
+		if (!resolved || resolved.missing) return;
 
 		const cachedUrl = this.lastUrl.get(ev.action.id);
 		let url: string | undefined;
 		if (cachedUrl) {
 			url = cachedUrl;
 		} else {
-			const parsed = parseRepoIdentifier(repo);
+			const parsed = parseRepoIdentifier(resolved.repo);
 			if (parsed) {
 				url = `https://github.com/${parsed.owner}/${parsed.repo}/releases`;
 			}
@@ -153,16 +143,6 @@ export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSetting
 		await ev.action.setSettings(newSettings);
 		this.actionSettings.set(ev.action.id, newSettings);
 
-		if (newSettings.repo) {
-			this.coordinator.subscribe({
-				actionId: ev.action.id,
-				repo: newSettings.repo,
-				fragments: ["latestRelease"],
-				maxAgeSec: newSettings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL,
-				params: { includePreReleases: !current },
-			}, () => this.refreshRelease(ev.action.id));
-		}
-
 		this.polling.resetBackoff(ev.action.id);
 		await this.refreshRelease(ev.action.id, true);
 	}
@@ -174,14 +154,14 @@ export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSetting
 	override async onDialDown(ev: DialDownEvent<ReleaseMonitorSettings>): Promise<void> {
 		const cached = this.actionSettings.get(ev.action.id);
 		const settings = cached ?? ev.payload.settings;
-		const repo = settings.repo;
-		if (!repo) return;
+		const resolved = await this.resolveEffectiveRepo(settings);
+		if (!resolved || resolved.missing) return;
 
 		const url = this.lastUrl.get(ev.action.id);
 		if (url) {
 			await streamDeck.system.openUrl(url);
 		} else {
-			const parsed = parseRepoIdentifier(repo);
+			const parsed = parseRepoIdentifier(resolved.repo);
 			if (parsed) {
 				await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/releases`);
 			}
@@ -249,16 +229,6 @@ export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSetting
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
-		if (settings.repo) {
-			this.coordinator.subscribe({
-				actionId: ev.action.id,
-				repo: settings.repo,
-				fragments: ["latestRelease"],
-				maxAgeSec: intervalSec,
-				params: { includePreReleases: settings.includePreReleases ?? false },
-			}, () => this.refreshRelease(ev.action.id));
-		}
-
 		this.polling.restart(ev.action.id, () => this.refreshRelease(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshRelease(ev.action.id);
@@ -275,7 +245,28 @@ export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSetting
 
 		const isDial = actionContext.isDial();
 
-		const parsed = parseRepoIdentifier(settings.repo);
+		const resolved = await this.resolveEffectiveRepo(settings);
+		if (!resolved) return;
+		this.watchActiveRepo(actionId, resolved.isSentinel, () => this.refreshRelease(actionId));
+
+		if (resolved.missing === "bridge") {
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("No Active"));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError("No active repo") });
+			return;
+		}
+		if (resolved.missing === "invalid") {
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("Bad Bridge"));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError("Bridge invalid") });
+			return;
+		}
+
+		const parsed = parseRepoIdentifier(resolved.repo);
 		if (!parsed) {
 			if (actionContext.isKey()) {
 				await actionContext.setImage(renderErrorImage("Invalid"));
@@ -296,6 +287,16 @@ export class ReleaseMonitorAction extends BaseGitHubAction<ReleaseMonitorSetting
 				if (isDial) await actionContext.setFeedback({ canvas: renderStripUnconfigured() });
 				return;
 			}
+
+			const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+			this.syncResolvedRepoSubscription(
+				actionId,
+				resolved.repo,
+				["latestRelease"],
+				intervalSec,
+				{ includePreReleases: settings.includePreReleases ?? false },
+				() => this.refreshRelease(actionId),
+			);
 
 			const result = force
 				? await this.coordinator.invalidateAndFetch(actionId, token)

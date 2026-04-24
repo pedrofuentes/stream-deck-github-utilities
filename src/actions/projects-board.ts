@@ -83,15 +83,6 @@ export class ProjectsBoardAction extends BaseGitHubAction<ProjectsBoardSettings>
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
-		if (settings.repo) {
-			this.coordinator.subscribe({
-				actionId: ev.action.id,
-				repo: settings.repo,
-				fragments: ["projectsV2"],
-				maxAgeSec: intervalSec,
-			}, () => this.refreshData(ev.action.id));
-		}
-
 		this.polling.start(ev.action.id, () => this.refreshData(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshData(ev.action.id);
@@ -113,10 +104,10 @@ export class ProjectsBoardAction extends BaseGitHubAction<ProjectsBoardSettings>
 
 		const settings = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
-		const repo = cached?.repo ?? settings.repo;
-		if (!repo) return;
+		const resolved = await this.resolveEffectiveRepo(cached ?? settings);
+		if (!resolved || resolved.missing) return;
 
-		const parsed = parseRepoIdentifier(repo);
+		const parsed = parseRepoIdentifier(resolved.repo);
 		if (parsed) {
 			const url = `https://github.com/${parsed.owner}/${parsed.repo}/projects`;
 			this.urlOpener.scheduleOpen(ev.action.id, url);
@@ -127,10 +118,10 @@ export class ProjectsBoardAction extends BaseGitHubAction<ProjectsBoardSettings>
 	override async onDialDown(ev: DialDownEvent<ProjectsBoardSettings>): Promise<void> {
 		const cached = this.actionSettings.get(ev.action.id);
 		const settings = cached ?? ev.payload.settings;
-		const repo = settings.repo;
-		if (!repo) return;
+		const resolved = await this.resolveEffectiveRepo(settings);
+		if (!resolved || resolved.missing) return;
 
-		const parsed = parseRepoIdentifier(repo);
+		const parsed = parseRepoIdentifier(resolved.repo);
 		if (parsed) {
 			await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/projects`);
 		}
@@ -197,15 +188,6 @@ export class ProjectsBoardAction extends BaseGitHubAction<ProjectsBoardSettings>
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
 
-		if (settings.repo) {
-			this.coordinator.subscribe({
-				actionId: ev.action.id,
-				repo: settings.repo,
-				fragments: ["projectsV2"],
-				maxAgeSec: intervalSec,
-			}, () => this.refreshData(ev.action.id));
-		}
-
 		this.polling.restart(ev.action.id, () => this.refreshData(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshData(ev.action.id);
@@ -222,7 +204,28 @@ export class ProjectsBoardAction extends BaseGitHubAction<ProjectsBoardSettings>
 
 		const isDial = actionContext.isDial();
 
-		const parsed = parseRepoIdentifier(settings.repo);
+		const resolved = await this.resolveEffectiveRepo(settings);
+		if (!resolved) return;
+		this.watchActiveRepo(actionId, resolved.isSentinel, () => this.refreshData(actionId));
+
+		if (resolved.missing === "bridge") {
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("No Active"));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError("No active repo") });
+			return;
+		}
+		if (resolved.missing === "invalid") {
+			if (actionContext.isKey()) {
+				await actionContext.setImage(renderErrorImage("Bad Bridge"));
+				await actionContext.setTitle("");
+			}
+			if (isDial) await actionContext.setFeedback({ canvas: renderStripError("Bridge invalid") });
+			return;
+		}
+
+		const parsed = parseRepoIdentifier(resolved.repo);
 		if (!parsed) {
 			if (actionContext.isKey()) {
 				await actionContext.setImage(renderErrorImage("Invalid"));
@@ -243,6 +246,16 @@ export class ProjectsBoardAction extends BaseGitHubAction<ProjectsBoardSettings>
 				if (isDial) await actionContext.setFeedback({ canvas: renderStripUnconfigured() });
 				return;
 			}
+
+			const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+			this.syncResolvedRepoSubscription(
+				actionId,
+				resolved.repo,
+				["projectsV2"],
+				intervalSec,
+				undefined,
+				() => this.refreshData(actionId),
+			);
 
 			const result = force
 				? await this.coordinator.invalidateAndFetch(actionId, token)

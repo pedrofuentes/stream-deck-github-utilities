@@ -88,8 +88,6 @@ export class SecurityHealthAction extends BaseGitHubAction<SecurityHealthSetting
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		const maxAgeSec = intervalSec;
-		this.coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo!, fragments: ["vulnerabilityAlerts"], maxAgeSec }, () => this.refreshHealth(ev.action.id));
 
 		this.polling.start(ev.action.id, () => this.refreshHealth(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
@@ -108,11 +106,11 @@ export class SecurityHealthAction extends BaseGitHubAction<SecurityHealthSetting
 
 		const settings = ev.payload.settings;
 		const cached = this.actionSettings.get(ev.action.id);
-		const repo = cached?.repo ?? settings.repo;
+		const resolved = await this.resolveEffectiveRepo(cached ?? settings);
 
 		let url = "https://github.com";
-		if (repo) {
-			const parsed = parseRepoIdentifier(repo);
+		if (resolved && !resolved.missing) {
+			const parsed = parseRepoIdentifier(resolved.repo);
 			if (parsed) {
 				url = `https://github.com/${parsed.owner}/${parsed.repo}/security`;
 			}
@@ -136,13 +134,14 @@ export class SecurityHealthAction extends BaseGitHubAction<SecurityHealthSetting
 	 */
 	override async onDialDown(ev: DialDownEvent<SecurityHealthSettings>): Promise<void> {
 		const cached = this.actionSettings.get(ev.action.id);
-		const repo = cached?.repo;
-
-		if (repo) {
-			const parsed = parseRepoIdentifier(repo);
-			if (parsed) {
-				await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/security`);
-				return;
+		if (cached) {
+			const resolved = await this.resolveEffectiveRepo(cached);
+			if (resolved && !resolved.missing) {
+				const parsed = parseRepoIdentifier(resolved.repo);
+				if (parsed) {
+					await streamDeck.system.openUrl(`https://github.com/${parsed.owner}/${parsed.repo}/security`);
+					return;
+				}
 			}
 		}
 		await streamDeck.system.openUrl("https://github.com");
@@ -190,9 +189,6 @@ export class SecurityHealthAction extends BaseGitHubAction<SecurityHealthSetting
 		}
 
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		const maxAgeSec = intervalSec;
-		this.coordinator.subscribe({ actionId: ev.action.id, repo: settings.repo!, fragments: ["vulnerabilityAlerts"], maxAgeSec }, () => this.refreshHealth(ev.action.id));
-
 		this.polling.restart(ev.action.id, () => this.refreshHealth(ev.action.id), intervalSec, MIN_REFRESH_INTERVAL);
 
 		await this.refreshHealth(ev.action.id);
@@ -218,7 +214,30 @@ export class SecurityHealthAction extends BaseGitHubAction<SecurityHealthSetting
 				return;
 			}
 
-			const parsed = parseRepoIdentifier(settings.repo);
+			const resolved = await this.resolveEffectiveRepo(settings);
+			if (!resolved) return;
+			this.watchActiveRepo(actionId, resolved.isSentinel, () => this.refreshHealth(actionId));
+
+			if (resolved.missing === "bridge") {
+				if (actionContext.isKey()) {
+					await actionContext.setImage(renderErrorImage("No Active"));
+					await actionContext.setTitle("");
+				} else if (actionContext.isDial()) {
+					await actionContext.setFeedback({ canvas: renderStripError("No active repo") });
+				}
+				return;
+			}
+			if (resolved.missing === "invalid") {
+				if (actionContext.isKey()) {
+					await actionContext.setImage(renderErrorImage("Bad Bridge"));
+					await actionContext.setTitle("");
+				} else if (actionContext.isDial()) {
+					await actionContext.setFeedback({ canvas: renderStripError("Bridge invalid") });
+				}
+				return;
+			}
+
+			const parsed = parseRepoIdentifier(resolved.repo);
 			if (!parsed) {
 				if (actionContext.isKey()) {
 					await actionContext.setImage(renderErrorImage("Bad Repo"));
@@ -228,6 +247,16 @@ export class SecurityHealthAction extends BaseGitHubAction<SecurityHealthSetting
 				}
 				return;
 			}
+
+			const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
+			this.syncResolvedRepoSubscription(
+				actionId,
+				resolved.repo,
+				["vulnerabilityAlerts"],
+				intervalSec,
+				undefined,
+				() => this.refreshHealth(actionId),
+			);
 
 			const result = forceRefresh
 				? await this.coordinator.invalidateAndFetch(actionId, token)

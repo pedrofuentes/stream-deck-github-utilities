@@ -87,7 +87,24 @@ vi.mock("../../src/utils/github-api", async (importOriginal) => {
 	};
 });
 
+// ──────────────────────────────────────────────
+// Mock active-repo-source (bridge-file reader)
+// ──────────────────────────────────────────────
+
+const { mockResolveRepoSelection } = vi.hoisted(() => ({
+	mockResolveRepoSelection: vi.fn(),
+}));
+
+vi.mock("../../src/utils/active-repo-source", async (importOriginal) => {
+	const actual = (await importOriginal()) as Record<string, unknown>;
+	return {
+		...actual,
+		resolveRepoSelection: mockResolveRepoSelection,
+	};
+});
+
 import { handlePIDataRequest, PI_EVENTS } from "../../src/utils/pi-data-provider";
+import { ACTIVE_REPO_SENTINEL } from "../../src/utils/active-repo-source";
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -106,6 +123,15 @@ describe("PI Data Provider", () => {
 		vi.clearAllMocks();
 		mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_testtoken123" });
 		mockSendToPropertyInspector.mockResolvedValue(undefined);
+
+		// Default: bridge file is missing. Tests for Dynamic mode override this.
+		mockResolveRepoSelection.mockImplementation(async (repoSetting: string | undefined) => {
+			if (!repoSetting) return null;
+			if (repoSetting === ACTIVE_REPO_SENTINEL) {
+				return { repo: "", isSentinel: true, missing: "bridge" };
+			}
+			return { repo: repoSetting, isSentinel: false };
+		});
 	});
 
 	// ── PI_EVENTS constants ─────────────────────
@@ -164,7 +190,7 @@ describe("PI Data Provider", () => {
 	// ── getRepos event ──────────────────────────
 
 	describe("getRepos event", () => {
-		it("fetches repos using token from global settings", async () => {
+		it("prepends the active-repo sentinel item and then the fetched repos", async () => {
 			const repos = [
 				{ label: "owner/repo1", value: "owner/repo1" },
 				{ label: "owner/repo2", value: "owner/repo2" },
@@ -175,9 +201,31 @@ describe("PI Data Provider", () => {
 
 			expect(mockGetGlobalSettings).toHaveBeenCalled();
 			expect(mockFetchUserRepos).toHaveBeenCalledWith("ghp_testtoken123");
-			expect(mockSendToPropertyInspector).toHaveBeenCalledWith({
-				event: "getRepos",
-				items: repos,
+
+			const call = mockSendToPropertyInspector.mock.calls[0][0];
+			expect(call.event).toBe("getRepos");
+			expect(call.items[0]).toEqual({
+				label: "★ Cursor/VS Code: Current Active Repo",
+				value: ACTIVE_REPO_SENTINEL,
+			});
+			expect(call.items.slice(1)).toEqual(repos);
+		});
+
+		it("annotates the sentinel item with the resolved repo when the bridge file is valid", async () => {
+			mockResolveRepoSelection.mockImplementation(async (repoSetting: string) => {
+				if (repoSetting === ACTIVE_REPO_SENTINEL) {
+					return { repo: "verygoodplugins/autohub", isSentinel: true };
+				}
+				return { repo: repoSetting, isSentinel: false };
+			});
+			mockFetchUserRepos.mockResolvedValue([]);
+
+			await handlePIDataRequest("getRepos", makeGetSettings());
+
+			const call = mockSendToPropertyInspector.mock.calls[0][0];
+			expect(call.items[0]).toEqual({
+				label: "★ Current Active Repo (verygoodplugins/autohub)",
+				value: ACTIVE_REPO_SENTINEL,
 			});
 		});
 
@@ -295,6 +343,82 @@ describe("PI Data Provider", () => {
 			await handlePIDataRequest("getEnvironments", makeGetSettings());
 
 			expect(mockFetchRepoEnvironments).not.toHaveBeenCalled();
+		});
+	});
+
+	// ── Dynamic Repo Mode (sentinel in the repo setting) ─
+
+	describe("Dynamic Repo Mode", () => {
+		it("resolves the sentinel via the bridge file for getWorkflows", async () => {
+			mockResolveRepoSelection.mockResolvedValue({
+				repo: "verygoodplugins/autohub",
+				isSentinel: true,
+			});
+			mockFetchRepoWorkflows.mockResolvedValue([
+				{ label: "All Workflows", value: "" },
+				{ label: "CI (ci.yml)", value: "ci.yml" },
+			]);
+
+			await handlePIDataRequest(
+				"getWorkflows",
+				makeGetSettings({ repo: ACTIVE_REPO_SENTINEL }),
+			);
+
+			expect(mockFetchRepoWorkflows).toHaveBeenCalledWith(
+				"verygoodplugins",
+				"autohub",
+				"ghp_testtoken123",
+			);
+		});
+
+		it("returns a specific 'bridge missing' item when dynamic mode and no bridge file exists", async () => {
+			mockResolveRepoSelection.mockResolvedValue({
+				repo: "",
+				isSentinel: true,
+				missing: "bridge",
+			});
+
+			await handlePIDataRequest(
+				"getBranches",
+				makeGetSettings({ repo: ACTIVE_REPO_SENTINEL }),
+			);
+
+			expect(mockFetchRepoBranches).not.toHaveBeenCalled();
+			expect(mockSendToPropertyInspector).toHaveBeenCalledWith({
+				event: "getBranches",
+				items: [
+					{
+						label: "⚠ Active-repo bridge file not found — see README",
+						value: "",
+						disabled: true,
+					},
+				],
+			});
+		});
+
+		it("returns a specific 'bridge invalid' item when the file exists but has no usable repo", async () => {
+			mockResolveRepoSelection.mockResolvedValue({
+				repo: "",
+				isSentinel: true,
+				missing: "invalid",
+			});
+
+			await handlePIDataRequest(
+				"getEnvironments",
+				makeGetSettings({ repo: ACTIVE_REPO_SENTINEL }),
+			);
+
+			expect(mockFetchRepoEnvironments).not.toHaveBeenCalled();
+			expect(mockSendToPropertyInspector).toHaveBeenCalledWith({
+				event: "getEnvironments",
+				items: [
+					{
+						label: "⚠ Active-repo bridge file is invalid — see README",
+						value: "",
+						disabled: true,
+					},
+				],
+			});
 		});
 	});
 
