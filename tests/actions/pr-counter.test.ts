@@ -456,6 +456,111 @@ describe("PRCounterAction", () => {
 		});
 	});
 
+	// ── Repo switching ─────────────────────────────
+	// Verifies that changing the repo in the Property Inspector results in
+	// the coordinator being re-subscribed with the new repo (the coordinator
+	// handles cache invalidation internally when it detects a repo change).
+
+	describe("repo switching", () => {
+		it("should re-subscribe to coordinator with new repo on settings change", async () => {
+			const mockAction = createMockKeyAction("pr-switch-1");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({ prCount: 17 });
+
+			// Initial appear with repo A
+			await action.onWillAppear?.(
+				createWillAppearEvent(mockAction, { repo: "owner/repo-a", stateFilter: "open" }) as never,
+			);
+
+			vi.clearAllMocks();
+			mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
+			mockCoordinator.fetchData.mockResolvedValue({ prCount: 5 });
+
+			// User changes to repo B via Property Inspector
+			await action.onDidReceiveSettings?.(
+				createDidReceiveSettingsEvent(mockAction, { repo: "owner/repo-b", stateFilter: "open" }) as never,
+			);
+
+			// Coordinator.subscribe should be called with the new repo.
+			// The coordinator itself detects the repo change and invalidates stale cache.
+			expect(mockCoordinator.subscribe).toHaveBeenCalledWith(
+				expect.objectContaining({ actionId: "pr-switch-1", repo: "owner/repo-b" }),
+				expect.any(Function),
+			);
+		});
+
+		it("should display the NEW repo's PR count after switching repos", async () => {
+			const mockAction = createMockKeyAction("pr-switch-2");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({ prCount: 17 });
+
+			// Initial appear with repo A — count is 17
+			await action.onWillAppear?.(
+				createWillAppearEvent(mockAction, { repo: "owner/repo-a", stateFilter: "open" }) as never,
+			);
+
+			vi.clearAllMocks();
+			mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
+
+			// After repo switch, coordinator returns fresh data for repo B
+			mockCoordinator.fetchData.mockResolvedValue({ prCount: 5 });
+
+			// User switches to repo B
+			await action.onDidReceiveSettings?.(
+				createDidReceiveSettingsEvent(mockAction, { repo: "owner/repo-b", stateFilter: "open" }) as never,
+			);
+
+			// The button should show repo B's count (5), not repo A's stale count (17)
+			const svg = lastImage(mockAction);
+			expect(svg).toContain("5");
+			expect(svg).not.toContain(">17<");
+		});
+
+		it("should re-subscribe when stateFilter changes on same repo", async () => {
+			const mockAction = createMockKeyAction("pr-switch-3");
+
+			Object.defineProperty(action, "actions", {
+				get: () => [mockAction],
+				configurable: true,
+			});
+
+			mockCoordinator.fetchData.mockResolvedValue({ prCount: 17 });
+
+			// Initial appear with open PRs
+			await action.onWillAppear?.(
+				createWillAppearEvent(mockAction, { repo: "owner/repo", stateFilter: "open" }) as never,
+			);
+
+			vi.clearAllMocks();
+			mockGetGlobalSettings.mockResolvedValue({ githubToken: "ghp_test123" });
+			mockCoordinator.fetchData.mockResolvedValue({ prCount: 42 });
+
+			// User changes to closed PRs
+			await action.onDidReceiveSettings?.(
+				createDidReceiveSettingsEvent(mockAction, { repo: "owner/repo", stateFilter: "closed" }) as never,
+			);
+
+			expect(mockCoordinator.subscribe).toHaveBeenCalledWith(
+				expect.objectContaining({ params: { prState: "closed" } }),
+				expect.any(Function),
+			);
+
+			const svg = lastImage(mockAction);
+			expect(svg).toContain("42");
+			expect(svg).toContain("Closed PRs");
+		});
+	});
+
 	// ── Error handling ──────────────────────────
 
 	describe("error handling", () => {

@@ -1113,8 +1113,8 @@ describe("RepoStatsAction", () => {
 			});
 			await action.onDidReceiveSettings?.(drsEv as never);
 
-			// Should unsubscribe old and subscribe with new repo
-			expect(mockCoordinatorUnsubscribe).toHaveBeenCalledWith("coord-resub-1");
+			// Should re-subscribe with new repo (coordinator auto-detects the
+			// repo change and handles cache invalidation internally)
 			expect(mockCoordinatorSubscribe).toHaveBeenCalledWith(
 				expect.objectContaining({ repo: "owner/new-repo" }),
 				expect.any(Function),
@@ -1135,8 +1135,8 @@ describe("RepoStatsAction", () => {
 			await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo", statType: "stars" }) as never);
 			mockCoordinatorUnsubscribe.mockClear();
 
-			// PI clears repo
-			await action.onDidReceiveSettings?.(createDidReceiveSettingsEvent(mockAction, {}) as never);
+			// PI explicitly clears repo
+			await action.onDidReceiveSettings?.(createDidReceiveSettingsEvent(mockAction, { repo: "" }) as never);
 
 			expect(mockCoordinatorUnsubscribe).toHaveBeenCalledWith("coord-unsub-drs");
 		});
