@@ -43,7 +43,7 @@
 	},
 	"homepage": "https://github.com/pedrofuentes/stream-deck-github-utilities#readme",
 	"dependencies": {
-		"@elgato/streamdeck": "^2.0.0",
+		"@elgato/streamdeck": "^2.1.0",
 		"git-network-graph": "^0.1.7",
 		"zod": "^4.3.6"
 	},
@@ -62,6 +62,9 @@
 		"tsx": "^4.21.0",
 		"typescript": "^5.3.0",
 		"vitest": "^3.0.0"
+	},
+	"overrides": {
+		"esbuild": "^0.28.1"
 	},
 	"engines": {
 		"node": ">=20.0.0"
