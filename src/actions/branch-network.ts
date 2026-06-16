@@ -96,6 +96,7 @@ function resolveRenderData(graph: GitGraph, graphSettings: GraphSettings): Netwo
 	const [graphLines] = printUnicode(graph, cleanSettings);
 
 	// Strip any residual ANSI escape codes (safety measure)
+	// eslint-disable-next-line no-control-regex -- intentional ANSI escape (ESC, \x1b) stripping
 	const cleanLines = graphLines.map((line: string) => line.replace(/\x1b\[[0-9;]*m/g, ""));
 
 	// Build column → color mapping from branch data
@@ -112,8 +113,8 @@ function resolveRenderData(graph: GitGraph, graphSettings: GraphSettings): Netwo
 
 	// Resolve branch labels
 	const branches = graph.allBranches
-		.filter((b: any) => b.visual.column != null)
-		.map((b: any) => {
+		.filter((b) => b.visual.column != null)
+		.map((b) => {
 			// Find the first row where this branch's dot appears
 			const col = b.visual.column!;
 			const charCol = col * 2; // each branch lane = 2 chars wide

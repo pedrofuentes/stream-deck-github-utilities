@@ -327,13 +327,13 @@ export interface WorkflowStatusSettings extends BranchFilterSettings {
 }
 
 /** Per-action settings for the PR Counter action */
-export interface PullRequestCounterSettings extends StateFilteredSettings {}
+export type PullRequestCounterSettings = StateFilteredSettings;
 
 /** Per-action settings for the PR Review Queue action — cross-repo (searches by username) */
 export type PRReviewQueueSettings = RepoActionSettings;
 
 /** Per-action settings for the Issue Counter action */
-export interface IssueCounterSettings extends StateFilteredSettings {}
+export type IssueCounterSettings = StateFilteredSettings;
 
 /** Per-action settings for the Release Monitor action */
 export interface ReleaseMonitorSettings extends RepoActionSettings {
