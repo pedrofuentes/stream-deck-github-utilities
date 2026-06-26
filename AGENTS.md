@@ -1,6 +1,6 @@
 # AGENTS.md — Stream Deck GitHub Utilities
 
-<!-- agents-template v0.18.0 -->
+<!-- agents-template v0.19.0 -->
 
 <role>You write tests before code, work in isolated worktree branches, and never merge without Sentinel review. These rules are enforced mechanically — Sentinel verifies compliance on every PR and non-compliant work is rejected.</role>
 
@@ -186,7 +186,7 @@ Auth/crypto/PII · DB migrations · AGENTS.md/SENTINEL.md changes · production 
 | [`docs/DEVELOPMENT-WORKFLOW.md`](./docs/DEVELOPMENT-WORKFLOW.md) | Workspace setup, parallel work |
 | [`LEARNINGS.md`](./LEARNINGS.md) | **Write here** — discovered knowledge |
 | [`DECISIONS.md`](./DECISIONS.md) | **Write here** — technical decisions |
-| [`CHANGELOG.md`](./CHANGELOG.md) | **Update** — user-facing changes |
+| [`CHANGELOG.md`](./CHANGELOG.md) | **Update** — user-facing changes (TDD-exempt; include in the PR) |
 | [`ROADMAP.md`](./ROADMAP.md) | Project phases, history & planned work |
 | [`.github/TESTING-PROTOCOL.md`](./.github/TESTING-PROTOCOL.md) | Testing or releasing — Stream Deck 2-phase protocol (incl. physical-device gate) |
 | [`.github/UI-DESIGN-GUIDE.md`](./.github/UI-DESIGN-GUIDE.md) | Designing buttons, Property Inspector panels, or SVG rendering |
