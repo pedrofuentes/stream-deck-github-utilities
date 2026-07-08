@@ -23,8 +23,8 @@ import { SecurityHealthAction } from "./actions/security-health";
 import { DiscussionsMonitorAction } from "./actions/discussions-monitor";
 import { ProjectsBoardAction } from "./actions/projects-board";
 
-// Configure the logger
-streamDeck.logger.setLevel("debug");
+// Configure the logger — use "debug" locally when verbose output is needed
+streamDeck.logger.setLevel("info");
 
 // Register actions
 streamDeck.actions.registerAction(new RepoStatsAction());
