@@ -349,7 +349,9 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 
 				this.lastUrl.set(
 					actionId,
-					info.deployment.log_url || info.latestRun?.html_url || `https://github.com/${parsed.owner}/${parsed.repo}/actions`,
+					isSafeGitHubUrl(info.deployment.log_url)
+						? info.deployment.log_url!
+						: info.latestRun?.html_url || `https://github.com/${parsed.owner}/${parsed.repo}/actions`,
 				);
 			} else if (info.latestRun) {
 				const displayStatus = getWorkflowDisplayStatus(info.latestRun);
@@ -579,5 +581,20 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 			clearInterval(md.timer);
 			md.timer = null;
 		}
+	}
+}
+
+/**
+ * Returns true only for URLs that belong to GitHub-owned domains.
+ * Used to validate deployment.log_url before opening it in the browser,
+ * guarding against a tampered API response redirecting to an arbitrary host.
+ */
+function isSafeGitHubUrl(url: string | null | undefined): boolean {
+	if (!url) return false;
+	try {
+		const { protocol, hostname } = new URL(url);
+		return protocol === "https:" && (hostname === "github.com" || hostname.endsWith(".github.com"));
+	} catch {
+		return false;
 	}
 }
