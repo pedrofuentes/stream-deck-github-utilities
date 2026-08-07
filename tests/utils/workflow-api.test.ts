@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
 	fetchLatestWorkflowRun,
 	fetchLatestDeploymentStatus,
+	fetchPendingDeployments,
 	fetchWorkflowInfo,
 	triggerWorkflowDispatch,
 	getWorkflowDisplayStatus,
@@ -358,6 +359,110 @@ describe("Workflow API", () => {
 		});
 	});
 
+	// ── fetchPendingDeployments ─────────────────
+
+	describe("fetchPendingDeployments", () => {
+		function makePending(overrides?: Record<string, unknown>) {
+			return {
+				environment: { id: 1, name: "prod" },
+				wait_timer: 0,
+				wait_timer_started_at: null,
+				current_user_can_approve: true,
+				reviewers: [{ type: "User", reviewer: { login: "sandrosuter" } }],
+				...overrides,
+			};
+		}
+
+		it("queries the run's pending_deployments endpoint", async () => {
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse([]));
+
+			await fetchPendingDeployments("owner", "repo", 12345, "ghp_test");
+
+			const url = vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
+			expect(url).toContain("/repos/owner/repo/actions/runs/12345/pending_deployments");
+		});
+
+		it("maps environment, approval right and reviewers", async () => {
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse([makePending()]));
+
+			const result = await fetchPendingDeployments("owner", "repo", 1, "ghp_test");
+
+			expect(result).toHaveLength(1);
+			expect(result[0].environment).toBe("prod");
+			expect(result[0].currentUserCanApprove).toBe(true);
+			expect(result[0].reviewers).toEqual(["sandrosuter"]);
+		});
+
+		it("reads team reviewers, which carry name instead of login", async () => {
+			vi.mocked(globalThis.fetch).mockResolvedValue(
+				mockFetchResponse([
+					makePending({
+						reviewers: [
+							{ type: "Team", reviewer: { name: "platform" } },
+							{ type: "User", reviewer: { login: "alice" } },
+						],
+					}),
+				]),
+			);
+
+			const result = await fetchPendingDeployments("owner", "repo", 1, "ghp_test");
+
+			expect(result[0].reviewers).toEqual(["platform", "alice"]);
+		});
+
+		it("returns an empty list when nothing is pending", async () => {
+			vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse([]));
+
+			expect(await fetchPendingDeployments("owner", "repo", 1, "ghp_test")).toEqual([]);
+		});
+
+		it("reports several blocked environments in order", async () => {
+			vi.mocked(globalThis.fetch).mockResolvedValue(
+				mockFetchResponse([
+					makePending({ environment: { name: "prod" } }),
+					makePending({ environment: { name: "demo" }, current_user_can_approve: false }),
+				]),
+			);
+
+			const result = await fetchPendingDeployments("owner", "repo", 1, "ghp_test");
+
+			expect(result.map((p) => p.environment)).toEqual(["prod", "demo"]);
+			expect(result[1].currentUserCanApprove).toBe(false);
+		});
+
+		it("carries the wait timer through", async () => {
+			vi.mocked(globalThis.fetch).mockResolvedValue(
+				mockFetchResponse([makePending({ wait_timer: 30, reviewers: [] })]),
+			);
+
+			const result = await fetchPendingDeployments("owner", "repo", 1, "ghp_test");
+
+			expect(result[0].waitTimerMinutes).toBe(30);
+			expect(result[0].reviewers).toEqual([]);
+		});
+
+		it("tolerates a missing reviewers array", async () => {
+			vi.mocked(globalThis.fetch).mockResolvedValue(
+				mockFetchResponse([{ environment: { name: "prod" }, current_user_can_approve: false }]),
+			);
+
+			const result = await fetchPendingDeployments("owner", "repo", 1, "ghp_test");
+
+			expect(result[0].reviewers).toEqual([]);
+			expect(result[0].waitTimerMinutes).toBe(0);
+		});
+
+		it("throws on 403, which a token without the right scope gets", async () => {
+			vi.mocked(globalThis.fetch).mockResolvedValue(
+				mockFetchResponse({ message: "Forbidden" }, 403, false),
+			);
+
+			await expect(
+				fetchPendingDeployments("owner", "repo", 1, "ghp_test"),
+			).rejects.toThrow(GitHubApiError);
+		});
+	});
+
 	// ── fetchWorkflowInfo ───────────────────────
 
 	describe("fetchWorkflowInfo", () => {
@@ -403,6 +508,87 @@ describe("Workflow API", () => {
 			const info = await fetchWorkflowInfo("owner", "repo", "ghp_test");
 			expect(info.latestRun).toBeNull();
 			expect(info.deployment).toBeNull();
+			expect(info.pendingDeployments).toEqual([]);
+		});
+
+		// The pending-deployments lookup is an extra request, so it may only
+		// happen for the one status that can actually be blocked.
+		describe("pending deployments", () => {
+			function mockRun(status: string) {
+				vi.mocked(globalThis.fetch).mockImplementation(async (url) => {
+					const urlStr = url as string;
+					if (urlStr.includes("/pending_deployments")) {
+						return mockFetchResponse([
+							{
+								environment: { name: "prod" },
+								current_user_can_approve: true,
+								reviewers: [{ type: "User", reviewer: { login: "sandrosuter" } }],
+							},
+						]);
+					}
+					if (urlStr.includes("/actions/")) {
+						return mockFetchResponse({
+							total_count: 1,
+							workflow_runs: [makeWorkflowRunData({ status, conclusion: null })],
+						});
+					}
+					return mockFetchResponse([]);
+				});
+			}
+
+			function pendingCalls(): string[] {
+				return vi.mocked(globalThis.fetch).mock.calls
+					.map((c) => c[0] as string)
+					.filter((u) => u.includes("/pending_deployments"));
+			}
+
+			it("looks them up for a waiting run", async () => {
+				mockRun("waiting");
+
+				const info = await fetchWorkflowInfo("owner", "repo", "ghp_test");
+
+				expect(pendingCalls()).toHaveLength(1);
+				expect(info.pendingDeployments).toHaveLength(1);
+				expect(info.pendingDeployments[0].environment).toBe("prod");
+			});
+
+			it("skips the request for a completed run", async () => {
+				mockRun("completed");
+
+				const info = await fetchWorkflowInfo("owner", "repo", "ghp_test");
+
+				expect(pendingCalls()).toHaveLength(0);
+				expect(info.pendingDeployments).toEqual([]);
+			});
+
+			it("skips the request for a queued run", async () => {
+				mockRun("queued");
+
+				await fetchWorkflowInfo("owner", "repo", "ghp_test");
+
+				expect(pendingCalls()).toHaveLength(0);
+			});
+
+			it("still returns the run when the lookup fails", async () => {
+				vi.mocked(globalThis.fetch).mockImplementation(async (url) => {
+					const urlStr = url as string;
+					if (urlStr.includes("/pending_deployments")) {
+						return mockFetchResponse({ message: "Forbidden" }, 403, false);
+					}
+					if (urlStr.includes("/actions/")) {
+						return mockFetchResponse({
+							total_count: 1,
+							workflow_runs: [makeWorkflowRunData({ status: "waiting", conclusion: null })],
+						});
+					}
+					return mockFetchResponse([]);
+				});
+
+				const info = await fetchWorkflowInfo("owner", "repo", "ghp_test");
+
+				expect(info.latestRun).not.toBeNull();
+				expect(info.pendingDeployments).toEqual([]);
+			});
 		});
 
 		it("propagates workflow run errors but catches deployment errors", async () => {

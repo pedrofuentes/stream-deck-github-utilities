@@ -89,6 +89,40 @@ export const DeploymentStatusResponseSchema = z
 	})
 	.passthrough();
 
+/**
+ * Schema for an entry of the pending deployments endpoint — a deployment held
+ * back by an environment protection rule. Reviewers are either users or teams,
+ * so the reviewer object carries `login` or `name` depending on its type.
+ */
+export const PendingDeploymentResponseSchema = z
+	.object({
+		environment: z
+			.object({
+				name: z.string().optional(),
+			})
+			.passthrough(),
+		wait_timer: z.number().optional(),
+		wait_timer_started_at: z.string().nullable().optional(),
+		current_user_can_approve: z.boolean(),
+		reviewers: z
+			.array(
+				z
+					.object({
+						type: z.string().optional(),
+						reviewer: z
+							.object({
+								login: z.string().optional(),
+								name: z.string().optional(),
+							})
+							.passthrough()
+							.optional(),
+					})
+					.passthrough(),
+			)
+			.optional(),
+	})
+	.passthrough();
+
 // ──────────────────────────────────────────────
 // pull-requests.ts / issues-releases.ts
 // ──────────────────────────────────────────────

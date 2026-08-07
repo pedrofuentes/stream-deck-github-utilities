@@ -176,6 +176,14 @@ describe("Button renderer snapshots", () => {
 		it("without repo name", () => {
 			expect(renderWorkflowImage("Failure", "failure")).toMatchSnapshot();
 		});
+
+		it("waiting for approval, dimmed frame", () => {
+			expect(renderWorkflowImage("Waiting", "waiting", "owner/repo", "approve prod", true)).toMatchSnapshot();
+		});
+
+		it("waiting, bright frame", () => {
+			expect(renderWorkflowImage("Waiting", "waiting", "owner/repo")).toMatchSnapshot();
+		});
 	});
 
 	// ── Deploying image ────────────────────────────────────────────────────

@@ -38,6 +38,7 @@ import {
 	getWorkflowStatusLabel,
 	formatRunDuration,
 	type DeploymentState,
+	type PendingDeployment,
 } from "../utils/github-api";
 import {
 	renderWorkflowImage,
@@ -60,8 +61,30 @@ const LINE3_MAX_VISIBLE = 18; // max chars at 15px
 /** Render variant cache for marquee re-rendering without API calls. */
 type WfRenderVariant =
 	| { type: "deploying"; deployState: string }
+	| { type: "awaitingApproval" }
 	| { type: "workflow"; statusLabel: string; displayStatus: string; deployLabel?: string; duration?: string }
 	| { type: "noRuns" };
+
+/**
+ * Builds the detail line for a run waiting on approval.
+ *
+ * Says whether the token's owner is one of the reviewers and which environment
+ * is blocked, because "someone has to approve this" and "you have to approve
+ * this" call for very different reactions. Additional blocked environments are
+ * counted rather than listed — the line only holds ~18 characters.
+ *
+ * The verb comes first so that a long environment name is what gets truncated,
+ * not the part that says whether you need to act.
+ */
+export function formatApprovalLabel(pending: PendingDeployment[]): string {
+	if (pending.length === 0) return "";
+
+	const verb = pending.some((p) => p.currentUserCanApprove) ? "approve" : "awaiting";
+	const environment = pending[0].environment || "deploy";
+	const more = pending.length > 1 ? ` +${pending.length - 1}` : "";
+
+	return `${verb} ${environment}${more}`;
+}
 
 /** Cached render data and marquee state per action instance. */
 interface WfMarqueeData {
@@ -71,6 +94,8 @@ interface WfMarqueeData {
 	repoName: string;
 	line3Text: string;
 	variant: WfRenderVariant;
+	/** Current half of the blink while the key waits for approval */
+	dimmed: boolean;
 }
 
 @action({ UUID: "com.pedrofuentes.github-utilities.workflow-status" })
@@ -341,7 +366,23 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 			md.repoName = parsed.repo;
 			md.line1.setText(parsed.repo);
 
-			if (isDeploying && info.deployment) {
+			// A run held for approval outranks everything else the key could show:
+			// it is the one state that needs a person to act, and it is invisible
+			// on GitHub unless you go looking for it.
+			const pending = info.pendingDeployments ?? [];
+
+			if (pending.length > 0) {
+				const label = formatApprovalLabel(pending);
+				md.line3Text = label;
+				md.line3.setText(label);
+				md.variant = { type: "awaitingApproval" };
+
+				// The run page is where the approval prompt lives
+				this.lastUrl.set(
+					actionId,
+					info.latestRun?.html_url || `https://github.com/${parsed.owner}/${parsed.repo}/actions`,
+				);
+			} else if (isDeploying && info.deployment) {
 				const envName = info.deployment.environment || "deploy";
 				md.line3Text = envName;
 				md.line3.setText(envName);
@@ -386,7 +427,9 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 					? md.variant.displayStatus
 					: md.variant.type === "deploying"
 						? "deploying"
-						: "neutral";
+						: md.variant.type === "awaitingApproval"
+							? "waiting"
+							: "neutral";
 
 				// Only add to history when a NEW run appears
 				const currentRunId = info.latestRun?.id ?? 0;
@@ -407,7 +450,9 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 					? md.variant.statusLabel
 					: md.variant.type === "deploying"
 						? "Deploying"
-						: "No Runs";
+						: md.variant.type === "awaitingApproval"
+							? "Approval"
+							: "No Runs";
 				await actionContext.setFeedback({
 					canvas: renderWorkflowStrip(statusLabel, currentStatus, wfName, branch, "", history),
 				});
@@ -502,6 +547,7 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 				repoName: "",
 				line3Text: "",
 				variant: { type: "noRuns" },
+				dimmed: false,
 			};
 			this.marqueeData.set(actionId, md);
 		}
@@ -529,6 +575,11 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 			case "deploying":
 				image = renderDeployingImage(displayLine3, md.variant.deployState, displayName);
 				break;
+			case "awaitingApproval":
+				// Alternates dimmed and bright so the key blinks — this is the state
+				// the user needs to notice without looking for it
+				image = renderWorkflowImage("Waiting", "waiting", displayName, displayLine3, md.dimmed);
+				break;
 			case "workflow":
 				image = renderWorkflowImage(
 					md.variant.statusLabel,
@@ -547,26 +598,37 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 	}
 
 	/**
-	 * Starts or stops the marquee animation timer based on whether any line
-	 * needs scrolling.
+	 * Starts or stops the animation timer, which drives both the marquee scroll
+	 * and the blink of a key waiting for approval.
+	 *
+	 * The blink has to be sent frame by frame: the device rasterises each
+	 * `setImage` payload, so an SVG that animates itself renders as a still.
 	 */
 	private updateMarqueeTimer(actionId: string): void {
 		const md = this.marqueeData.get(actionId);
 		if (!md) return;
 
-		const needsAnimation = md.line1.needsAnimation() || md.line3.needsAnimation();
+		const blinks = md.variant.type === "awaitingApproval";
+		const needsAnimation = md.line1.needsAnimation() || md.line3.needsAnimation() || blinks;
 
 		if (needsAnimation && !md.timer) {
 			md.timer = setInterval(() => {
 				const changed1 = md.line1.tick();
 				const changed3 = md.line3.tick();
-				if (changed1 || changed3) {
+
+				// Every other frame is dimmed while the key is waiting for approval
+				const blinking = md.variant.type === "awaitingApproval";
+				if (blinking) md.dimmed = !md.dimmed;
+				else md.dimmed = false;
+
+				if (changed1 || changed3 || blinking) {
 					this.renderWithMarquee(actionId).catch(() => { /* marquee render error — ignore */ });
 				}
 			}, MARQUEE_INTERVAL_MS);
 		} else if (!needsAnimation && md.timer) {
 			clearInterval(md.timer);
 			md.timer = null;
+			md.dimmed = false;
 		}
 	}
 
@@ -578,6 +640,7 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 		if (md?.timer) {
 			clearInterval(md.timer);
 			md.timer = null;
+			md.dimmed = false;
 		}
 	}
 }

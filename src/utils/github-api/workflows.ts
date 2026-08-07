@@ -21,6 +21,7 @@ import {
 	WorkflowRunsResponseSchema,
 	DeploymentResponseSchema,
 	DeploymentStatusResponseSchema,
+	PendingDeploymentResponseSchema,
 } from "./schemas";
 
 /** Possible workflow run statuses from the GitHub API */
@@ -87,10 +88,33 @@ export interface DeploymentStatus {
 	log_url: string;
 }
 
+/**
+ * A deployment held back by an environment protection rule.
+ *
+ * A run blocked this way reports `status: "waiting"`, which on its own does not
+ * say whether it is waiting for a person or for a timer — this fills that in.
+ */
+export interface PendingDeployment {
+	/** Environment awaiting approval (e.g. "prod") */
+	environment: string;
+	/** Whether the token's owner is among the reviewers who can approve it */
+	currentUserCanApprove: boolean;
+	/** Reviewer logins or team names, in the order GitHub returns them */
+	reviewers: string[];
+	/** Remaining wait timer in minutes; 0 when the rule is a review rather than a timer */
+	waitTimerMinutes: number;
+}
+
 /** Combined workflow + deployment info for the button */
 export interface WorkflowInfo {
 	latestRun: WorkflowRun | null;
 	deployment: DeploymentStatus | null;
+	/**
+	 * Deployments awaiting approval on the latest run. Only populated while that
+	 * run is `waiting`; empty otherwise, so the extra request costs nothing in
+	 * the normal case.
+	 */
+	pendingDeployments: PendingDeployment[];
 }
 
 /**
@@ -230,7 +254,56 @@ export async function fetchLatestDeploymentStatus(
 }
 
 /**
+ * Fetches the deployments of a run that are held back by environment protection
+ * rules — typically a required review.
+ *
+ * Only meaningful for a run whose status is `waiting`; any other run returns an
+ * empty list, so callers should check the status first rather than spend a
+ * request on it.
+ *
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param runId - The workflow run to inspect
+ * @param token - GitHub PAT
+ * @returns Environments awaiting approval, empty if none
+ * @throws {GitHubApiError} on API errors
+ */
+export async function fetchPendingDeployments(
+	owner: string,
+	repo: string,
+	runId: number,
+	token?: string,
+): Promise<PendingDeployment[]> {
+	const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runId}/pending_deployments`;
+	const headers = buildHeaders(token);
+
+	const response = await fetchWithRetry(url, { headers }, "fetchPendingDeployments");
+	const rateLimitInfo = parseRateLimitHeaders(response.headers);
+
+	if (!response.ok) {
+		handleApiError(response.status, rateLimitInfo, owner, repo, parseRetryAfter(response.headers));
+	}
+
+	const pending = z.array(PendingDeploymentResponseSchema).parse(await response.json());
+
+	return pending.map((entry) => ({
+		environment: entry.environment?.name ?? "",
+		currentUserCanApprove: entry.current_user_can_approve,
+		// Reviewers are users or teams; the payload carries login for one and name for the other
+		reviewers: (entry.reviewers ?? [])
+			.map((r) => r.reviewer?.login ?? r.reviewer?.name ?? "")
+			.filter((name) => name !== ""),
+		waitTimerMinutes: entry.wait_timer ?? 0,
+	}));
+}
+
+/**
  * Fetches combined workflow run + deployment info for a repository.
+ *
+ * When the latest run is `waiting` it is blocked by an environment protection
+ * rule, and the pending deployments are fetched to say what it is blocked on.
+ * That request is skipped for every other status, so it costs nothing in the
+ * normal case.
  *
  * @deprecated Use coordinator.fetchData() with workflow-specific queries instead.
  */
@@ -251,7 +324,11 @@ export async function fetchWorkflowInfo(
 		fetchLatestDeploymentStatus(owner, repo, token, options?.environment).catch(() => null),
 	]);
 
-	return { latestRun, deployment };
+	const pendingDeployments = latestRun?.status === "waiting"
+		? await fetchPendingDeployments(owner, repo, latestRun.id, token).catch(() => [])
+		: [];
+
+	return { latestRun, deployment, pendingDeployments };
 }
 
 /**
