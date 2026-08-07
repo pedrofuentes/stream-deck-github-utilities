@@ -7,8 +7,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { DataSubscription, GraphQLRepoNode } from "../../src/types";
+import type { DataFragmentName, DataSubscription, FragmentParams, GraphQLRepoNode } from "../../src/types";
 import { RepoDataCache } from "../../src/utils/repo-data-cache";
+import { fragmentCacheKey } from "../../src/utils/fragment-cache-key";
 
 // ─── Hoisted mocks ──────────────────────────────────────────────────────────
 
@@ -136,6 +137,11 @@ function baseSub(overrides: Partial<DataSubscription> = {}): DataSubscription {
 	};
 }
 
+/** Cache key a subscriber using {@link baseSub}'s defaults reads a fragment from. */
+function keyFor(fragment: DataFragmentName, params?: FragmentParams): string {
+	return fragmentCacheKey("owner/repo", fragment, params);
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("GraphQLQueryCoordinator", () => {
@@ -241,7 +247,7 @@ describe("GraphQLQueryCoordinator", () => {
 
 	describe("Cache-first behavior", () => {
 		it("should return cached data when all fragments are fresh", async () => {
-			cache.set("owner/repo", "prCount", 42, "graphql");
+			cache.set(keyFor("prCount"), "prCount", 42, "graphql");
 			coordinator.subscribe(baseSub({ fragments: ["prCount"] }));
 
 			const result = await coordinator.fetchData("action-1", TOKEN);
@@ -252,7 +258,7 @@ describe("GraphQLQueryCoordinator", () => {
 
 		it("should fetch only stale fragments", async () => {
 			// prCount is fresh, issueCount not cached
-			cache.set("owner/repo", "prCount", 42, "graphql");
+			cache.set(keyFor("prCount"), "prCount", 42, "graphql");
 			coordinator.subscribe(baseSub({ fragments: ["prCount", "issueCount"] }));
 
 			await coordinator.fetchData("action-1", TOKEN);
@@ -262,8 +268,8 @@ describe("GraphQLQueryCoordinator", () => {
 		});
 
 		it("should not refetch when all data is fresh within maxAge", async () => {
-			cache.set("owner/repo", "prCount", 42, "graphql");
-			cache.set("owner/repo", "issueCount", 10, "graphql");
+			cache.set(keyFor("prCount"), "prCount", 42, "graphql");
+			cache.set(keyFor("issueCount"), "issueCount", 10, "graphql");
 			coordinator.subscribe(baseSub({ fragments: ["prCount", "issueCount"] }));
 
 			const result = await coordinator.fetchData("action-1", TOKEN);
@@ -772,7 +778,7 @@ describe("GraphQLQueryCoordinator", () => {
 	describe("Force refresh (invalidateAndFetch)", () => {
 		it("should invalidate cache and fetch fresh data", async () => {
 			// Pre-populate cache
-			cache.set("owner/repo", "prCount", 42, "graphql");
+			cache.set(keyFor("prCount"), "prCount", 42, "graphql");
 			coordinator.subscribe(baseSub({ fragments: ["prCount"] }));
 
 			// First fetch from cache
@@ -912,8 +918,8 @@ describe("GraphQLQueryCoordinator", () => {
 
 		it("should serve stale cache data when both GraphQL and REST fail", async () => {
 			// Pre-populate cache then invalidate
-			cache.set("owner/repo", "prCount", 99, "graphql");
-			cache.invalidate("owner/repo", ["prCount"]);
+			cache.set(keyFor("prCount"), "prCount", 99, "graphql");
+			cache.invalidate(keyFor("prCount"), ["prCount"]);
 
 			mocks.executeGraphQLQuery.mockRejectedValue(new Error("GraphQL down"));
 			mocks.fetchPullRequestCount.mockRejectedValue(new Error("REST fail"));
@@ -964,24 +970,24 @@ describe("GraphQLQueryCoordinator", () => {
 
 	describe("Cleanup", () => {
 		it("should clean up cache for repos with no subscribers on unsubscribe", async () => {
-			cache.set("owner/repo", "prCount", 42, "graphql");
+			cache.set(keyFor("prCount"), "prCount", 42, "graphql");
 			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo" }));
 
 			// Unsubscribe removes the last subscriber for owner/repo
 			coordinator.unsubscribe("a1");
 
-			expect(cache.has("owner/repo", "prCount")).toBe(false);
+			expect(cache.has(keyFor("prCount"), "prCount")).toBe(false);
 		});
 
 		it("should preserve cache for repos with remaining subscribers", async () => {
-			cache.set("owner/repo", "prCount", 42, "graphql");
+			cache.set(keyFor("prCount"), "prCount", 42, "graphql");
 			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo" }));
 			coordinator.subscribe(baseSub({ actionId: "a2", repo: "owner/repo" }));
 
 			coordinator.unsubscribe("a1");
 
 			// a2 is still subscribed to owner/repo
-			expect(cache.has("owner/repo", "prCount")).toBe(true);
+			expect(cache.has(keyFor("prCount"), "prCount")).toBe(true);
 		});
 	});
 

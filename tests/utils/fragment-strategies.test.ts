@@ -66,6 +66,7 @@ vi.mock("../../src/utils/github", () => ({
 }));
 
 import { fragmentRegistry, type FragmentStrategy } from "../../src/utils/fragment-strategies";
+import { fragmentCacheKey } from "../../src/utils/fragment-cache-key";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -239,7 +240,7 @@ describe("Fragment Strategies", () => {
 			strategy.extractFromGraphQL!(cache, REPO, node);
 
 			expect(mocks.extractPRCount).toHaveBeenCalledWith(node, "open");
-			expect(cache.getStale(REPO, "prCount")?.data).toBe(5);
+			expect(cache.getStale(fragmentCacheKey(REPO, "prCount"), "prCount")?.data).toBe(5);
 		});
 
 		it("should extract from GraphQL with custom state", () => {
@@ -257,7 +258,7 @@ describe("Fragment Strategies", () => {
 			await strategy.fetchViaREST(cache, REPO, TOKEN, { prState: "closed" });
 
 			expect(mocks.fetchPullRequestCount).toHaveBeenCalledWith("owner", "repo", TOKEN, "closed");
-			expect(cache.getStale(REPO, "prCount")?.data).toBe(10);
+			expect(cache.getStale(fragmentCacheKey(REPO, "prCount", { prState: "closed" }), "prCount")?.data).toBe(10);
 		});
 
 		it("should assign to result", () => {
@@ -300,7 +301,7 @@ describe("Fragment Strategies", () => {
 			await strategy.fetchViaREST(cache, REPO, TOKEN, { issueState: "closed" });
 
 			expect(mocks.fetchIssueCount).toHaveBeenCalledWith("owner", "repo", TOKEN, "closed");
-			expect(cache.getStale(REPO, "issueCount")?.data).toBe(15);
+			expect(cache.getStale(fragmentCacheKey(REPO, "issueCount", { issueState: "closed" }), "issueCount")?.data).toBe(15);
 		});
 
 		it("should assign to result", () => {
@@ -345,7 +346,7 @@ describe("Fragment Strategies", () => {
 			await strategy.fetchViaREST(cache, REPO, TOKEN, { includePreReleases: true });
 
 			expect(mocks.fetchLatestRelease).toHaveBeenCalledWith("owner", "repo", TOKEN, true);
-			expect(cache.getStale(REPO, "latestRelease")?.data).toBe(release);
+			expect(cache.getStale(fragmentCacheKey(REPO, "latestRelease", { includePreReleases: true }), "latestRelease")?.data).toBe(release);
 		});
 
 		it("should assign to result", () => {
@@ -523,7 +524,8 @@ describe("Fragment Strategies", () => {
 				workflowFile: "ci.yml",
 				environment: "production",
 			});
-			expect(cache.getStale(REPO, "workflowRuns")?.data).toBe(info);
+			const workflowParams = { branch: "main", workflowFile: "ci.yml", environment: "production" };
+			expect(cache.getStale(fragmentCacheKey(REPO, "workflowRuns", workflowParams), "workflowRuns")?.data).toBe(info);
 		});
 
 		it("should skip REST fetch when repo is invalid", async () => {
@@ -585,7 +587,7 @@ describe("Fragment Strategies", () => {
 			await strategy.fetchViaREST(cache, REPO, TOKEN);
 
 			expect(mocks.fetchBranchComparison).toHaveBeenCalledWith("owner", "repo", "main", "develop", TOKEN);
-			expect(cache.getStale(REPO, "branchComparison")?.data).toBe(comparison);
+			expect(cache.getStale(fragmentCacheKey(REPO, "branchComparison"), "branchComparison")?.data).toBe(comparison);
 		});
 
 		it("should fetch via REST with custom branches", async () => {
@@ -682,7 +684,7 @@ describe("Fragment Strategies", () => {
 			for (const name of graphqlStrategies) {
 				const strategy = getStrategy(name);
 				strategy.extractFromGraphQL!(cache, REPO, node);
-				expect(cache.getStale(REPO, name as never)?.source).toBe("graphql");
+				expect(cache.getStale(fragmentCacheKey(REPO, name as never), name as never)?.source).toBe("graphql");
 			}
 		});
 
@@ -698,7 +700,7 @@ describe("Fragment Strategies", () => {
 				mock.mockResolvedValue(value);
 				const strategy = getStrategy(name);
 				await strategy.fetchViaREST(cache, REPO, TOKEN);
-				expect(cache.getStale(REPO, name as never)?.source).toBe("rest");
+				expect(cache.getStale(fragmentCacheKey(REPO, name as never), name as never)?.source).toBe("rest");
 			}
 		});
 	});

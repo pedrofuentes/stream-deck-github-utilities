@@ -123,6 +123,11 @@ export {
 	type FragmentStrategy,
 } from "./fragment-strategies";
 export {
+	fragmentCacheKey,
+	repoFromCacheKey,
+	FRAGMENT_PARAM_DEFAULTS,
+} from "./fragment-cache-key";
+export {
 	buildRepoQuery,
 	buildSearchQuery,
 	isGraphQLFragment,

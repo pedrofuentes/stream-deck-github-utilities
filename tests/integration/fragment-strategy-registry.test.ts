@@ -9,6 +9,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { fragmentRegistry } from "../../src/utils/fragment-strategies";
 import { RepoDataCache } from "../../src/utils/repo-data-cache";
+import { fragmentCacheKey } from "../../src/utils/fragment-cache-key";
 import type { CoordinatorResult, DataFragmentName, GraphQLRepoNode } from "../../src/types";
 import { makeGraphQLRepoNode } from "./fixtures";
 
@@ -95,7 +96,7 @@ describe("Fragment strategy registry", () => {
 			const strategy = fragmentRegistry.get("prCount")!;
 			strategy.extractFromGraphQL!(cache, repo, node, { prState: "open" });
 
-			const entry = cache.getStale(repo, "prCount");
+			const entry = cache.getStale(fragmentCacheKey(repo, "prCount", { prState: "open" }), "prCount");
 			expect(entry).not.toBeNull();
 
 			const result: CoordinatorResult = {};
@@ -107,7 +108,7 @@ describe("Fragment strategy registry", () => {
 			const strategy = fragmentRegistry.get("issueCount")!;
 			strategy.extractFromGraphQL!(cache, repo, node, { issueState: "all" });
 
-			const entry = cache.getStale(repo, "issueCount");
+			const entry = cache.getStale(fragmentCacheKey(repo, "issueCount", { issueState: "all" }), "issueCount");
 			expect(entry).not.toBeNull();
 
 			const result: CoordinatorResult = {};
@@ -119,7 +120,7 @@ describe("Fragment strategy registry", () => {
 			const strategy = fragmentRegistry.get("latestRelease")!;
 			strategy.extractFromGraphQL!(cache, repo, node, { includePreReleases: false });
 
-			const entry = cache.getStale(repo, "latestRelease");
+			const entry = cache.getStale(fragmentCacheKey(repo, "latestRelease", { includePreReleases: false }), "latestRelease");
 			expect(entry).not.toBeNull();
 
 			const result: CoordinatorResult = {};
