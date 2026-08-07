@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Workflow Status keys now show the branch they are configured for. Without it, several keys
+  watching one repository on different branches were indistinguishable — they all read as the
+  repository name plus a status. The branch takes the prominent row below the icon and the
+  run/deployment detail moves to a smaller row beneath it; keys with no branch configured are
+  unchanged.
+
 ### Changed
 
 ### Fixed

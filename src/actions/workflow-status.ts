@@ -523,11 +523,12 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 		const displayLine3 = md.line3.needsAnimation()
 			? md.line3.getCurrentText()
 			: md.line3Text;
+		const branchLabel = this.actionSettings.get(actionId)?.branch || undefined;
 
 		let image: string;
 		switch (md.variant.type) {
 			case "deploying":
-				image = renderDeployingImage(displayLine3, md.variant.deployState, displayName);
+				image = renderDeployingImage(displayLine3, md.variant.deployState, displayName, branchLabel);
 				break;
 			case "workflow":
 				image = renderWorkflowImage(
@@ -535,10 +536,11 @@ export class WorkflowStatusAction extends BaseGitHubAction<WorkflowStatusSetting
 					md.variant.displayStatus,
 					displayName,
 					md.variant.deployLabel ? displayLine3 : undefined,
+					branchLabel,
 				);
 				break;
 			case "noRuns":
-				image = renderWorkflowImage("No Runs", "neutral", displayName);
+				image = renderWorkflowImage("No Runs", "neutral", displayName, undefined, branchLabel);
 				break;
 		}
 
