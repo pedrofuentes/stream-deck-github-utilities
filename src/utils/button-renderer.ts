@@ -71,6 +71,9 @@ export const SPINNER_FRAME_COUNT = 8;
 /** @deprecated Frame-based spinner replaced by native SVG animation. Kept for backwards compat. */
 export const SPINNER_INTERVAL_MS = 150;
 
+/** Opacity of the faded half of a blink — low enough to read as off at a glance. */
+const DIMMED_OPACITY = 0.3;
+
 const SPINNER_RADIUS = 18;
 const SPINNER_CX = 72;
 const SPINNER_CY = 62;
@@ -97,8 +100,9 @@ const STATUS_ICONS: Record<string, string> = {
 	queued: `<circle cx="18" cy="18" r="11" fill="none" stroke="%%COLOR%%" stroke-width="2.5"/><line x1="18" y1="11" x2="18" y2="18" stroke="%%COLOR%%" stroke-width="2.5" stroke-linecap="round"/><line x1="18" y1="18" x2="24" y2="18" stroke="%%COLOR%%" stroke-width="2.5" stroke-linecap="round"/>`,
 	// ⏳ Hourglass (pending)
 	pending: `<circle cx="8" cy="18" r="3" fill="%%COLOR%%"/><circle cx="18" cy="18" r="3" fill="%%COLOR%%"/><circle cx="28" cy="18" r="3" fill="%%COLOR%%"/>`,
-	// ◷ Clock (waiting, same as queued)
-	waiting: `<circle cx="18" cy="18" r="11" fill="none" stroke="%%COLOR%%" stroke-width="2.5"/><line x1="18" y1="11" x2="18" y2="18" stroke="%%COLOR%%" stroke-width="2.5" stroke-linecap="round"/><line x1="18" y1="18" x2="24" y2="18" stroke="%%COLOR%%" stroke-width="2.5" stroke-linecap="round"/>`,
+	// 👤 Head and shoulders (waiting) — a run held by an environment protection rule
+	// is waiting for a person, which the clock it used to share with `queued` hid
+	waiting: `<circle cx="18" cy="12" r="5.5" fill="none" stroke="%%COLOR%%" stroke-width="2.5"/><path d="M7,29 A11,11 0 0,1 29,29" fill="none" stroke="%%COLOR%%" stroke-width="2.5" stroke-linecap="round"/>`,
 	// → Forward arrow (skipped)
 	skipped: `<line x1="8" y1="18" x2="28" y2="18" stroke="%%COLOR%%" stroke-width="3" stroke-linecap="round"/><polyline points="20,10 28,18 20,26" fill="none" stroke="%%COLOR%%" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`,
 	// ⏱ Clock with X (timed out)
@@ -151,6 +155,16 @@ export type KeyIconImageOptions = {
 	line3?: string;
 	/** Color for the accent bar at the top */
 	statusColor: string;
+	/**
+	 * Draws the accent bar and icon faded. Alternating this between renders is
+	 * what makes a key blink; the caller owns the timer, the same way the
+	 * marquee owns its scroll position.
+	 *
+	 * The device rasterises each `setImage` payload, so SVG's own `<animate>`
+	 * does not run on the hardware — anything that moves has to be sent frame
+	 * by frame.
+	 */
+	dimmed?: boolean;
 };
 
 // ── Core renderer ──────────────────────────────────────────────────────────
@@ -256,11 +270,15 @@ export function renderIconKeyImage(options: KeyIconImageOptions): string {
 		line3Y = 0;
 	}
 
+	// An added attribute rather than a wrapper, so an undimmed key produces
+	// byte-for-byte the markup it did before this option existed
+	const fade = options.dimmed ? ` opacity="${DIMMED_OPACITY}"` : "";
+
 	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
   <rect width="144" height="144" rx="16" fill="${COLORS.background}"/>
-  <rect y="0" width="144" height="6" rx="3" fill="${options.statusColor}"/>
+  <rect y="0" width="144" height="6" rx="3" fill="${options.statusColor}"${fade}/>
   ${hasLine1 ? `<text x="72" y="${line1Y}" text-anchor="middle" fill="${COLORS.textMuted}" font-size="18" font-family="${FONT}">${line1}</text>` : ""}
-  <g transform="translate(52,${iconY}) scale(${(40 / 36).toFixed(4)})">${iconSvg}</g>
+  <g transform="translate(52,${iconY}) scale(${(40 / 36).toFixed(4)})"${fade}>${iconSvg}</g>
   ${hasLine3 ? `<text x="72" y="${line3Y}" text-anchor="middle" fill="${COLORS.textMuted}" font-size="15" font-family="${FONT}">${line3}</text>` : ""}
 </svg>`;
 
@@ -320,12 +338,14 @@ export function renderWorkflowImage(
 	status: string,
 	repoName?: string,
 	deployLabel?: string,
+	dimmed?: boolean,
 ): string {
 	return renderIconKeyImage({
 		line1: repoName,
 		status,
 		line3: deployLabel ?? statusLabel,
 		statusColor: getWorkflowStatusColor(status),
+		dimmed,
 	});
 }
 

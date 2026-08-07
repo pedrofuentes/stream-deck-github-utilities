@@ -492,5 +492,56 @@ describe("button-renderer", () => {
 			expect(svg).toContain("repo");
 			expect(svg).toContain("Failed");
 		});
+
+		describe("dimmed", () => {
+			const base = {
+				line1: "repo",
+				status: "waiting",
+				line3: "approve prod",
+				statusColor: COLORS.workflow.waiting,
+			};
+
+			it("fades the accent bar and the icon", () => {
+				const svg = decodeSvg(renderIconKeyImage({ ...base, dimmed: true }));
+
+				// One on the accent bar, one on the icon group; the text stays legible
+				expect(svg.match(/opacity="0.3"/g)).toHaveLength(2);
+				expect(svg).toContain(`fill="${COLORS.workflow.waiting}" opacity="0.3"/>`);
+				expect(svg).toContain('scale(1.1111)" opacity="0.3">');
+			});
+
+			it("differs from the undimmed frame, which is what makes it blink", () => {
+				expect(renderIconKeyImage({ ...base, dimmed: true }))
+					.not.toBe(renderIconKeyImage({ ...base, dimmed: false }));
+			});
+
+			it("leaves markup byte-identical when off", () => {
+				expect(renderIconKeyImage({ ...base, dimmed: false })).toBe(renderIconKeyImage(base));
+				expect(renderIconKeyImage({ ...base, dimmed: undefined })).toBe(renderIconKeyImage(base));
+			});
+
+			it("emits no self-animating markup, which the device would not run", () => {
+				expect(decodeSvg(renderIconKeyImage({ ...base, dimmed: true }))).not.toContain("<animate");
+			});
+		});
+	});
+
+	// ── waiting status icon ─────────────────────
+
+	describe("waiting status icon", () => {
+		it("differs from queued, which it used to be identical to", () => {
+			expect(getStatusIcon("waiting", "#fff")).not.toBe(getStatusIcon("queued", "#fff"));
+			expect(decodeSvg(renderWorkflowImage("Waiting", "waiting")))
+				.not.toBe(decodeSvg(renderWorkflowImage("Queued", "queued")));
+		});
+
+		it("draws a person rather than a clock", () => {
+			const icon = getStatusIcon("waiting", "#fff");
+
+			// Head circle plus a shoulders arc — no clock hands
+			expect(icon).toContain("<circle");
+			expect(icon).toContain("<path");
+			expect(icon).not.toContain("<line");
+		});
 	});
 });

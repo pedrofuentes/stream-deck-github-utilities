@@ -86,7 +86,7 @@ vi.mock("../../src/utils/repo-data-cache", () => ({
 	RepoDataCache: vi.fn(),
 }));
 
-import { WorkflowStatusAction } from "../../src/actions/workflow-status";
+import { WorkflowStatusAction, formatApprovalLabel } from "../../src/actions/workflow-status";
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -229,8 +229,9 @@ function setupErrorFetchMock(status: number, message: string) {
 function setupCoordinatorMock(
 	latestRun: Record<string, unknown> | null = makeRunData(),
 	deployment: Record<string, unknown> | null = null,
+	pendingDeployments: Record<string, unknown>[] = [],
 ) {
-	const result = { workflowRuns: { latestRun, deployment } };
+	const result = { workflowRuns: { latestRun, deployment, pendingDeployments } };
 	mockFetchData.mockResolvedValue(result);
 	mockInvalidateAndFetch.mockResolvedValue(result);
 }
@@ -402,6 +403,110 @@ describe("WorkflowStatusAction", () => {
 			await action.onWillAppear?.(ev as never);
 
 			expect(lastImage(mockAction)).toContain("No Runs");
+		});
+
+		// A run held by an environment protection rule is the one state that needs
+		// a person to act, and GitHub does not surface it anywhere obvious.
+		describe("awaiting approval", () => {
+			const waitingRun = () => makeRunData({ status: "waiting", conclusion: null });
+
+			function keyFor(id: string, pending: Record<string, unknown>[], deployment: Record<string, unknown> | null = null) {
+				const mockAction = createMockKeyAction(id);
+				Object.defineProperty(action, "actions", {
+					get: () => [mockAction],
+					configurable: true,
+				});
+				setupCoordinatorMock(waitingRun(), deployment, pending);
+				return mockAction;
+			}
+
+			it("names the environment and prompts to approve", async () => {
+				const mockAction = keyFor("wf-appr-1", [
+					{ environment: "prod", currentUserCanApprove: true, reviewers: ["sandrosuter"], waitTimerMinutes: 0 },
+				]);
+
+				await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+				expect(lastImage(mockAction)).toContain("approve prod");
+			});
+
+			it("says pending when someone else has to approve", async () => {
+				const mockAction = keyFor("wf-appr-2", [
+					{ environment: "prod", currentUserCanApprove: false, reviewers: ["someone"], waitTimerMinutes: 0 },
+				]);
+
+				await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+				expect(lastImage(mockAction)).toContain("awaiting prod");
+			});
+
+			it("counts further blocked environments instead of listing them", async () => {
+				const mockAction = keyFor("wf-appr-3", [
+					{ environment: "prod", currentUserCanApprove: true, reviewers: [], waitTimerMinutes: 0 },
+					{ environment: "demo", currentUserCanApprove: false, reviewers: [], waitTimerMinutes: 0 },
+				]);
+
+				await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+				expect(lastImage(mockAction)).toContain("approve prod +1");
+			});
+
+			// The device rasterises each setImage payload, so a self-animating SVG
+			// renders as a still — the blink has to be sent frame by frame.
+			it("blinks by alternating dimmed and bright frames", async () => {
+				vi.useFakeTimers();
+				try {
+					const mockAction = keyFor("wf-appr-4", [
+						{ environment: "prod", currentUserCanApprove: true, reviewers: [], waitTimerMinutes: 0 },
+					]);
+
+					await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+					const first = lastImage(mockAction);
+
+					await vi.advanceTimersByTimeAsync(500);
+					const second = lastImage(mockAction);
+
+					await vi.advanceTimersByTimeAsync(500);
+					const third = lastImage(mockAction);
+
+					expect(second).not.toBe(first);
+					expect(third).toBe(first);
+					expect([first, second].some((f) => f.includes('opacity="0.3"'))).toBe(true);
+				} finally {
+					vi.useRealTimers();
+				}
+			});
+
+			it("emits no self-animating markup, which the device would ignore", async () => {
+				const mockAction = keyFor("wf-appr-4b", [
+					{ environment: "prod", currentUserCanApprove: true, reviewers: [], waitTimerMinutes: 0 },
+				]);
+
+				await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+				expect(lastImage(mockAction)).not.toContain("<animate");
+			});
+
+			it("outranks an in-progress deployment", async () => {
+				const mockAction = keyFor(
+					"wf-appr-5",
+					[{ environment: "prod", currentUserCanApprove: true, reviewers: [], waitTimerMinutes: 0 }],
+					{ environment: "demo", state: "in_progress", description: "", log_url: null },
+				);
+
+				await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+				expect(lastImage(mockAction)).toContain("approve prod");
+				expect(lastImage(mockAction)).not.toContain("demo");
+			});
+
+			it("does not pulse once nothing is pending", async () => {
+				const mockAction = keyFor("wf-appr-6", []);
+
+				await action.onWillAppear?.(createWillAppearEvent(mockAction, { repo: "owner/repo" }) as never);
+
+				expect(lastImage(mockAction)).not.toContain("<animate");
+			});
 		});
 
 		it("shows deploying state when deployment is in_progress", async () => {
@@ -1072,5 +1177,67 @@ describe("WorkflowStatusAction", () => {
 			expect(mockOpenUrl).not.toHaveBeenCalled();
 			vi.useRealTimers();
 		});
+	});
+});
+
+// ── formatApprovalLabel ─────────────────────────
+
+describe("formatApprovalLabel", () => {
+	function pending(overrides: Record<string, unknown> = {}) {
+		return {
+			environment: "prod",
+			currentUserCanApprove: true,
+			reviewers: [],
+			waitTimerMinutes: 0,
+			...overrides,
+		} as never;
+	}
+
+	it("returns an empty string for nothing pending", () => {
+		expect(formatApprovalLabel([])).toBe("");
+	});
+
+	it("prompts to approve when the user is a reviewer", () => {
+		expect(formatApprovalLabel([pending()])).toBe("approve prod");
+	});
+
+	it("reports awaiting when the user is not a reviewer", () => {
+		expect(formatApprovalLabel([pending({ currentUserCanApprove: false })])).toBe("awaiting prod");
+	});
+
+	it("counts the remaining environments", () => {
+		const label = formatApprovalLabel([
+			pending({ environment: "prod" }),
+			pending({ environment: "demo" }),
+			pending({ environment: "test" }),
+		]);
+
+		expect(label).toBe("approve prod +2");
+	});
+
+	it("prompts to approve if the user can approve any of them", () => {
+		const label = formatApprovalLabel([
+			pending({ environment: "prod", currentUserCanApprove: false }),
+			pending({ environment: "demo", currentUserCanApprove: true }),
+		]);
+
+		expect(label).toBe("approve prod +1");
+	});
+
+	it("falls back to a generic name for a nameless environment", () => {
+		expect(formatApprovalLabel([pending({ environment: "" })])).toBe("approve deploy");
+	});
+
+	// The detail row truncates at 18 characters, so the verb has to come first —
+	// otherwise a long environment name pushes off the part that says to act.
+	it("keeps the verb readable when the environment name is long", () => {
+		const label = formatApprovalLabel([
+			pending({ environment: "production-europe" }),
+			pending(),
+			pending(),
+		]);
+
+		expect(label.slice(0, 18)).toContain("approve");
+		expect(label.startsWith("approve ")).toBe(true);
 	});
 });
