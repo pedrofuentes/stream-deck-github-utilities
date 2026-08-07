@@ -319,6 +319,59 @@ describe("Workflow API", () => {
 			expect(url).toContain("environment=production");
 		});
 
+		// environment and ref are independent filters — each has to work on its
+		// own and the two have to combine, so a key can watch "any environment
+		// on this branch" as readily as "this environment on any branch".
+		describe("environment and ref filters", () => {
+			beforeEach(() => {
+				vi.mocked(globalThis.fetch).mockResolvedValue(mockFetchResponse([]));
+			});
+
+			function requestedUrl(): string {
+				return vi.mocked(globalThis.fetch).mock.calls[0][0] as string;
+			}
+
+			it("applies neither filter when neither is given", async () => {
+				await fetchLatestDeploymentStatus("owner", "repo", "ghp_test");
+
+				expect(requestedUrl()).not.toContain("environment=");
+				expect(requestedUrl()).not.toContain("ref=");
+			});
+
+			it("applies the ref filter alone", async () => {
+				await fetchLatestDeploymentStatus("owner", "repo", "ghp_test", undefined, "develop");
+
+				expect(requestedUrl()).toContain("ref=develop");
+				expect(requestedUrl()).not.toContain("environment=");
+			});
+
+			it("applies the environment filter alone", async () => {
+				await fetchLatestDeploymentStatus("owner", "repo", "ghp_test", "prod");
+
+				expect(requestedUrl()).toContain("environment=prod");
+				expect(requestedUrl()).not.toContain("ref=");
+			});
+
+			it("applies both filters together", async () => {
+				await fetchLatestDeploymentStatus("owner", "repo", "ghp_test", "dev", "develop");
+
+				expect(requestedUrl()).toContain("environment=dev");
+				expect(requestedUrl()).toContain("ref=develop");
+			});
+
+			it("ignores an empty ref", async () => {
+				await fetchLatestDeploymentStatus("owner", "repo", "ghp_test", "prod", "");
+
+				expect(requestedUrl()).not.toContain("ref=");
+			});
+
+			it("encodes refs containing slashes", async () => {
+				await fetchLatestDeploymentStatus("owner", "repo", "ghp_test", undefined, "feature/new thing");
+
+				expect(requestedUrl()).toContain("ref=feature%2Fnew%20thing");
+			});
+		});
+
 		it("handles in_progress deployment status", async () => {
 			vi.mocked(globalThis.fetch)
 				.mockResolvedValueOnce(
@@ -403,6 +456,60 @@ describe("Workflow API", () => {
 			const info = await fetchWorkflowInfo("owner", "repo", "ghp_test");
 			expect(info.latestRun).toBeNull();
 			expect(info.deployment).toBeNull();
+		});
+
+		// The branch setting has to narrow both halves of the result. Narrowing
+		// only the workflow run lets a deployment created from an unrelated
+		// branch surface on the key — and because an active deployment takes
+		// precedence in the display, it hides the run the key was configured for.
+		describe("branch filter", () => {
+			function deploymentUrls(): string[] {
+				return vi.mocked(globalThis.fetch).mock.calls
+					.map((call) => call[0] as string)
+					.filter((url) => url.includes("/deployments") && !url.includes("/statuses"));
+			}
+
+			beforeEach(() => {
+				vi.mocked(globalThis.fetch).mockImplementation(async (url) => {
+					const urlStr = url as string;
+					if (urlStr.includes("/actions/")) {
+						return mockFetchResponse({ total_count: 0, workflow_runs: [] });
+					}
+					return mockFetchResponse([]);
+				});
+			});
+
+			it("narrows the deployment lookup by branch", async () => {
+				await fetchWorkflowInfo("owner", "repo", "ghp_test", { branch: "develop" });
+
+				expect(deploymentUrls()).toHaveLength(1);
+				expect(deploymentUrls()[0]).toContain("ref=develop");
+			});
+
+			it("narrows the deployment lookup by branch and environment together", async () => {
+				await fetchWorkflowInfo("owner", "repo", "ghp_test", {
+					branch: "develop",
+					environment: "dev",
+					workflowFile: "ci.yml",
+				});
+
+				expect(deploymentUrls()[0]).toContain("ref=develop");
+				expect(deploymentUrls()[0]).toContain("environment=dev");
+			});
+
+			it("narrows by environment alone when no branch is set", async () => {
+				await fetchWorkflowInfo("owner", "repo", "ghp_test", { environment: "prod" });
+
+				expect(deploymentUrls()[0]).toContain("environment=prod");
+				expect(deploymentUrls()[0]).not.toContain("ref=");
+			});
+
+			it("applies no deployment filter when neither is set", async () => {
+				await fetchWorkflowInfo("owner", "repo", "ghp_test", { workflowFile: "ci.yml" });
+
+				expect(deploymentUrls()[0]).not.toContain("ref=");
+				expect(deploymentUrls()[0]).not.toContain("environment=");
+			});
 		});
 
 		it("propagates workflow run errors but catches deployment errors", async () => {

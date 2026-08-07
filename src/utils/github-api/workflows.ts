@@ -158,13 +158,18 @@ export async function fetchLatestWorkflowRun(
 /**
  * Fetches the latest deployment status for a repository.
  *
+ * `environment` and `ref` are independent filters and may be used alone or
+ * together: with neither, the newest deployment of the repository is returned;
+ * with both, the newest deployment of that environment created from that ref.
+ *
  * @deprecated Use coordinator.fetchData() with deployment-specific queries instead.
  *
  * @param owner - Repository owner
  * @param repo - Repository name
  * @param token - GitHub PAT
  * @param environment - Optional environment filter (e.g. "production")
- * @returns Latest deployment status, or null if no deployments
+ * @param ref - Optional ref filter — the branch, tag or SHA a deployment was created from
+ * @returns Latest deployment status, or null if no deployments match
  * @throws {GitHubApiError} on API errors
  */
 export async function fetchLatestDeploymentStatus(
@@ -172,11 +177,16 @@ export async function fetchLatestDeploymentStatus(
 	repo: string,
 	token?: string,
 	environment?: string,
+	ref?: string,
 ): Promise<DeploymentStatus | null> {
 	let url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/deployments?per_page=1`;
 
 	if (environment) {
 		url += `&environment=${encodeURIComponent(environment)}`;
+	}
+
+	if (ref) {
+		url += `&ref=${encodeURIComponent(ref)}`;
 	}
 
 	const headers = buildHeaders(token);
@@ -232,6 +242,12 @@ export async function fetchLatestDeploymentStatus(
 /**
  * Fetches combined workflow run + deployment info for a repository.
  *
+ * `branch`, `workflowFile` and `environment` are independent filters that may
+ * be used alone or in any combination. `branch` narrows both halves of the
+ * result: the workflow run by the branch it ran on, and the deployment by the
+ * ref it was created from — so a key watching `develop` no longer reports a
+ * deployment that came from another branch.
+ *
  * @deprecated Use coordinator.fetchData() with workflow-specific queries instead.
  */
 export async function fetchWorkflowInfo(
@@ -248,7 +264,7 @@ export async function fetchWorkflowInfo(
 	// Fetch the secondary deployment status — catch errors so partial results still work.
 	const [latestRun, deployment] = await Promise.all([
 		fetchLatestWorkflowRun(owner, repo, token, options?.branch, options?.workflowFile),
-		fetchLatestDeploymentStatus(owner, repo, token, options?.environment).catch(() => null),
+		fetchLatestDeploymentStatus(owner, repo, token, options?.environment, options?.branch).catch(() => null),
 	]);
 
 	return { latestRun, deployment };
