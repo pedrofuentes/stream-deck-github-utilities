@@ -176,6 +176,18 @@ describe("Button renderer snapshots", () => {
 		it("without repo name", () => {
 			expect(renderWorkflowImage("Failure", "failure")).toMatchSnapshot();
 		});
+
+		it("with branch and deploy label", () => {
+			expect(renderWorkflowImage("Success", "success", "owner/repo", "prod: success", "main")).toMatchSnapshot();
+		});
+
+		it("with branch and no deploy label", () => {
+			expect(renderWorkflowImage("Failure", "failure", "owner/repo", undefined, "develop")).toMatchSnapshot();
+		});
+
+		it("with branch and no repo name", () => {
+			expect(renderWorkflowImage("Success", "success", undefined, "dev: success", "develop")).toMatchSnapshot();
+		});
 	});
 
 	// ── Deploying image ────────────────────────────────────────────────────
@@ -191,6 +203,10 @@ describe("Button renderer snapshots", () => {
 
 		it("without repo name", () => {
 			expect(renderDeployingImage("preview", "pending")).toMatchSnapshot();
+		});
+
+		it("with branch", () => {
+			expect(renderDeployingImage("production", "in_progress", "owner/repo", "main")).toMatchSnapshot();
 		});
 	});
 

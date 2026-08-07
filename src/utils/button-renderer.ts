@@ -147,8 +147,14 @@ export type KeyIconImageOptions = {
 	line1?: string;
 	/** Workflow status key (e.g. "success", "failure") — renders as icon */
 	status: string;
-	/** Line 3: metadata / detail (bottom, dimmed, 15 px) */
+	/** Line 3: metadata / detail (below the icon, dimmed, 15 px) */
 	line3?: string;
+	/**
+	 * Line 4: secondary detail (bottom, dimmed, 13 px). Optional — supplying it
+	 * tightens the layout to make room; omitting it leaves the three-line
+	 * geometry untouched. Ignored without a {@link KeyIconImageOptions.line3}.
+	 */
+	line4?: string;
 	/** Color for the accent bar at the top */
 	statusColor: string;
 };
@@ -214,54 +220,80 @@ export function renderKeyImage(options: KeyImageOptions): string {
 /**
  * Renders a data URI for a 144×144 SVG key image with a centered icon.
  *
- * Layout:
- *   ┌════════════════════════┐  ← colored accent bar (6 px)
- *   │                        │
- *   │     line1 (18 px)      │  ← identifier, dimmed
- *   │                        │
- *   │       [ICON 40px]      │  ← status icon, colored
- *   │                        │
- *   │     line3 (15 px)      │  ← metadata, dimmed
- *   │                        │
- *   └────────────────────────┘
+ * Layout (three lines):        Layout (with line4):
+ *   ┌═══════════════════┐        ┌═══════════════════┐  ← accent bar (6 px)
+ *   │                   │        │   line1 (18 px)   │  ← identifier, dimmed
+ *   │   line1 (18 px)   │        │                   │
+ *   │                   │        │    [ICON 40px]    │  ← status icon, colored
+ *   │    [ICON 40px]    │        │                   │
+ *   │                   │        │   line3 (15 px)   │  ← detail, dimmed
+ *   │   line3 (15 px)   │        │   line4 (13 px)   │  ← secondary, dimmed
+ *   │                   │        │                   │
+ *   └───────────────────┘        └───────────────────┘
+ *
+ * Supplying `line4` tightens the vertical rhythm to make room for the extra
+ * row; without it the three-line geometry is unchanged.
  */
 export function renderIconKeyImage(options: KeyIconImageOptions): string {
 	const line1 = options.line1 ? escapeXml(truncate(options.line1, 14)) : "";
 	const line3 = options.line3 ? escapeXml(truncate(options.line3, 18)) : "";
+	const line4 = options.line4 ? escapeXml(truncate(options.line4, 20)) : "";
 
 	const hasLine1 = !!options.line1;
 	const hasLine3 = !!options.line3;
+	// A fourth line without a third would leave a hole where line3 belongs
+	const hasLine4 = !!options.line4 && hasLine3;
 
 	const iconColor = getWorkflowStatusColor(options.status);
 	const iconSvg = getStatusIcon(options.status, iconColor);
 
 	// Icon positioning (center of the 40×40 icon area)
-	let line1Y: number, iconY: number, line3Y: number;
+	let line1Y: number, iconY: number, line3Y: number, line4Y: number;
 
-	if (hasLine1 && hasLine3) {
+	if (hasLine1 && hasLine4) {
+		line1Y = 30;
+		iconY = 42;   // icon top
+		line3Y = 104;
+		line4Y = 126;
+	} else if (hasLine4) {
+		line1Y = 0;
+		iconY = 32;
+		line3Y = 100;
+		line4Y = 122;
+	} else if (hasLine1 && hasLine3) {
 		line1Y = 36;
-		iconY = 50;   // icon top
+		iconY = 50;
 		line3Y = 120;
+		line4Y = 0;
 	} else if (hasLine1) {
 		line1Y = 40;
 		iconY = 56;
 		line3Y = 0;
+		line4Y = 0;
 	} else if (hasLine3) {
 		line1Y = 0;
 		iconY = 36;
 		line3Y = 114;
+		line4Y = 0;
 	} else {
 		line1Y = 0;
 		iconY = 46;
 		line3Y = 0;
+		line4Y = 0;
 	}
+
+	// Emitted only when present, so keys without a fourth line produce byte-for-byte
+	// the same markup as before this row existed
+	const line4Svg = hasLine4
+		? `\n  <text x="72" y="${line4Y}" text-anchor="middle" fill="${COLORS.textMuted}" font-size="13" font-family="${FONT}">${line4}</text>`
+		: "";
 
 	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
   <rect width="144" height="144" rx="16" fill="${COLORS.background}"/>
   <rect y="0" width="144" height="6" rx="3" fill="${options.statusColor}"/>
   ${hasLine1 ? `<text x="72" y="${line1Y}" text-anchor="middle" fill="${COLORS.textMuted}" font-size="18" font-family="${FONT}">${line1}</text>` : ""}
   <g transform="translate(52,${iconY}) scale(${(40 / 36).toFixed(4)})">${iconSvg}</g>
-  ${hasLine3 ? `<text x="72" y="${line3Y}" text-anchor="middle" fill="${COLORS.textMuted}" font-size="15" font-family="${FONT}">${line3}</text>` : ""}
+  ${hasLine3 ? `<text x="72" y="${line3Y}" text-anchor="middle" fill="${COLORS.textMuted}" font-size="15" font-family="${FONT}">${line3}</text>` : ""}${line4Svg}
 </svg>`;
 
 	return `data:image/svg+xml,${encodeURIComponent(svg)}`;
@@ -313,31 +345,48 @@ export function renderStatImage(displayValue: string, statType: StatType, repoNa
 
 /**
  * Renders a workflow status image with an icon.
+ *
  * Layout: repo name / [status icon] / deploy info (optional)
+ * With a branch: repo name / [status icon] / branch / deploy info
+ *
+ * The branch takes the prominent row because it is what tells two keys on the
+ * same repository apart; the status below it is the part that keeps changing.
  */
 export function renderWorkflowImage(
 	statusLabel: string,
 	status: string,
 	repoName?: string,
 	deployLabel?: string,
+	branchLabel?: string,
 ): string {
+	const detail = deployLabel ?? statusLabel;
+
 	return renderIconKeyImage({
 		line1: repoName,
 		status,
-		line3: deployLabel ?? statusLabel,
+		line3: branchLabel || detail,
+		line4: branchLabel ? detail : undefined,
 		statusColor: getWorkflowStatusColor(status),
 	});
 }
 
 /**
  * Renders a deploying state image with an icon.
+ *
  * Layout: repo name / [deploying icon] / environment name
+ * With a branch: repo name / [deploying icon] / branch / environment name
  */
-export function renderDeployingImage(envName: string, _state: string, repoName?: string): string {
+export function renderDeployingImage(
+	envName: string,
+	_state: string,
+	repoName?: string,
+	branchLabel?: string,
+): string {
 	return renderIconKeyImage({
 		line1: repoName,
 		status: "deploying",
-		line3: envName,
+		line3: branchLabel || envName,
+		line4: branchLabel ? envName : undefined,
 		statusColor: COLORS.workflow.deploying,
 	});
 }

@@ -293,6 +293,53 @@ describe("button-renderer", () => {
 			// in_progress = path (circular arrow)
 			expect(decodeSvg(renderWorkflowImage("X", "in_progress"))).toContain("path");
 		});
+
+		// Several keys commonly watch one repository on different branches, so the
+		// branch is what tells them apart and takes the prominent row; the status
+		// moves to the smaller row below it.
+		describe("branch label", () => {
+			it("shows the branch above the deploy label", () => {
+				const svg = decodeSvg(renderWorkflowImage("Success", "success", "Steps", "dev: success", "develop"));
+
+				expect(svg).toContain("develop");
+				expect(svg).toContain("dev: success");
+				expect(svg).toContain("Steps");
+				// Branch on the 15 px row, deploy info on the 13 px row below it
+				expect(svg).toMatch(/font-size="15"[^>]*>develop</);
+				expect(svg).toMatch(/font-size="13"[^>]*>dev: success</);
+			});
+
+			it("falls back to the status label on the lower row without a deployment", () => {
+				const svg = decodeSvg(renderWorkflowImage("Success", "success", "Steps", undefined, "develop"));
+
+				expect(svg).toMatch(/font-size="15"[^>]*>develop</);
+				expect(svg).toMatch(/font-size="13"[^>]*>Success</);
+			});
+
+			it("keeps the three-line layout when no branch is set", () => {
+				const withBranch = decodeSvg(renderWorkflowImage("Success", "success", "Steps", "dev: success", "develop"));
+				const without = decodeSvg(renderWorkflowImage("Success", "success", "Steps", "dev: success"));
+
+				expect(without).not.toContain('font-size="13"');
+				// The extra row shifts the other elements up
+				expect(without).toContain('y="120"');
+				expect(withBranch).not.toContain('y="120"');
+			});
+
+			it("treats an empty branch as no branch", () => {
+				const empty = decodeSvg(renderWorkflowImage("Success", "success", "Steps", "dev: success", ""));
+				const omitted = decodeSvg(renderWorkflowImage("Success", "success", "Steps", "dev: success"));
+
+				expect(empty).toBe(omitted);
+			});
+
+			it("truncates a long branch name", () => {
+				const svg = decodeSvg(renderWorkflowImage("Success", "success", "Steps", "prod: ok", "feature/a-very-long-branch-name"));
+
+				expect(svg).not.toContain("feature/a-very-long-branch-name");
+				expect(svg).toContain("feature/a-very-l..");
+			});
+		});
 	});
 
 	// ── renderDeployingImage ────────────────────
@@ -314,6 +361,20 @@ describe("button-renderer", () => {
 			const svg = decodeSvg(renderDeployingImage("staging", "queued"));
 			expect(svg).toContain("staging");
 			expect(svg).toContain(COLORS.workflow.deploying);
+		});
+
+		it("shows the branch above the environment when provided", () => {
+			const svg = decodeSvg(renderDeployingImage("prod", "in_progress", "Steps", "main"));
+
+			expect(svg).toMatch(/font-size="15"[^>]*>main</);
+			expect(svg).toMatch(/font-size="13"[^>]*>prod</);
+		});
+
+		it("keeps the environment on the main row without a branch", () => {
+			const svg = decodeSvg(renderDeployingImage("prod", "in_progress", "Steps"));
+
+			expect(svg).toMatch(/font-size="15"[^>]*>prod</);
+			expect(svg).not.toContain('font-size="13"');
 		});
 	});
 
@@ -491,6 +552,71 @@ describe("button-renderer", () => {
 			}));
 			expect(svg).toContain("repo");
 			expect(svg).toContain("Failed");
+		});
+
+		describe("line4", () => {
+			it("renders a fourth row and tightens the layout", () => {
+				const svg = decodeSvg(renderIconKeyImage({
+					line1: "repo",
+					status: "success",
+					line3: "develop",
+					line4: "dev: success",
+					statusColor: COLORS.workflow.success,
+				}));
+
+				expect(svg).toContain("develop");
+				expect(svg).toContain("dev: success");
+				// Rows move up to make room: line1 30, icon 42, line3 104, line4 126
+				expect(svg).toContain('y="30"');
+				expect(svg).toContain("translate(52,42)");
+				expect(svg).toContain('y="104"');
+				expect(svg).toContain('y="126"');
+			});
+
+			it("positions the rows without line1", () => {
+				const svg = decodeSvg(renderIconKeyImage({
+					status: "success",
+					line3: "develop",
+					line4: "dev: success",
+					statusColor: COLORS.workflow.success,
+				}));
+
+				expect(svg).toContain("translate(52,32)");
+				expect(svg).toContain('y="100"');
+				expect(svg).toContain('y="122"');
+			});
+
+			it("is ignored without a line3, which would leave a hole", () => {
+				const svg = decodeSvg(renderIconKeyImage({
+					line1: "repo",
+					status: "success",
+					line4: "orphan",
+					statusColor: COLORS.workflow.success,
+				}));
+
+				expect(svg).not.toContain("orphan");
+				// Falls back to the line1-only geometry
+				expect(svg).toContain("translate(52,56)");
+			});
+
+			it("leaves markup byte-identical when omitted", () => {
+				const base = { line1: "repo", status: "success", line3: "Done", statusColor: COLORS.workflow.success };
+
+				expect(renderIconKeyImage({ ...base, line4: undefined })).toBe(renderIconKeyImage(base));
+			});
+
+			it("escapes and truncates line4", () => {
+				const svg = decodeSvg(renderIconKeyImage({
+					status: "success",
+					line3: "branch",
+					line4: "A&B a-really-long-detail-line",
+					statusColor: COLORS.workflow.success,
+				}));
+
+				expect(svg).toContain("A&amp;B");
+				expect(svg).not.toContain("a-really-long-detail-line");
+				expect(svg).toContain("..");
+			});
 		});
 	});
 });

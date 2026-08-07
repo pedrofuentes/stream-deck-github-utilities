@@ -404,6 +404,60 @@ describe("WorkflowStatusAction", () => {
 			expect(lastImage(mockAction)).toContain("No Runs");
 		});
 
+		// Without the branch on the key, several keys watching one repository on
+		// different branches are indistinguishable.
+		describe("branch label on the key", () => {
+			it("shows the configured branch", async () => {
+				const mockAction = createMockKeyAction("wf-branch-1");
+
+				Object.defineProperty(action, "actions", {
+					get: () => [mockAction],
+					configurable: true,
+				});
+
+				setupCoordinatorMock(makeRunData({ status: "completed", conclusion: "success" }));
+
+				const ev = createWillAppearEvent(mockAction, { repo: "owner/repo", branch: "develop" });
+				await action.onWillAppear?.(ev as never);
+
+				expect(lastImage(mockAction)).toContain("develop");
+			});
+
+			it("still shows the branch when there are no runs", async () => {
+				const mockAction = createMockKeyAction("wf-branch-2");
+
+				Object.defineProperty(action, "actions", {
+					get: () => [mockAction],
+					configurable: true,
+				});
+
+				setupCoordinatorMock(null, null);
+
+				const ev = createWillAppearEvent(mockAction, { repo: "owner/repo", branch: "develop" });
+				await action.onWillAppear?.(ev as never);
+
+				const svg = lastImage(mockAction);
+				expect(svg).toContain("develop");
+				expect(svg).toContain("No Runs");
+			});
+
+			it("omits the extra row when no branch is configured", async () => {
+				const mockAction = createMockKeyAction("wf-branch-3");
+
+				Object.defineProperty(action, "actions", {
+					get: () => [mockAction],
+					configurable: true,
+				});
+
+				setupCoordinatorMock(makeRunData({ status: "completed", conclusion: "success" }));
+
+				const ev = createWillAppearEvent(mockAction, { repo: "owner/repo" });
+				await action.onWillAppear?.(ev as never);
+
+				expect(lastImage(mockAction)).not.toContain('font-size="13"');
+			});
+		});
+
 		it("shows deploying state when deployment is in_progress", async () => {
 			const mockAction = createMockKeyAction("wf-7");
 			const settings = { repo: "owner/repo" };
