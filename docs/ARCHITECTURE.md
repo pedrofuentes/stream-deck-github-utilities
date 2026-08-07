@@ -32,7 +32,7 @@ stream-deck-github-utilities/
 │       ├── button-renderer.ts     ← 144×144 SVG button generation (GitHub dark theme, STATUS_ICONS)
 │       ├── touch-strip-renderer.ts← Stream Deck+ dial / touch-strip rendering
 │       ├── polling-coordinator.ts ← Shared adaptive polling (dedupes calls per repo)
-│       ├── repo-data-cache.ts, pi-data-provider.ts, data-fragments.ts, fragment-strategies.ts
+│       ├── repo-data-cache.ts, fragment-cache-key.ts, pi-data-provider.ts, data-fragments.ts, fragment-strategies.ts
 │       ├── debounced-url-opener.ts, render-debouncer.ts, marquee-controller.ts, spinner-animator.ts
 │       └── index.ts               ← utils barrel
 ├── tests/                         ← Mirrors src/ (actions/, utils/, integration/, renderers/)

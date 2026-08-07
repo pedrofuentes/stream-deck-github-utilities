@@ -145,7 +145,7 @@ Follow these steps and refer to the existing **Repo Stats** and **Workflow Statu
 The plugin uses a **GraphQL Query Coordinator** layer between actions and the GitHub API. Instead of each action making independent REST/GraphQL calls, all 14 actions subscribe to the coordinator with the data fragments they need. The coordinator:
 
 - **Batches queries** — combines fragments from multiple actions into a single GraphQL request per repository
-- **Caches per-repo** — `repo-data-cache.ts` tracks field-level staleness so only stale fields are re-fetched
+- **Caches per-repo and per-params** — `repo-data-cache.ts` tracks field-level staleness so only stale fields are re-fetched; `fragment-cache-key.ts` gives fragments whose result depends on the action's settings (branch pair, workflow, PR state, …) their own entry, so two actions on the same repo with different settings don't overwrite each other
 - **Builds queries dynamically** — `graphql-query-builder.ts` composes the minimal GraphQL query for requested fields
 - **Dispatches via strategies** — `fragment-strategies.ts` encapsulates each fragment's extraction, REST fallback, and result assignment
 - **Retries transient failures** — `fetchWithRetry()` in `github-api/core.ts` retries 429/502/503/504 with exponential backoff
@@ -155,6 +155,7 @@ Key files:
 - `src/utils/fragment-strategies.ts` — strategy pattern with 12 fragment strategies
 - `src/utils/graphql-query-builder.ts` — dynamic query composition
 - `src/utils/repo-data-cache.ts` — per-repo cache with field-level TTL
+- `src/utils/fragment-cache-key.ts` — cache key construction and shared parameter defaults
 - `src/utils/data-fragments.ts` — GraphQL→REST interface extractors
 - `src/utils/github-api/` — domain-split API modules (core, repos, PRs, issues, workflows, security, datasources)
 
