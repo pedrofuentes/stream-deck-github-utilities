@@ -9,6 +9,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { RepoDataCache } from "../../src/utils/repo-data-cache";
+import { fragmentCacheKey } from "../../src/utils/fragment-cache-key";
 import type { DataFragmentName } from "../../src/types";
 
 describe("RepoDataCache", () => {
@@ -285,6 +286,45 @@ describe("RepoDataCache", () => {
 		it("should be a no-op when cache is empty", () => {
 			cache.cleanup(new Set(["some/repo"]));
 			expect(cache.size).toBe(0);
+		});
+
+		it("should keep every parameter variant of an active repo", () => {
+			const open = fragmentCacheKey("active/repo", "prCount", { prState: "open" });
+			const closed = fragmentCacheKey("active/repo", "prCount", { prState: "closed" });
+			cache.set(open, "prCount", 10, "graphql");
+			cache.set(closed, "prCount", 99, "graphql");
+
+			cache.cleanup(new Set(["active/repo"]));
+
+			expect(cache.has(open, "prCount")).toBe(true);
+			expect(cache.has(closed, "prCount")).toBe(true);
+			expect(cache.size).toBe(2);
+		});
+
+		it("should remove every parameter variant of an inactive repo", () => {
+			const active = fragmentCacheKey("active/repo", "prCount", { prState: "open" });
+			const inactiveOpen = fragmentCacheKey("inactive/repo", "prCount", { prState: "open" });
+			const inactiveClosed = fragmentCacheKey("inactive/repo", "prCount", { prState: "closed" });
+			cache.set(active, "prCount", 1, "graphql");
+			cache.set(inactiveOpen, "prCount", 2, "graphql");
+			cache.set(inactiveClosed, "prCount", 3, "graphql");
+
+			cache.cleanup(new Set(["active/repo"]));
+
+			expect(cache.size).toBe(1);
+			expect(cache.has(active, "prCount")).toBe(true);
+		});
+
+		it("should not be fooled by a discriminator containing the separator", () => {
+			const key = fragmentCacheKey("active/repo", "branchComparison", {
+				baseBranch: "main",
+				headBranch: "fix/#42",
+			});
+			cache.set(key, "branchComparison", { ahead_by: 1 }, "rest");
+
+			cache.cleanup(new Set(["active/repo"]));
+
+			expect(cache.has(key, "branchComparison")).toBe(true);
 		});
 	});
 

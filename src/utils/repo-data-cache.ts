@@ -1,7 +1,7 @@
 /**
  * Per-repository data cache with field-level staleness tracking.
  *
- * Stores fetched data (GraphQL or REST) keyed by repository and data fragment name.
+ * Stores fetched data (GraphQL or REST) keyed by cache key and data fragment name.
  * Each fragment has its own timestamp, allowing the coordinator to selectively
  * refresh only stale data while serving fresh data from cache.
  *
@@ -11,14 +11,16 @@
  */
 
 import type { CacheEntry, DataFragmentName, DataSource } from "../types";
+import { repoFromCacheKey } from "./fragment-cache-key";
 
 /**
  * Per-repository data cache with field-level staleness tracking.
  *
- * The outer map is keyed by repository identifier ("owner/repo"),
- * and the inner map is keyed by {@link DataFragmentName}. Each entry
- * carries its own timestamp so the coordinator can selectively refresh
- * only the fragments that have gone stale.
+ * The outer map is keyed by the cache key produced by {@link fragmentCacheKey} —
+ * the repository identifier ("owner/repo"), plus a discriminator for fragments
+ * whose result depends on the requesting action's settings — and the inner map
+ * is keyed by {@link DataFragmentName}. Each entry carries its own timestamp so
+ * the coordinator can selectively refresh only the fragments that have gone stale.
  */
 export class RepoDataCache {
 	private cache = new Map<string, Map<DataFragmentName, CacheEntry>>();
@@ -27,12 +29,12 @@ export class RepoDataCache {
 	 * Gets cached data for a fragment if it's fresh enough.
 	 * Returns `null` if no cache exists or data is stale.
 	 *
-	 * @param repo - Repository identifier ("owner/repo")
+	 * @param cacheKey - Cache key from {@link fragmentCacheKey}
 	 * @param fragment - The data fragment to retrieve
 	 * @param maxAgeSec - Maximum age in seconds before data is considered stale
 	 */
-	get<T = unknown>(repo: string, fragment: DataFragmentName, maxAgeSec: number): CacheEntry<T> | null {
-		const entry = this.cache.get(repo)?.get(fragment);
+	get<T = unknown>(cacheKey: string, fragment: DataFragmentName, maxAgeSec: number): CacheEntry<T> | null {
+		const entry = this.cache.get(cacheKey)?.get(fragment);
 		if (!entry) return null;
 
 		const ageSec = (Date.now() - entry.fetchedAt) / 1000;
@@ -44,18 +46,18 @@ export class RepoDataCache {
 	/**
 	 * Stores data for a fragment, recording the current time and data source.
 	 *
-	 * @param repo - Repository identifier ("owner/repo")
+	 * @param cacheKey - Cache key from {@link fragmentCacheKey}
 	 * @param fragment - The data fragment to store
 	 * @param data - The data payload
 	 * @param source - Whether data came from GraphQL or REST
 	 */
-	set(repo: string, fragment: DataFragmentName, data: unknown, source: DataSource): void {
-		let repoMap = this.cache.get(repo);
-		if (!repoMap) {
-			repoMap = new Map();
-			this.cache.set(repo, repoMap);
+	set(cacheKey: string, fragment: DataFragmentName, data: unknown, source: DataSource): void {
+		let fragmentMap = this.cache.get(cacheKey);
+		if (!fragmentMap) {
+			fragmentMap = new Map();
+			this.cache.set(cacheKey, fragmentMap);
 		}
-		repoMap.set(fragment, { data, fetchedAt: Date.now(), source });
+		fragmentMap.set(fragment, { data, fetchedAt: Date.now(), source });
 	}
 
 	/**
@@ -63,16 +65,16 @@ export class RepoDataCache {
 	 * Does **not** delete the data — stale data can still be returned as fallback
 	 * via {@link getStale}.
 	 *
-	 * @param repo - Repository identifier ("owner/repo")
+	 * @param cacheKey - Cache key from {@link fragmentCacheKey}
 	 * @param fragments - Fragments to invalidate; omit to invalidate all
 	 */
-	invalidate(repo: string, fragments?: DataFragmentName[]): void {
-		const repoMap = this.cache.get(repo);
-		if (!repoMap) return;
+	invalidate(cacheKey: string, fragments?: DataFragmentName[]): void {
+		const fragmentMap = this.cache.get(cacheKey);
+		if (!fragmentMap) return;
 
-		const targets = fragments ?? Array.from(repoMap.keys());
+		const targets = fragments ?? Array.from(fragmentMap.keys());
 		for (const frag of targets) {
-			const entry = repoMap.get(frag);
+			const entry = fragmentMap.get(frag);
 			if (entry) {
 				entry.fetchedAt = 0;
 			}
@@ -83,12 +85,12 @@ export class RepoDataCache {
 	 * Returns which of the given fragments need refreshing because they are
 	 * missing or older than `maxAgeSec`.
 	 *
-	 * @param repo - Repository identifier ("owner/repo")
+	 * @param cacheKey - Cache key from {@link fragmentCacheKey}
 	 * @param fragments - The set of fragments to check
 	 * @param maxAgeSec - Maximum age in seconds before data is considered stale
 	 */
-	getStaleFragments(repo: string, fragments: DataFragmentName[], maxAgeSec: number): DataFragmentName[] {
-		return fragments.filter((f) => this.get(repo, f, maxAgeSec) === null);
+	getStaleFragments(cacheKey: string, fragments: DataFragmentName[], maxAgeSec: number): DataFragmentName[] {
+		return fragments.filter((f) => this.get(cacheKey, f, maxAgeSec) === null);
 	}
 
 	/**
@@ -96,12 +98,16 @@ export class RepoDataCache {
 	 * Call periodically to prevent memory leaks when repos are removed
 	 * from Stream Deck actions.
 	 *
+	 * A repository may hold several entries — one per parameter variant, see
+	 * {@link fragmentCacheKey} — so keys are matched by their repository part
+	 * rather than compared verbatim.
+	 *
 	 * @param activeRepos - Set of repository identifiers currently in use
 	 */
 	cleanup(activeRepos: Set<string>): void {
-		for (const repo of this.cache.keys()) {
-			if (!activeRepos.has(repo)) {
-				this.cache.delete(repo);
+		for (const key of this.cache.keys()) {
+			if (!activeRepos.has(repoFromCacheKey(key))) {
+				this.cache.delete(key);
 			}
 		}
 	}
@@ -110,26 +116,26 @@ export class RepoDataCache {
 	 * Returns `true` if the cache has **any** data for the fragment, even if stale.
 	 * Useful for deciding whether fallback data is available during errors.
 	 *
-	 * @param repo - Repository identifier ("owner/repo")
+	 * @param cacheKey - Cache key from {@link fragmentCacheKey}
 	 * @param fragment - The data fragment to check
 	 */
-	has(repo: string, fragment: DataFragmentName): boolean {
-		return this.cache.get(repo)?.has(fragment) ?? false;
+	has(cacheKey: string, fragment: DataFragmentName): boolean {
+		return this.cache.get(cacheKey)?.has(fragment) ?? false;
 	}
 
 	/**
 	 * Gets cached data regardless of staleness (for error fallback).
 	 * Returns `null` only if no data has ever been cached for this fragment.
 	 *
-	 * @param repo - Repository identifier ("owner/repo")
+	 * @param cacheKey - Cache key from {@link fragmentCacheKey}
 	 * @param fragment - The data fragment to retrieve
 	 */
-	getStale<T = unknown>(repo: string, fragment: DataFragmentName): CacheEntry<T> | null {
-		const entry = this.cache.get(repo)?.get(fragment);
+	getStale<T = unknown>(cacheKey: string, fragment: DataFragmentName): CacheEntry<T> | null {
+		const entry = this.cache.get(cacheKey)?.get(fragment);
 		return entry ? (entry as CacheEntry<T>) : null;
 	}
 
-	/** Number of repositories currently in the cache. */
+	/** Number of cache keys currently in the cache. */
 	get size(): number {
 		return this.cache.size;
 	}

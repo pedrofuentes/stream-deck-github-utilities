@@ -42,6 +42,7 @@ import {
 	fetchTagsForGraph,
 } from "./github-api";
 import { parseRepoIdentifier } from "./github";
+import { fragmentCacheKey, FRAGMENT_PARAM_DEFAULTS } from "./fragment-cache-key";
 
 /**
  * Strategy for fetching, extracting, and assigning a single data fragment.
@@ -50,6 +51,13 @@ import { parseRepoIdentifier } from "./github";
  * - Extract data from a batched GraphQL response (if supported)
  * - Fetch data via REST API (fallback or primary for REST-only fragments)
  * - Assign cached data to the appropriate field on a {@link CoordinatorResult}
+ *
+ * Strategies must write to {@link fragmentCacheKey}`(repo, this.name, params)`
+ * rather than to `repo` directly, so that two actions querying the same
+ * repository with different settings do not overwrite each other's data. Any
+ * default a strategy applies to a missing parameter must come from
+ * {@link FRAGMENT_PARAM_DEFAULTS}, otherwise an omitted parameter and its
+ * explicit default would resolve to two different cache entries.
  */
 export interface FragmentStrategy {
 	/** The fragment name this strategy handles. */
@@ -72,7 +80,7 @@ class RepoMetadataStrategy implements FragmentStrategy {
 	readonly supportsGraphQL = true;
 
 	extractFromGraphQL(cache: RepoDataCache, repo: string, node: GraphQLRepoNode): void {
-		cache.set(repo, "repoMetadata", extractRepoMetadata(node), "graphql");
+		cache.set(fragmentCacheKey(repo, this.name), "repoMetadata", extractRepoMetadata(node), "graphql");
 	}
 
 	async fetchViaREST(cache: RepoDataCache, repo: string, token: string): Promise<void> {
@@ -83,7 +91,7 @@ class RepoMetadataStrategy implements FragmentStrategy {
 			fetchOpenPullRequestCount(parsed.owner, parsed.repo, token),
 		]);
 		stats.open_pull_request_count = openPRCount;
-		cache.set(repo, "repoMetadata", stats, "rest");
+		cache.set(fragmentCacheKey(repo, this.name), "repoMetadata", stats, "rest");
 	}
 
 	assignToResult(result: CoordinatorResult, data: unknown): void {
@@ -97,14 +105,15 @@ class PRCountStrategy implements FragmentStrategy {
 	readonly supportsGraphQL = true;
 
 	extractFromGraphQL(cache: RepoDataCache, repo: string, node: GraphQLRepoNode, params?: FragmentParams): void {
-		cache.set(repo, "prCount", extractPRCount(node, (params?.prState ?? "open") as "open" | "closed" | "all"), "graphql");
+		const state = params?.prState ?? FRAGMENT_PARAM_DEFAULTS.prState;
+		cache.set(fragmentCacheKey(repo, this.name, params), "prCount", extractPRCount(node, state), "graphql");
 	}
 
 	async fetchViaREST(cache: RepoDataCache, repo: string, token: string, params?: FragmentParams): Promise<void> {
 		const parsed = parseRepoIdentifier(repo);
 		if (!parsed) return;
-		const count = await fetchPullRequestCount(parsed.owner, parsed.repo, token, params?.prState ?? "open");
-		cache.set(repo, "prCount", count, "rest");
+		const count = await fetchPullRequestCount(parsed.owner, parsed.repo, token, params?.prState ?? FRAGMENT_PARAM_DEFAULTS.prState);
+		cache.set(fragmentCacheKey(repo, this.name, params), "prCount", count, "rest");
 	}
 
 	assignToResult(result: CoordinatorResult, data: unknown): void {
@@ -118,14 +127,15 @@ class IssueCountStrategy implements FragmentStrategy {
 	readonly supportsGraphQL = true;
 
 	extractFromGraphQL(cache: RepoDataCache, repo: string, node: GraphQLRepoNode, params?: FragmentParams): void {
-		cache.set(repo, "issueCount", extractIssueCount(node, (params?.issueState ?? "open") as "open" | "closed" | "all"), "graphql");
+		const state = params?.issueState ?? FRAGMENT_PARAM_DEFAULTS.issueState;
+		cache.set(fragmentCacheKey(repo, this.name, params), "issueCount", extractIssueCount(node, state), "graphql");
 	}
 
 	async fetchViaREST(cache: RepoDataCache, repo: string, token: string, params?: FragmentParams): Promise<void> {
 		const parsed = parseRepoIdentifier(repo);
 		if (!parsed) return;
-		const count = await fetchIssueCount(parsed.owner, parsed.repo, token, params?.issueState ?? "open");
-		cache.set(repo, "issueCount", count, "rest");
+		const count = await fetchIssueCount(parsed.owner, parsed.repo, token, params?.issueState ?? FRAGMENT_PARAM_DEFAULTS.issueState);
+		cache.set(fragmentCacheKey(repo, this.name, params), "issueCount", count, "rest");
 	}
 
 	assignToResult(result: CoordinatorResult, data: unknown): void {
@@ -139,14 +149,15 @@ class LatestReleaseStrategy implements FragmentStrategy {
 	readonly supportsGraphQL = true;
 
 	extractFromGraphQL(cache: RepoDataCache, repo: string, node: GraphQLRepoNode, params?: FragmentParams): void {
-		cache.set(repo, "latestRelease", extractLatestRelease(node, params?.includePreReleases ?? false), "graphql");
+		const includePreReleases = params?.includePreReleases ?? FRAGMENT_PARAM_DEFAULTS.includePreReleases;
+		cache.set(fragmentCacheKey(repo, this.name, params), "latestRelease", extractLatestRelease(node, includePreReleases), "graphql");
 	}
 
 	async fetchViaREST(cache: RepoDataCache, repo: string, token: string, params?: FragmentParams): Promise<void> {
 		const parsed = parseRepoIdentifier(repo);
 		if (!parsed) return;
-		const release = await fetchLatestRelease(parsed.owner, parsed.repo, token, params?.includePreReleases ?? false);
-		cache.set(repo, "latestRelease", release, "rest");
+		const release = await fetchLatestRelease(parsed.owner, parsed.repo, token, params?.includePreReleases ?? FRAGMENT_PARAM_DEFAULTS.includePreReleases);
+		cache.set(fragmentCacheKey(repo, this.name, params), "latestRelease", release, "rest");
 	}
 
 	assignToResult(result: CoordinatorResult, data: unknown): void {
@@ -160,14 +171,14 @@ class BranchesStrategy implements FragmentStrategy {
 	readonly supportsGraphQL = true;
 
 	extractFromGraphQL(cache: RepoDataCache, repo: string, node: GraphQLRepoNode): void {
-		cache.set(repo, "branches", extractBranches(node), "graphql");
+		cache.set(fragmentCacheKey(repo, this.name), "branches", extractBranches(node), "graphql");
 	}
 
 	async fetchViaREST(cache: RepoDataCache, repo: string, token: string): Promise<void> {
 		const parsed = parseRepoIdentifier(repo);
 		if (!parsed) return;
 		const branches = await fetchBranchNetwork(parsed.owner, parsed.repo, token);
-		cache.set(repo, "branches", branches, "rest");
+		cache.set(fragmentCacheKey(repo, this.name), "branches", branches, "rest");
 	}
 
 	assignToResult(result: CoordinatorResult, data: unknown): void {
@@ -181,14 +192,14 @@ class VulnerabilityAlertsStrategy implements FragmentStrategy {
 	readonly supportsGraphQL = true;
 
 	extractFromGraphQL(cache: RepoDataCache, repo: string, node: GraphQLRepoNode): void {
-		cache.set(repo, "vulnerabilityAlerts", extractSecurityAlerts(node), "graphql");
+		cache.set(fragmentCacheKey(repo, this.name), "vulnerabilityAlerts", extractSecurityAlerts(node), "graphql");
 	}
 
 	async fetchViaREST(cache: RepoDataCache, repo: string, token: string): Promise<void> {
 		const parsed = parseRepoIdentifier(repo);
 		if (!parsed) return;
 		const alerts = await fetchDependabotAlerts(parsed.owner, parsed.repo, token);
-		cache.set(repo, "vulnerabilityAlerts", alerts, "rest");
+		cache.set(fragmentCacheKey(repo, this.name), "vulnerabilityAlerts", alerts, "rest");
 	}
 
 	assignToResult(result: CoordinatorResult, data: unknown): void {
@@ -202,7 +213,7 @@ class DiscussionsStrategy implements FragmentStrategy {
 	readonly supportsGraphQL = true;
 
 	extractFromGraphQL(cache: RepoDataCache, repo: string, node: GraphQLRepoNode): void {
-		cache.set(repo, "discussions", extractDiscussions(node), "graphql");
+		cache.set(fragmentCacheKey(repo, this.name), "discussions", extractDiscussions(node), "graphql");
 	}
 
 	async fetchViaREST(): Promise<void> {
@@ -220,7 +231,7 @@ class ProjectsV2Strategy implements FragmentStrategy {
 	readonly supportsGraphQL = true;
 
 	extractFromGraphQL(cache: RepoDataCache, repo: string, node: GraphQLRepoNode): void {
-		cache.set(repo, "projectsV2", extractProjectsV2(node), "graphql");
+		cache.set(fragmentCacheKey(repo, this.name), "projectsV2", extractProjectsV2(node), "graphql");
 	}
 
 	async fetchViaREST(): Promise<void> {
@@ -245,7 +256,7 @@ class WorkflowRunsStrategy implements FragmentStrategy {
 			workflowFile: params?.workflowFile,
 			environment: params?.environment,
 		});
-		cache.set(repo, "workflowRuns", info, "rest");
+		cache.set(fragmentCacheKey(repo, this.name, params), "workflowRuns", info, "rest");
 	}
 
 	assignToResult(result: CoordinatorResult, data: unknown): void {
@@ -262,7 +273,7 @@ class CommitActivityStrategy implements FragmentStrategy {
 		const parsed = parseRepoIdentifier(repo);
 		if (!parsed) return;
 		const weeks = await fetchCommitActivityWeeks(parsed.owner, parsed.repo, token);
-		cache.set(repo, "commitActivity", weeks, "rest");
+		cache.set(fragmentCacheKey(repo, this.name), "commitActivity", weeks, "rest");
 	}
 
 	assignToResult(result: CoordinatorResult, data: unknown): void {
@@ -278,10 +289,10 @@ class BranchComparisonStrategy implements FragmentStrategy {
 	async fetchViaREST(cache: RepoDataCache, repo: string, token: string, params?: FragmentParams): Promise<void> {
 		const parsed = parseRepoIdentifier(repo);
 		if (!parsed) return;
-		const base = params?.baseBranch ?? "main";
-		const head = params?.headBranch ?? "develop";
+		const base = params?.baseBranch ?? FRAGMENT_PARAM_DEFAULTS.baseBranch;
+		const head = params?.headBranch ?? FRAGMENT_PARAM_DEFAULTS.headBranch;
 		const comparison = await fetchBranchComparison(parsed.owner, parsed.repo, base, head, token);
-		cache.set(repo, "branchComparison", comparison, "rest");
+		cache.set(fragmentCacheKey(repo, this.name, params), "branchComparison", comparison, "rest");
 	}
 
 	assignToResult(result: CoordinatorResult, data: unknown): void {
@@ -311,12 +322,12 @@ class NetworkCommitsStrategy implements FragmentStrategy {
 	async fetchViaREST(cache: RepoDataCache, repo: string, token: string, params?: FragmentParams): Promise<void> {
 		const parsed = parseRepoIdentifier(repo);
 		if (!parsed) return;
-		const maxCommits = params?.maxCommits ?? 100;
+		const maxCommits = params?.maxCommits ?? FRAGMENT_PARAM_DEFAULTS.maxCommits;
 		const [commits, tags] = await Promise.all([
 			fetchCommitsForGraph(parsed.owner, parsed.repo, token, maxCommits),
 			fetchTagsForGraph(parsed.owner, parsed.repo, token),
 		]);
-		cache.set(repo, "networkCommits", { commits, tags }, "rest");
+		cache.set(fragmentCacheKey(repo, this.name, params), "networkCommits", { commits, tags }, "rest");
 	}
 
 	assignToResult(result: CoordinatorResult, data: unknown): void {

@@ -27,7 +27,17 @@ import { extractReviewRequestedPRs } from "./data-fragments";
 import { fetchReviewRequestedPRs } from "./github-api";
 import { parseRepoIdentifier } from "./github";
 import { fragmentRegistry } from "./fragment-strategies";
+import { fragmentCacheKey } from "./fragment-cache-key";
 import streamDeck from "@elgato/streamdeck";
+
+/** Cache key for `reviewRequestedPRs` when no repository is configured. */
+const GLOBAL_CACHE_KEY = "__global__";
+
+/** A repo-scoped GraphQL fragment together with the params to extract it with. */
+interface GraphQLFragmentTarget {
+	fragment: GraphQLFragmentName;
+	params?: FragmentParams;
+}
 
 /**
  * Centralized data fetching coordinator for Stream Deck actions.
@@ -88,7 +98,9 @@ export class GraphQLQueryCoordinator {
 
 		const { repo, fragments, maxAgeSec, params } = subscription;
 
-		const staleFragments = this.cache.getStaleFragments(repo, fragments, maxAgeSec);
+		const staleFragments = fragments.filter(
+			(frag) => this.cache.get(this.cacheKeyFor(repo, frag, params), frag, maxAgeSec) === null,
+		);
 
 		if (staleFragments.length === 0) {
 			return this.buildResult(repo, fragments, maxAgeSec, params);
@@ -111,7 +123,9 @@ export class GraphQLQueryCoordinator {
 			throw new Error(`No subscription found for action "${actionId}"`);
 		}
 
-		this.cache.invalidate(subscription.repo, subscription.fragments);
+		for (const frag of subscription.fragments) {
+			this.cache.invalidate(this.cacheKeyFor(subscription.repo, frag, subscription.params), [frag]);
+		}
 
 		const result = await this.fetchData(actionId, token);
 
@@ -181,6 +195,19 @@ export class GraphQLQueryCoordinator {
 	// ─── Private helpers ─────────────────────────────────────────────────
 
 	/**
+	 * Resolves the cache key a fragment is stored under.
+	 *
+	 * Delegates to {@link fragmentCacheKey}, which separates entries whose
+	 * content depends on the subscriber's params, and handles the one fragment
+	 * that is not repo-scoped: `reviewRequestedPRs` queries across repositories
+	 * and falls back to a global key when no repo is configured.
+	 */
+	private cacheKeyFor(repo: string, fragment: DataFragmentName, params?: FragmentParams): string {
+		if (fragment === "reviewRequestedPRs") return repo || GLOBAL_CACHE_KEY;
+		return fragmentCacheKey(repo, fragment, params);
+	}
+
+	/**
 	 * Fetches stale fragments for a repo using GraphQL + REST as appropriate.
 	 */
 	private async fetchStaleFragments(
@@ -206,8 +233,8 @@ export class GraphQLQueryCoordinator {
 		// For GraphQL fragments: batch ALL repo-scoped GraphQL fragments from ALL subscribers
 		let graphqlFailed = false;
 		if (graphqlFragments.length > 0) {
-			const allRepoGraphQLFragments = this.getAllRepoScopedGraphQLFragments(repo);
-			graphqlFailed = !(await this.fetchGraphQLBatch(repo, allRepoGraphQLFragments, token, params));
+			const targets = this.getRepoScopedGraphQLTargets(repo);
+			graphqlFailed = !(await this.fetchGraphQLBatch(repo, targets, token));
 		}
 
 		// Fall back to REST for GraphQL fragments that failed
@@ -224,13 +251,32 @@ export class GraphQLQueryCoordinator {
 	}
 
 	/**
-	 * Gets all repo-scoped GraphQL fragment names for a repo from ALL subscribers.
+	 * Gets every repo-scoped GraphQL fragment a repo's subscribers need, paired
+	 * with the params to extract it with.
+	 *
+	 * The same fragment appears more than once when subscribers request it with
+	 * different params — two PR counters showing open and closed counts, say.
+	 * Each variant is cached separately, so each one has to be extracted
+	 * separately; the batched query itself is unaffected, since the response
+	 * carries the data for all of them. Targets resolving to the same cache
+	 * entry are deduplicated.
 	 */
-	private getAllRepoScopedGraphQLFragments(repo: string): GraphQLFragmentName[] {
-		const allFragments = this.getAllFragmentsForRepo(repo);
-		return allFragments.filter(
-			(f): f is GraphQLFragmentName => isGraphQLFragment(f) && f !== "reviewRequestedPRs",
-		);
+	private getRepoScopedGraphQLTargets(repo: string): GraphQLFragmentTarget[] {
+		const targets = new Map<string, GraphQLFragmentTarget>();
+
+		for (const sub of this.subscriptions.values()) {
+			if (sub.repo !== repo) continue;
+
+			for (const frag of sub.fragments) {
+				if (!isGraphQLFragment(frag) || frag === "reviewRequestedPRs") continue;
+				const key = `${frag}@${this.cacheKeyFor(repo, frag, sub.params)}`;
+				if (!targets.has(key)) {
+					targets.set(key, { fragment: frag, params: sub.params });
+				}
+			}
+		}
+
+		return [...targets.values()];
 	}
 
 	/**
@@ -239,20 +285,18 @@ export class GraphQLQueryCoordinator {
 	 */
 	private async fetchGraphQLBatch(
 		repo: string,
-		fragments: GraphQLFragmentName[],
+		targets: GraphQLFragmentTarget[],
 		token: string,
-		params?: FragmentParams,
 	): Promise<boolean> {
-		if (fragments.length === 0) return true;
+		if (targets.length === 0) return true;
 
 		const parsed = parseRepoIdentifier(repo);
 		if (!parsed) return false;
 
-		const repoScopedFragments = fragments.filter((f) => f !== "reviewRequestedPRs");
-		if (repoScopedFragments.length === 0) return true;
+		const queryFragments = [...new Set(targets.map((t) => t.fragment))];
 
 		try {
-			const query = buildRepoQuery(repoScopedFragments);
+			const query = buildRepoQuery(queryFragments);
 			const result = await executeGraphQLQuery<GraphQLRepoResponse["data"]>(
 				token,
 				query,
@@ -262,14 +306,14 @@ export class GraphQLQueryCoordinator {
 			const node = result.data?.repository;
 			if (!node) return false;
 
-			// Extract and cache each fragment individually
-			for (const frag of repoScopedFragments) {
+			// Extract and cache each fragment variant individually
+			for (const { fragment, params } of targets) {
 				try {
-					this.extractAndCacheFragment(repo, frag, node, params);
+					this.extractAndCacheFragment(repo, fragment, node, params);
 				} catch (err) {
 					// Individual extractor failed — try REST fallback for this fragment
-					streamDeck.logger.debug(`Fragment extraction failed for ${frag} on ${repo}, falling back to REST: ${err instanceof Error ? err.message : "unknown"}`);
-					await this.fetchRESTFragment(repo, frag, token, params);
+					streamDeck.logger.debug(`Fragment extraction failed for ${fragment} on ${repo}, falling back to REST: ${err instanceof Error ? err.message : "unknown"}`);
+					await this.fetchRESTFragment(repo, fragment, token, params);
 				}
 			}
 
@@ -327,7 +371,7 @@ export class GraphQLQueryCoordinator {
 		_params?: FragmentParams,
 	): Promise<void> {
 		// Use the repo key for cache (even though the query is cross-repo)
-		const cacheKey = repo || "__global__";
+		const cacheKey = this.cacheKeyFor(repo, "reviewRequestedPRs");
 
 		try {
 			const query = buildSearchQuery();
@@ -361,13 +405,13 @@ export class GraphQLQueryCoordinator {
 		repo: string,
 		fragments: DataFragmentName[],
 		maxAgeSec: number,
-		_params?: FragmentParams,
+		params?: FragmentParams,
 	): CoordinatorResult {
 		const result: CoordinatorResult = {};
 		const errors: Record<string, string> = {};
 
 		for (const frag of fragments) {
-			const cacheKey = frag === "reviewRequestedPRs" ? (repo || "__global__") : repo;
+			const cacheKey = this.cacheKeyFor(repo, frag, params);
 			const entry = this.cache.get(cacheKey, frag, maxAgeSec);
 			const staleEntry = entry ? null : this.cache.getStale(cacheKey, frag);
 
