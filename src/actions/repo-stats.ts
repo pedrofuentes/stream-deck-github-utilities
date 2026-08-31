@@ -297,6 +297,8 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 
 		this.actionSettings.set(ev.action.id, settings);
 
+		this.stopMarquee(ev.action.id);
+
 		if (ev.action.isKey()) {
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			if (!settings.repo || !globalSettings.githubToken) {
@@ -323,9 +325,9 @@ export class RepoStatsAction extends BaseGitHubAction<RepoStatsSettings> {
 			await ev.action.setFeedback({ canvas: renderStripLoading() });
 		}
 
-		// Re-subscribe with updated settings
+		// Re-subscribe with updated settings (the coordinator auto-detects
+		// repo/params changes and invalidates stale cache)
 		const intervalSec = settings.refreshInterval ?? DEFAULT_REFRESH_INTERVAL;
-		this.coordinator.unsubscribe(ev.action.id);
 		this.coordinator.subscribe({
 			actionId: ev.action.id,
 			repo: settings.repo!,

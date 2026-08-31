@@ -20,6 +20,16 @@ import type {
 	GraphQLRepoResponse,
 	GraphQLSearchResponse,
 } from "../types";
+
+/** Shallow-compare two FragmentParams objects for value equality. */
+function paramsEqual(a?: FragmentParams, b?: FragmentParams): boolean {
+	if (a === b) return true;
+	if (!a || !b) return a == b;
+	const keysA = Object.keys(a) as (keyof FragmentParams)[];
+	const keysB = Object.keys(b) as (keyof FragmentParams)[];
+	if (keysA.length !== keysB.length) return false;
+	return keysA.every((k) => a[k] === b[k]);
+}
 import { RepoDataCache } from "./repo-data-cache";
 import { buildRepoQuery, buildSearchQuery, isGraphQLFragment } from "./graphql-query-builder";
 import { executeGraphQLQuery } from "./github-graphql";
@@ -49,13 +59,24 @@ export class GraphQLQueryCoordinator {
 
 	/**
 	 * Register an action's data needs.
-	 * Call in onWillAppear.
+	 *
+	 * If the action already has a subscription and the repo or params changed,
+	 * the old subscription is removed (triggering cache cleanup for orphaned
+	 * repos) and the new repo's cached fragments are invalidated so the next
+	 * {@link fetchData} call fetches fresh data instead of returning stale cache.
 	 *
 	 * @param subscription - The action's data subscription.
 	 * @param onSiblingRefresh - Optional callback fired when a sibling action
 	 *   (same repo) force-refreshes. Use to re-render with fresh cached data.
 	 */
 	subscribe(subscription: DataSubscription, onSiblingRefresh?: () => Promise<void>): void {
+		const existing = this.subscriptions.get(subscription.actionId);
+
+		if (existing && (existing.repo !== subscription.repo || !paramsEqual(existing.params, subscription.params))) {
+			this.unsubscribe(subscription.actionId);
+			this.cache.invalidate(subscription.repo, subscription.fragments);
+		}
+
 		this.subscriptions.set(subscription.actionId, subscription);
 		if (onSiblingRefresh) {
 			this.refreshCallbacks.set(subscription.actionId, onSiblingRefresh);

@@ -168,6 +168,8 @@ export class PRReviewQueueAction extends BaseGitHubAction<PRReviewQueueSettings>
 
 		this.actionSettings.set(ev.action.id, settings);
 
+		this.stopMarquee(ev.action.id);
+
 		const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 		if (!globalSettings.githubToken) {
 			if (ev.action.isKey()) {

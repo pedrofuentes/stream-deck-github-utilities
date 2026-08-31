@@ -235,6 +235,90 @@ describe("GraphQLQueryCoordinator", () => {
 		it("should be safe to unsubscribe unknown actionId", () => {
 			expect(() => coordinator.unsubscribe("nonexistent")).not.toThrow();
 		});
+
+		it("should invalidate cache when re-subscribing with a different repo", async () => {
+			cache.set("owner/repo-a", "prCount", 17, "graphql");
+			cache.set("owner/repo-b", "prCount", 99, "graphql");
+
+			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo-a", fragments: ["prCount"] }));
+
+			// Switch to repo-b — the old cached value for repo-b should be invalidated
+			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo-b", fragments: ["prCount"] }));
+
+			// repo-b's stale cache entry (99) should have been invalidated,
+			// so fetchData should re-fetch rather than returning the stale 99
+			const staleFragments = cache.getStaleFragments("owner/repo-b", ["prCount"], 300);
+			expect(staleFragments).toContain("prCount");
+		});
+
+		it("should clean up orphaned repo cache when re-subscribing to a different repo", () => {
+			cache.set("owner/repo-a", "prCount", 17, "graphql");
+
+			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo-a", fragments: ["prCount"] }));
+			expect(cache.has("owner/repo-a", "prCount")).toBe(true);
+
+			// Switch to repo-b — repo-a has no other subscribers so its cache should be cleaned up
+			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo-b", fragments: ["prCount"] }));
+
+			expect(cache.has("owner/repo-a", "prCount")).toBe(false);
+		});
+
+		it("should invalidate cache when re-subscribing with different params", async () => {
+			cache.set("owner/repo", "prCount", 17, "graphql");
+
+			coordinator.subscribe(baseSub({ actionId: "a1", params: { prState: "open" } }));
+
+			// Switch to closed state — cached prCount was for "open" and should be invalidated
+			coordinator.subscribe(baseSub({ actionId: "a1", params: { prState: "closed" } }));
+
+			const staleFragments = cache.getStaleFragments("owner/repo", ["prCount"], 300);
+			expect(staleFragments).toContain("prCount");
+		});
+
+		it("should NOT invalidate cache when re-subscribing with same repo and params", () => {
+			cache.set("owner/repo", "prCount", 42, "graphql");
+
+			coordinator.subscribe(baseSub({ actionId: "a1", params: { prState: "open" } }));
+			coordinator.subscribe(baseSub({ actionId: "a1", params: { prState: "open" } }));
+
+			// Same repo + same params → no invalidation, cached data stays fresh
+			const entry = cache.get("owner/repo", "prCount", 300);
+			expect(entry).not.toBeNull();
+			expect(entry!.data).toBe(42);
+		});
+
+		it("should preserve other subscribers' cache when switching repos", () => {
+			cache.set("owner/repo-a", "prCount", 17, "graphql");
+			cache.set("owner/repo-a", "issueCount", 5, "graphql");
+
+			// Two actions watching repo-a
+			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo-a", fragments: ["prCount"] }));
+			coordinator.subscribe(baseSub({ actionId: "a2", repo: "owner/repo-a", fragments: ["issueCount"] }));
+
+			// a1 switches to repo-b — repo-a still has a2, so its cache should survive
+			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo-b", fragments: ["prCount"] }));
+
+			expect(cache.has("owner/repo-a", "issueCount")).toBe(true);
+		});
+
+		it("should fetch fresh data after repo switch instead of returning stale cache", async () => {
+			// Pre-populate cache for both repos
+			cache.set("owner/repo-a", "prCount", 17, "graphql");
+			cache.set("owner/repo-b", "prCount", 99, "graphql");
+
+			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo-a", fragments: ["prCount"] }));
+
+			// Switch to repo-b
+			mocks.executeGraphQLQuery.mockResolvedValue({
+				data: { repository: makeRepoNode({ openPRs: { totalCount: 5 } }) },
+			});
+			coordinator.subscribe(baseSub({ actionId: "a1", repo: "owner/repo-b", fragments: ["prCount"] }));
+
+			const result = await coordinator.fetchData("a1", TOKEN);
+
+			// Should return freshly fetched data (5), NOT the stale cached 99
+			expect(result.prCount).toBe(5);
+		});
 	});
 
 	// ── Cache-first behavior ─────────────────────────────────────────────

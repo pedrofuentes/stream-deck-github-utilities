@@ -185,6 +185,8 @@ export class DiscussionsMonitorAction extends BaseGitHubAction<DiscussionsMonito
 
 		this.actionSettings.set(ev.action.id, settings);
 
+		this.stopMarquee(ev.action.id);
+
 		if (ev.action.isKey()) {
 			const globalSettings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
 			if (!settings.repo || !globalSettings.githubToken) {
